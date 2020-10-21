@@ -1,0 +1,8 @@
+[package]
+name = "clapi"
+version = "0.1.0"
+authors = ["Freddy L. <freddy_luis_94@hotmail.com>"]
+edition = "2018"
+
+[dependencies]
+linked_hash_set = "0.1.4"

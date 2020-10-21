@@ -1,0 +1,13 @@
+[package]
+name = "clapi_macros"
+version = "0.1.0"
+authors = ["Freddy L P.B <freddy_luis_94@hotmail.com>"]
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = {version="1.0.45", features=["full", "extra-traits"]}
+quote = "1.0.7"
+clapi= { path="../clapi"}

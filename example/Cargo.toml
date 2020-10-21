@@ -1,0 +1,9 @@
+[package]
+name = "example"
+version = "0.1.0"
+authors = ["Freddy L P.B <freddy_luis_94@hotmail.com>"]
+edition = "2018"
+
+[dependencies]
+clapi= { path="../clapi" }
+clapi_macros= { path="../clapi_macros" }
