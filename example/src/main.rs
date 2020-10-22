@@ -5,17 +5,33 @@ use clapi::command_line::CommandLine;
 use clapi::command::Command;
 use clapi::option::CommandOption;
 
-// extern crate clapi_macros;
-// use clapi_macros::command;
+extern crate clapi_macros;
+use clapi_macros::command;
 
-// #[command]
-// fn main(x: u32, y: String, z: bool){
+// #[command(n=1)]
+// #[option]
+// #[option(name="x", alias="number", description="A number")]
+// #[option(name="y", alias="Text", description="A block of text")]
+// fn main(x: u32, y: String, z: bool)
+// {
 //     println!("Adios mundo");
 // }
 
-fn main() -> Result<()>{
-    run_cmd()
+#[command(description="A sample description", help="A sample help")]
+#[option(name="x", alias="number", description="A number", default=0)]
+#[option(name="y", alias="text", description="A text", default="Default text")]
+#[option(name="z", alias="true or false", description="A bool", default=false)]
+#[args(name="values", min=1, max=2, default=["one", "two", "three"])]
+fn main(x: u32, y: String, z: bool, values: Vec<String>){
 }
+
+// cmd x=10 y:Hello z true -- one two three
+
+// #[command(description="Create a file")]
+// #[option(name="filename", alias="")]
+// fn create(filename: String){
+//
+// }
 
 #[allow(dead_code)]
 fn run_cmd() -> Result<()>{

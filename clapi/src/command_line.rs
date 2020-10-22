@@ -147,7 +147,7 @@ impl CommandLine {
         if let Some(mut handler) = handler {
             let options = parse_result.options();
             let args = parse_result.args();
-            handler.deref_mut()(options, args.values())
+            handler.deref_mut()(options, args)
         } else {
             if self.show_help_when_not_handler {
                 self.display_help(&[])

@@ -20,10 +20,9 @@ pub struct Command {
     children: LinkedHashSet<Command>,
     options: Options,
     args: Arguments,
-    handler: Option<Rc<RefCell<dyn FnMut(&Options, &[String]) -> Result<()>>>>,
+    handler: Option<Rc<RefCell<dyn FnMut(&Options, &Arguments) -> Result<()>>>>,
 }
 
-// todo: Implement `help` for provides a long description of what the command do.
 impl Command {
     /// Constructs a new `Command`.
     #[inline]
@@ -93,7 +92,7 @@ impl Command {
     /// Returns the handler of this command, or `None` if not set.
     pub fn handler(
         &self,
-    ) -> Option<RefMut<'_, dyn FnMut(&Options, &[String]) -> Result<()> + 'static>> {
+    ) -> Option<RefMut<'_, dyn FnMut(&Options, &Arguments) -> Result<()> + 'static>> {
         self.handler.as_ref().map(|x| x.borrow_mut())
     }
 
@@ -155,7 +154,7 @@ impl Command {
     /// });
     /// ```
     pub fn set_handler<F>(mut self, f: F, ) -> Self
-        where F: FnMut(&Options, &[String]) -> Result<()> + 'static {
+        where F: FnMut(&Options, &Arguments) -> Result<()> + 'static {
         self.handler = Some(Rc::new(RefCell::new(f)));
         self
     }
@@ -310,16 +309,16 @@ mod tests {
 
         let cmd = Command::new("counter").set_handler(inc);
 
-        fn inc(_: &Options, _: &[String]) -> Result<()> {
+        fn inc(_: &Options, _: &Arguments) -> Result<()> {
             unsafe { VALUE += 1 };
             Ok(())
         }
 
         let opts = Options::new();
-        let args = Vec::<String>::new();
+        let args = Arguments::none();
 
-        cmd.handler().unwrap().deref_mut()(&opts, args.as_slice()).unwrap();
-        cmd.handler().unwrap().deref_mut()(&opts, args.as_slice()).unwrap();
+        cmd.handler().unwrap().deref_mut()(&opts, &args).unwrap();
+        cmd.handler().unwrap().deref_mut()(&opts, &args).unwrap();
 
         assert_eq!(unsafe { VALUE }, 2);
     }

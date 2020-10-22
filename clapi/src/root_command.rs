@@ -69,7 +69,7 @@ impl RootCommand {
 
     /// Returns the handler of this command, or `None` if not set.
     #[inline]
-    pub fn handler(&self) -> Option<RefMut<'_, dyn FnMut(&Options, &[String]) -> Result<()> + 'static>> {
+    pub fn handler(&self) -> Option<RefMut<'_, dyn FnMut(&Options, &Arguments) -> Result<()> + 'static>> {
         self.inner.handler()
     }
 
@@ -142,7 +142,7 @@ impl RootCommand {
     /// });
     /// ```
     #[inline]
-    pub fn set_handler<F: FnMut(&Options, &[String]) -> Result<()> + 'static>(self, f: F) -> Self{
+    pub fn set_handler<F: FnMut(&Options, &Arguments) -> Result<()> + 'static>(self, f: F) -> Self{
         RootCommand {
             inner: self.inner.set_handler(f),
         }
