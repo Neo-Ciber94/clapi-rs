@@ -8,7 +8,7 @@ edition = "2018"
 proc-macro = true
 
 [dependencies]
-syn = {version="1.0.45", features=["full", "extra-traits"]}
+syn = {version="1.0.45", features=["full", "extra-traits", "parsing"]}
 quote = "1.0.7"
 proc-macro2 = "1.0.24"
 clapi= { path="../clapi"}

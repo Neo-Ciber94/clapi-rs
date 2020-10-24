@@ -55,7 +55,7 @@ where
                     iterator.next();
 
                     // If the option take args, add them
-                    if option.args().take_args(){
+                    if option.args().take_args() {
                         let mut option_args = Vec::new();
 
                         while let Some(t) = iterator.peek() {
@@ -71,19 +71,16 @@ where
                             }
                         }
 
-                        option.set_args_values(option_args.clone())
-                            .or_else(|e| {
-                                let args = option_args.iter()
-                                    .map(|s| (*s).clone())
-                                    .collect();
+                        option.set_args_values(option_args.clone()).or_else(|e| {
+                            let args = option_args.iter().map(|s| (*s).clone()).collect();
 
-                                Err(Error::new_parse_error(
-                                    e.kind().clone(),
-                                    command.clone(),
-                                    Some(option.clone()),
-                                    Some(args),
-                                ))
-                            })?;
+                            Err(Error::new_parse_error(
+                                e.kind().clone(),
+                                command.clone(),
+                                Some(option.clone()),
+                                Some(args),
+                            ))
+                        })?;
                     }
 
                     result_options.add(option);
@@ -135,9 +132,7 @@ where
         }
 
         // Clones the command and set the options and args
-        let mut result_command = command
-            .clone()
-            .set_new_options(result_options);
+        let mut result_command = command.clone().set_new_options(result_options);
 
         result_command
             .set_args_values(rest_args.as_slice())

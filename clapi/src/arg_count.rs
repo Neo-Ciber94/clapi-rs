@@ -6,123 +6,131 @@ Represents the number of arguments a option or command can take.
 Numeric signed, unsigned and ranges of these types implements `Into<ArgCount>`.
 */
 #[derive(Debug, Default, Copy, Clone, Hash, Eq, PartialEq)]
-pub struct ArgCount{
+pub struct ArgCount {
     min_arg_count: usize,
-    max_arg_count: usize
+    max_arg_count: usize,
 }
 
-impl ArgCount{
+impl ArgCount {
     /// Constructs a new `ArgCount` with the specified `min` and `max` argument count.
-    pub fn new(min_arg_count: usize, max_arg_count: usize) -> Self{
-        assert!(min_arg_count <= max_arg_count, "min cannot be greater than max argument count");
-        ArgCount{
+    pub fn new(min_arg_count: usize, max_arg_count: usize) -> Self {
+        assert!(
+            min_arg_count <= max_arg_count,
+            "min cannot be greater than max argument count"
+        );
+        ArgCount {
             min_arg_count,
-            max_arg_count
+            max_arg_count,
         }
     }
 
     #[inline]
-    const fn new_unchecked(min_arg_count: usize, max_arg_count: usize) -> Self{
-        ArgCount{
+    const fn new_unchecked(min_arg_count: usize, max_arg_count: usize) -> Self {
+        ArgCount {
             min_arg_count,
-            max_arg_count
+            max_arg_count,
         }
     }
 
     /// Constructs a new `ArgCount` for not arguments.
     #[inline]
-    pub const fn zero() -> Self{
+    pub const fn zero() -> Self {
         Self::new_unchecked(0, 0)
     }
 
     /// Constructs a new `ArgCount` for exactly 1 argument.
     #[inline]
-    pub const fn one() -> Self{
+    pub const fn one() -> Self {
         Self::new_unchecked(1, 1)
     }
 
     /// Constructs a new `ArgCount` for any number of arguments.
     #[inline]
-    pub const fn any() -> Self{
+    pub const fn any() -> Self {
         Self::new_unchecked(0, usize::max_value())
     }
 
     /// Constructs a new `ArgCount` for the specified number of arguments.
     #[inline]
-    pub const fn exactly(arg_count: usize) -> Self{
+    pub const fn exactly(arg_count: usize) -> Self {
         Self::new_unchecked(arg_count, arg_count)
     }
 
     /// Constructs a new `ArgCount` for more than the specified number of arguments.
     #[inline]
-    pub const fn more_than(min_arg_count: usize) -> Self{
+    pub const fn more_than(min_arg_count: usize) -> Self {
         Self::new_unchecked(min_arg_count, usize::max_value())
     }
 
     /// Constructs a new `ArgCount` for less than the specified number of arguments.
     #[inline]
-    pub const fn less_than(max_arg_count: usize) -> Self{
+    pub const fn less_than(max_arg_count: usize) -> Self {
         Self::new_unchecked(0, max_arg_count)
     }
 
     /// Returns the min number of arguments can takes.
     #[inline]
-    pub const fn min_arg_count(&self) -> usize{
+    pub const fn min_arg_count(&self) -> usize {
         self.min_arg_count
     }
 
     /// Returns the max number of arguments can takes.
     #[inline]
-    pub const fn max_arg_count(&self) -> usize{
+    pub const fn max_arg_count(&self) -> usize {
         self.max_arg_count
     }
 
     /// Returns `true` if this accept the provided number of arguments.
     #[inline]
-    pub fn contains(&self, value: usize) -> bool{
+    pub fn contains(&self, value: usize) -> bool {
         (self.min_arg_count..=self.max_arg_count).contains(&value)
     }
 
     /// Returns `true` if this takes arguments.
     #[inline]
-    pub const fn takes_args(&self) -> bool{
+    pub const fn takes_args(&self) -> bool {
         self.max_arg_count != 0
     }
 
     /// Returns `true` if this takes an exact number of arguments.
     #[inline]
-    pub const fn is_exact(&self) -> bool{
+    pub const fn is_exact(&self) -> bool {
         self.min_arg_count == self.max_arg_count
     }
 
     /// Returns `true` if this takes exactly the specified number of arguments.
     #[inline]
-    pub fn takes_exactly(&self, arg_count: usize) -> bool{
+    pub fn takes_exactly(&self, arg_count: usize) -> bool {
         self.min_arg_count == arg_count && self.max_arg_count == arg_count
     }
 }
 
-impl Display for ArgCount{
+impl Display for ArgCount {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.is_exact(){
-            write!(f, "{} argument{}",
-                   self.min_arg_count,
-                   if self.takes_exactly(1) { "" } else { "s" }
+        if self.is_exact() {
+            write!(
+                f,
+                "{} argument{}",
+                self.min_arg_count,
+                if self.takes_exactly(1) { "" } else { "s" }
             )
-        }
-        else{
-            write!(f, "{} to {} arguments", self.min_arg_count, self.max_arg_count)
+        } else {
+            write!(
+                f,
+                "{} to {} arguments",
+                self.min_arg_count, self.max_arg_count
+            )
         }
     }
 }
 
-impl Into<RangeInclusive<usize>> for ArgCount{
+impl Into<RangeInclusive<usize>> for ArgCount {
     fn into(self) -> RangeInclusive<usize> {
         self.min_arg_count..=self.max_arg_count
     }
 }
 
-impl Into<ArgCount> for RangeFull{
+impl Into<ArgCount> for RangeFull {
     #[inline]
     fn into(self) -> ArgCount {
         ArgCount::any()
@@ -274,11 +282,11 @@ impl_into_for_unsigned_range! { u8, u16, u32, u64, u128, usize }
 impl_into_for_signed_range! { i8, i16, i32, i64, i128, isize }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
 
     #[test]
-    fn none_test(){
+    fn none_test() {
         let arg_count = ArgCount::zero();
         assert!(!arg_count.takes_args());
         assert!(arg_count.is_exact());
@@ -287,7 +295,7 @@ mod tests{
     }
 
     #[test]
-    fn one_test(){
+    fn one_test() {
         let arg_count = ArgCount::one();
         assert!(arg_count.takes_args());
         assert!(arg_count.is_exact());
@@ -296,7 +304,7 @@ mod tests{
     }
 
     #[test]
-    fn any_test(){
+    fn any_test() {
         let arg_count = ArgCount::any();
         assert!(arg_count.takes_args());
         assert!(!arg_count.is_exact());
@@ -305,7 +313,7 @@ mod tests{
     }
 
     #[test]
-    fn exactly_test(){
+    fn exactly_test() {
         let arg_count = ArgCount::exactly(2);
         assert!(arg_count.takes_exactly(2));
         assert_eq!(arg_count.min_arg_count, 2);
@@ -313,7 +321,7 @@ mod tests{
     }
 
     #[test]
-    fn more_than_test(){
+    fn more_than_test() {
         let arg_count = ArgCount::more_than(1);
         assert!(!arg_count.takes_exactly(1));
         assert_eq!(arg_count.min_arg_count, 1);
@@ -321,7 +329,7 @@ mod tests{
     }
 
     #[test]
-    fn less_than_test(){
+    fn less_than_test() {
         let arg_count = ArgCount::less_than(5);
         assert!(!arg_count.takes_exactly(5));
         assert_eq!(arg_count.min_arg_count, 0);
@@ -329,7 +337,7 @@ mod tests{
     }
 
     #[test]
-    fn contains_test(){
+    fn contains_test() {
         let arg_count = ArgCount::new(0, 3);
         assert!(arg_count.contains(0));
         assert!(arg_count.contains(1));
@@ -338,7 +346,7 @@ mod tests{
     }
 
     #[test]
-    fn display_test(){
+    fn display_test() {
         assert_eq!(ArgCount::new(0, 2).to_string(), "0 to 2 arguments");
         assert_eq!(ArgCount::exactly(1).to_string(), "1 argument");
         assert_eq!(ArgCount::exactly(3).to_string(), "3 arguments");

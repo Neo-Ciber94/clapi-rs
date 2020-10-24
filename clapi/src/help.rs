@@ -55,12 +55,13 @@ impl HelpCommand for DefaultHelpCommand {
         writer.writeln(command.name());
 
         // Command description
-        if let Some(description) = command.description(){
+        if let Some(description) = command.description() {
             writer.indented(|w| w.writeln(description));
         }
 
         // Command usage
-        if command.args().take_args() || command.options().len() > 0 || command.children().len() > 0{
+        if command.args().take_args() || command.options().len() > 0 || command.children().len() > 0
+        {
             writer.section("USAGE:", |w| {
                 if command.args().take_args() {
                     w.writeln(format!("{} [ARGS]", command.name()));
@@ -70,7 +71,7 @@ impl HelpCommand for DefaultHelpCommand {
                     let mut result = String::from(command.name());
                     write!(result, " [OPTIONS]").unwrap();
 
-                    if command.options().iter().any(|o| o.take_args()){
+                    if command.options().iter().any(|o| o.take_args()) {
                         write!(result, " [ARGS]").unwrap();
                     }
 
@@ -80,15 +81,15 @@ impl HelpCommand for DefaultHelpCommand {
                 if command.children().len() > 0 {
                     let mut children = command.children();
 
-                    if children.any(|c| c.args().take_args()){
+                    if children.any(|c| c.args().take_args()) {
                         w.writeln(format!("{} [SUBCOMMAND] [ARGS]", command.name()));
                     }
 
-                    if children.any(|c| c.options().len() > 0){
+                    if children.any(|c| c.options().len() > 0) {
                         let mut result = String::from(command.name());
                         write!(result, " [SUBCOMMAND] [OPTIONS]").unwrap();
 
-                        if children.any(|c| c.options().iter().any(|o| o.take_args())){
+                        if children.any(|c| c.options().iter().any(|o| o.take_args())) {
                             write!(result, " [ARGS]").unwrap();
                         }
 
@@ -369,7 +370,7 @@ mod help_writer {
         }
 
         #[inline]
-        pub fn into_string(self) -> String{
+        pub fn into_string(self) -> String {
             self.writer.into_string()
         }
     }
@@ -443,7 +444,7 @@ mod help_writer {
             format!("{:>6}{}", name_prefix, option.name())
         };
 
-        if let Some(args_name) = option.args().name(){
+        if let Some(args_name) = option.args().name() {
             names.push_str(&format!(" <{}>", args_name.to_uppercase()));
         }
 
@@ -461,7 +462,12 @@ mod help_writer {
         let mut buffer = String::new();
 
         if let Some(description) = command.description() {
-            buffer.push_str(&format!("{:width$}{}", command.name(), description, width = WIDTH))
+            buffer.push_str(&format!(
+                "{:width$}{}",
+                command.name(),
+                description,
+                width = WIDTH
+            ))
         } else {
             buffer.push_str(&format!("{:width$}", command.name(), width = WIDTH))
         }

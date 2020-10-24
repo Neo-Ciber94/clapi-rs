@@ -2,9 +2,9 @@ use crate::args::Arguments;
 use crate::command::Command;
 use crate::error::Result;
 use crate::option::{CommandOption, Options};
+use std::cell::RefMut;
 use std::env::current_exe;
 use std::fmt::Debug;
-use std::cell::RefMut;
 
 /// A command-line command. This is used as the root command of an application.
 #[derive(Debug, Clone)]
@@ -46,7 +46,7 @@ impl RootCommand {
 
     /// Returns an `ExactSizeIterator` over the children of this command.
     #[inline]
-    pub fn children(&self) -> impl ExactSizeIterator<Item=&'_ Command> + Debug{
+    pub fn children(&self) -> impl ExactSizeIterator<Item = &'_ Command> + Debug {
         self.inner.children()
     }
 
@@ -69,7 +69,9 @@ impl RootCommand {
 
     /// Returns the handler of this command, or `None` if not set.
     #[inline]
-    pub fn handler(&self) -> Option<RefMut<'_, dyn FnMut(&Options, &Arguments) -> Result<()> + 'static>> {
+    pub fn handler(
+        &self,
+    ) -> Option<RefMut<'_, dyn FnMut(&Options, &Arguments) -> Result<()> + 'static>> {
         self.inner.handler()
     }
 
@@ -107,7 +109,7 @@ impl RootCommand {
     #[inline]
     pub fn set_new_options(self, options: Options) -> Self {
         RootCommand {
-            inner: self.inner.set_new_options(options)
+            inner: self.inner.set_new_options(options),
         }
     }
 
@@ -122,9 +124,9 @@ impl RootCommand {
     /// Sets the argument values of this command.
     #[inline]
     pub fn set_args_values<'a, S, I>(&mut self, args: I) -> Result<()>
-        where
-            S: ToString + 'a,
-            I: IntoIterator<Item = &'a S>,
+    where
+        S: ToString + 'a,
+        I: IntoIterator<Item = &'a S>,
     {
         self.inner.set_args_values(args)
     }
@@ -142,7 +144,7 @@ impl RootCommand {
     /// });
     /// ```
     #[inline]
-    pub fn set_handler<F: FnMut(&Options, &Arguments) -> Result<()> + 'static>(self, f: F) -> Self{
+    pub fn set_handler<F: FnMut(&Options, &Arguments) -> Result<()> + 'static>(self, f: F) -> Self {
         RootCommand {
             inner: self.inner.set_handler(f),
         }

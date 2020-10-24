@@ -1,11 +1,11 @@
-use crate::utils::{Then, Also};
+use crate::utils::{Also, Then};
 
 /// Provides suggestions matches a value.
 ///
 /// # Implementing SuggestionProvider:
 /// Suggestion provided require the function `suggestions_for` where you
 /// use the `source` values and returns the matches, or `None` if not match is found.
-pub trait SuggestionProvider{
+pub trait SuggestionProvider {
     /// Returns the suggestion values for the given `source` and `value`,
     /// or `None` if not suggestion if found.
     fn suggestions_for(&self, value: &str, source: &[String]) -> Option<Vec<String>>;
@@ -13,9 +13,9 @@ pub trait SuggestionProvider{
     /// Returns a suggestion message with the suggestion values.
     /// By default this method returns a message for when a single match is found and other
     /// when multiple matches are found.
-    fn suggestion_message_for(&self, value: &str, source: &[String]) -> Option<String>{
-        if let Some(suggestions) = self.suggestions_for(value, source){
-            match suggestions.len(){
+    fn suggestion_message_for(&self, value: &str, source: &[String]) -> Option<String> {
+        if let Some(suggestions) = self.suggestions_for(value, source) {
+            match suggestions.len() {
                 0 => None,
                 1 => Some(format!("\n\n\tDid you mean `{}`?\n", suggestions[0])),
                 _ => {
@@ -23,8 +23,7 @@ pub trait SuggestionProvider{
                     Some(format!("Possible values: \n{}", formatted_values))
                 }
             }
-        }
-        else{
+        } else {
             None
         }
     }
@@ -55,10 +54,12 @@ pub trait SuggestionProvider{
 ///
 /// # See
 /// https://en.wikipedia.org/wiki/Levenshtein_distance
-pub struct DefaultSuggestionProvider { max_count: usize }
-impl DefaultSuggestionProvider{
+pub struct DefaultSuggestionProvider {
+    max_count: usize,
+}
+impl DefaultSuggestionProvider {
     /// Constructs a new `DefaultSuggestionProvider` that returns a max of 5 suggestions.
-    pub const fn new() -> Self{
+    pub const fn new() -> Self {
         DefaultSuggestionProvider { max_count: 5 }
     }
 
@@ -70,14 +71,15 @@ impl DefaultSuggestionProvider{
     }
 
     /// Returns the max number of suggestions.
-    pub fn max_count(&self) -> usize{
+    pub fn max_count(&self) -> usize {
         self.max_count
     }
 }
 
 impl SuggestionProvider for DefaultSuggestionProvider {
     fn suggestions_for(&self, value: &str, source: &[String]) -> Option<Vec<String>> {
-        source.iter()
+        source
+            .iter()
             .map(|s| (s, compute_levenshtein_distance_ignore_case(&value, &s)))
             .take(self.max_count)
             .collect::<Vec<_>>()
@@ -112,23 +114,22 @@ impl SuggestionProvider for DefaultSuggestionProvider {
 /// # See
 /// https://en.wikipedia.org/wiki/Levenshtein_distance
 pub struct SingleSuggestionProvider;
-impl SuggestionProvider for SingleSuggestionProvider{
+impl SuggestionProvider for SingleSuggestionProvider {
     fn suggestions_for(&self, value: &str, source: &[String]) -> Option<Vec<String>> {
         let mut current = None;
         let mut current_cost = usize::max_value();
 
         for s in source {
             let cost = compute_levenshtein_distance_ignore_case(&value, s);
-            if cost < current_cost{
+            if cost < current_cost {
                 current = Some(s);
                 current_cost = cost;
             }
         }
 
-        if let Some(result) = current.cloned(){
+        if let Some(result) = current.cloned() {
             Some(std::slice::from_ref(&result).to_vec())
-        }
-        else{
+        } else {
             None
         }
     }
@@ -139,7 +140,7 @@ impl SuggestionProvider for SingleSuggestionProvider{
 /// # See
 /// https://en.wikipedia.org/wiki/Levenshtein_distance
 #[inline]
-pub fn compute_levenshtein_distance_ignore_case(x: &str, y: &str) -> usize{
+pub fn compute_levenshtein_distance_ignore_case(x: &str, y: &str) -> usize {
     compute_levenshtein_distance(x, y, true)
 }
 
@@ -147,7 +148,7 @@ pub fn compute_levenshtein_distance_ignore_case(x: &str, y: &str) -> usize{
 ///
 /// # See
 /// https://en.wikipedia.org/wiki/Levenshtein_distance
-pub fn compute_levenshtein_distance(x: &str, y: &str, ignore_case: bool) -> usize{
+pub fn compute_levenshtein_distance(x: &str, y: &str, ignore_case: bool) -> usize {
     if x == y {
         return 0;
     }
@@ -155,23 +156,35 @@ pub fn compute_levenshtein_distance(x: &str, y: &str, ignore_case: bool) -> usiz
     let len_x = x.chars().count();
     let len_y = y.chars().count();
 
-    if len_x == 0 { return len_y; }
-    if len_y == 0 { return len_x; }
-
-    #[inline(always)]
-    fn calculate_cost(a: char, b: char) -> usize{
-        if a == b { 0 } else { 1 }
+    if len_x == 0 {
+        return len_y;
+    }
+    if len_y == 0 {
+        return len_x;
     }
 
     #[inline(always)]
-    fn min<T: Ord>(a: T, b: T, c: T) -> T{
-        std::cmp::min( std::cmp::min(a, b), c)
+    fn calculate_cost(a: char, b: char) -> usize {
+        if a == b {
+            0
+        } else {
+            1
+        }
+    }
+
+    #[inline(always)]
+    fn min<T: Ord>(a: T, b: T, c: T) -> T {
+        std::cmp::min(std::cmp::min(a, b), c)
     }
 
     let mut distance = vec![vec![0; len_y + 1]; len_x + 1];
 
-    for i in 0..=len_x { distance[i][0] = i; }
-    for j in 0..=len_y { distance[0][j] = j; }
+    for i in 0..=len_x {
+        distance[i][0] = i;
+    }
+    for j in 0..=len_y {
+        distance[0][j] = j;
+    }
 
     for i in 1..=len_x {
         for j in 1..=len_y {
@@ -195,15 +208,18 @@ pub fn compute_levenshtein_distance(x: &str, y: &str, ignore_case: bool) -> usiz
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
 
     #[test]
-    fn compute_levenshtein_distance_test(){
+    fn compute_levenshtein_distance_test() {
         assert_eq!(compute_levenshtein_distance_ignore_case("pop", "pop"), 0);
         assert_eq!(compute_levenshtein_distance_ignore_case("casa", "calle"), 3);
         assert_eq!(compute_levenshtein_distance_ignore_case("shot", "spot"), 1);
         assert_eq!(compute_levenshtein_distance_ignore_case("dad", "mom"), 3);
-        assert_eq!(compute_levenshtein_distance_ignore_case("blueberry", "berry"), 4);
+        assert_eq!(
+            compute_levenshtein_distance_ignore_case("blueberry", "berry"),
+            4
+        );
     }
 }

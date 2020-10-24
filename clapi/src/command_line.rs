@@ -26,15 +26,13 @@ impl CommandLine {
 
     /// Constructs a new `CommandLine` with default values with the provided `RootCommand`.
     #[inline]
-    pub fn default_with_root(root: RootCommand) -> Self{
-        Self::new(root)
-            .use_default_suggestions()
-            .use_default_help()
+    pub fn default_with_root(root: RootCommand) -> Self {
+        Self::new(root).use_default_suggestions().use_default_help()
     }
 
     /// Constructs a new `CommandLine` with default values with the provided `Context`.
     #[inline]
-    pub fn default_with_context(context: Context) -> Self{
+    pub fn default_with_context(context: Context) -> Self {
         Self::with_context(context)
             .use_default_suggestions()
             .use_default_help()
@@ -90,8 +88,7 @@ impl CommandLine {
             help_command.name()
         );
 
-        let command = Command::new(help_command.name())
-            .set_description(help_command.description());
+        let command = Command::new(help_command.name()).set_description(help_command.description());
 
         self.context.root_mut().as_mut().add_command(command);
         self.help = Some(Box::new(help_command));
@@ -131,7 +128,7 @@ impl CommandLine {
 
         let parse_result = match result {
             Ok(r) => r,
-            Err(error) => return self.handle_parse_error(error)
+            Err(error) => return self.handle_parse_error(error),
         };
 
         let command = parse_result.command();
@@ -164,11 +161,11 @@ impl CommandLine {
     ///
     /// This is equivalent to `cmd_line.exec(std::env::args().skip(1))`.
     #[inline]
-    pub fn run(&self) -> Result<()>{
+    pub fn run(&self) -> Result<()> {
         self.exec(std::env::args().skip(1))
     }
 
-    fn handle_parse_error(&self, error: Error) -> Result<()>{
+    fn handle_parse_error(&self, error: Error) -> Result<()> {
         if *error.kind() == ErrorKind::EmptyExpression && self.help.is_some() {
             return self.display_help(&[]);
         }

@@ -7,15 +7,16 @@ pub trait OptionExt<T> {
         T: PartialEq;
 }
 
-impl<T> OptionExt<T> for Option<T>{
+impl<T> OptionExt<T> for Option<T> {
     #[inline]
-    fn contains_some<U>(&self, value: U) -> bool where
+    fn contains_some<U>(&self, value: U) -> bool
+    where
         U: Borrow<T>,
-        T: PartialEq {
-
-        match self{
+        T: PartialEq,
+    {
+        match self {
             Some(x) => x == value.borrow(),
-            None => false
+            None => false,
         }
     }
 }

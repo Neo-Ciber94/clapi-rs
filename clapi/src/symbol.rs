@@ -1,4 +1,3 @@
-
 /// Represents a command-line symbol.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Symbol {

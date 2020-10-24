@@ -53,7 +53,9 @@ impl Error {
         option: Option<CommandOption>,
         args: Option<Vec<String>>,
     ) -> Self {
-        Error { inner: Parsed(Box::new(ParseError::new(kind, command, option, args))) }
+        Error {
+            inner: Parsed(Box::new(ParseError::new(kind, command, option, args))),
+        }
     }
 
     /// Returns the `ErrorKind` of this error.

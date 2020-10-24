@@ -1,4 +1,4 @@
-use crate::args::{Arguments, Iter};
+use crate::args::Arguments;
 use crate::command::Command;
 use crate::error::Result;
 use crate::option::{CommandOption, Options};
@@ -77,10 +77,10 @@ impl ParseResult {
     /// - If there is no values to convert.
     /// - If this takes not args.
     /// - One of the values cannot be converted to type `T`.
-    pub fn get_option_args_as<T>(&self, name_or_alias: &str) -> Option<Result<Iter<'_, T>>>
-        where
-            T: FromStr,
-            <T as FromStr>::Err: Display,
+    pub fn get_option_args_as<T>(&self, name_or_alias: &str) -> Option<Result<Vec<T>>>
+    where
+        T: FromStr,
+        <T as FromStr>::Err: Display,
     {
         self.get_option(name_or_alias).map(|o| o.args_as())
     }

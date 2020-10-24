@@ -60,7 +60,7 @@ impl Command {
     }
 
     /// Returns a description of the usage of this command.
-    pub fn help(&self) -> Option<&str>{
+    pub fn help(&self) -> Option<&str> {
         self.help.as_ref().map(|s| s.as_str())
     }
 
@@ -153,8 +153,10 @@ impl Command {
     ///         Ok(())
     /// });
     /// ```
-    pub fn set_handler<F>(mut self, f: F, ) -> Self
-        where F: FnMut(&Options, &Arguments) -> Result<()> + 'static {
+    pub fn set_handler<F>(mut self, f: F) -> Self
+    where
+        F: FnMut(&Options, &Arguments) -> Result<()> + 'static,
+    {
         self.handler = Some(Rc::new(RefCell::new(f)));
         self
     }

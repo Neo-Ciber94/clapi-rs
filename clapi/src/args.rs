@@ -3,10 +3,10 @@ use crate::args::validator::{ListValidator, Validator};
 use crate::error::{Error, ErrorKind, Result};
 use crate::symbol::Symbol;
 use linked_hash_set::LinkedHashSet;
-use std::fmt::{Debug, Formatter, Display};
+use std::fmt::{Debug, Display, Formatter};
+use std::marker::PhantomData;
 use std::rc::Rc;
 use std::str::FromStr;
-use std::marker::PhantomData;
 
 /// Represents the arguments of an option or command.
 #[derive(Clone)]
@@ -73,7 +73,7 @@ impl Arguments {
 
     /// Returns the name of this `Arguments` or `None` if not set.
     #[inline]
-    pub fn name(&self) -> Option<&str>{
+    pub fn name(&self) -> Option<&str> {
         self.name.as_ref().map(|s| s.as_str())
     }
 
@@ -123,7 +123,7 @@ impl Arguments {
     }
 
     /// Sets the name of this arguments.
-    pub fn set_name(mut self, name: &str) -> Self{
+    pub fn set_name(mut self, name: &str) -> Self {
         self.name = Some(name.to_string());
         self
     }
@@ -156,7 +156,10 @@ impl Arguments {
             .map(ToString::to_string)
             .collect::<Vec<String>>();
 
-        assert!(self.default_values.is_empty(), "already have default values");
+        assert!(
+            self.default_values.is_empty(),
+            "already have default values"
+        );
         assert!(self.take_args(), "arguments takes not values");
         assert!(self.values.is_empty(), "arguments already have values");
         assert!(
@@ -300,18 +303,21 @@ impl Arguments {
     /// - If this takes not args.
     /// - The value cannot be converted to type `T`.
     pub fn convert<T>(&self) -> Result<T>
-        where T : FromStr, <T as FromStr>::Err : Display {
+    where
+        T: FromStr,
+        <T as FromStr>::Err: Display,
+    {
         if self.values.is_empty() {
             return Err(Error::new(ErrorKind::Unknown, "no args to convert"));
         }
 
-        if self.arity.takes_args(){
+        if self.arity.takes_args() {
             try_parse_str(self.values[0].as_str())
         } else {
             Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
-                "takes not args")
-            )
+                "takes not args",
+            ))
         }
     }
 
@@ -321,23 +327,26 @@ impl Arguments {
     /// - If there is no values to convert.
     /// - If this takes not args.
     /// - One of the values cannot be converted to type `T`.
-    pub fn convert_all<T>(&self) -> Result<Iter<'_, T>>
-        where T : FromStr, <T as FromStr>::Err : Display {
-
+    pub fn convert_all<T>(&self) -> Result<Vec<T>>
+    where
+        T: FromStr,
+        <T as FromStr>::Err: Display,
+    {
         if self.values.is_empty() {
             return Err(Error::new(ErrorKind::Unknown, "no args to convert"));
         }
 
-        if self.arity.takes_args(){
-            Ok(Iter {
-                iter: self.values.iter(),
-                _marker: PhantomData
-            })
+        if self.arity.takes_args() {
+            let mut ret = Vec::new();
+            for value in &self.values {
+                ret.push(try_parse_str(value)?);
+            }
+            Ok(ret)
         } else {
             Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
-                "takes not args")
-            )
+                "takes not args",
+            ))
         }
     }
 }
@@ -379,46 +388,14 @@ impl<'a> IntoIterator for &'a Arguments {
     }
 }
 
-/// An iterator that converts the values into type `T`.
-pub struct Iter<'a, T>{
-    iter: std::slice::Iter<'a, String>,
-    _marker: PhantomData<T>
-}
-
-impl<T> Iter<'_, T>
-    where T : FromStr, <T as FromStr>::Err : Display{
-    /// Returns an `Ok(Vec<T>)` if all the values are converted
-    /// otherwise returns `Err`.
-    pub fn into_vec(self) -> Result<Vec<T>>{
-        let mut vec = Vec::new();
-
-        for arg in self {
-            vec.push(arg?);
-        }
-
-        Ok(vec)
-    }
-}
-
-impl<T> Iterator for Iter<'_, T>
-    where T : FromStr, <T as FromStr>::Err : Display{
-    type Item = Result<T>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.iter.next(){
-            Some(n) => Some(try_parse_str(n)),
-            None => None
-        }
-    }
-}
-
 fn try_parse_str<T>(value: &str) -> Result<T>
-    where T : FromStr, <T as FromStr>::Err : Display{
-    match T::from_str(value){
+where
+    T: FromStr,
+    <T as FromStr>::Err: Display,
+{
+    match T::from_str(value) {
         Ok(n) => Ok(n),
-        Err(e) => {
-            Err(Error::new(ErrorKind::Unknown, e.to_string()))
-        }
+        Err(e) => Err(Error::new(ErrorKind::Unknown, e.to_string())),
     }
 }
 
@@ -601,9 +578,8 @@ mod tests {
     }
 
     #[test]
-    fn convert_test(){
-        let mut args = Arguments::new(1..)
-            .set_name("numbers");
+    fn convert_test() {
+        let mut args = Arguments::new(1..).set_name("numbers");
 
         args.set_values(&["1", "2", "3"]).unwrap();
 
@@ -612,18 +588,17 @@ mod tests {
     }
 
     #[test]
-    fn convert_all_test(){
-        let mut args = Arguments::new(1..)
-            .set_name("numbers");
+    fn convert_all_test() {
+        let mut args = Arguments::new(1..).set_name("numbers");
 
         args.set_values(&["1", "2", "3"]).unwrap();
 
-        let values = args.convert_all::<u32>();
-        assert_eq!(vec![1,2,3], values.unwrap().into_vec().unwrap());
+        let values = args.convert_all::<u32>().unwrap();
+        assert_eq!(vec![1, 2, 3], values);
     }
 
     #[test]
-    fn convert_error_test(){
+    fn convert_error_test() {
         let mut args = Arguments::new(1..);
 
         args.set_values(&["1", "bool", "3"]).unwrap();
