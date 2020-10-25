@@ -40,7 +40,7 @@ impl CommandOption {
     }
 
     /// Returns an `Iterator` over the aliases of this option.
-    pub fn aliases(&self) -> impl ExactSizeIterator<Item = &'_ String> {
+    pub fn aliases(&self) -> impl ExactSizeIterator<Item = &'_ String> + Debug {
         self.aliases.iter()
     }
 

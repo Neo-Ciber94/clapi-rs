@@ -17,10 +17,10 @@ use crate::parse_to_str_stream2;
 /// ```
 #[derive(Debug)]
 pub struct OptionTokens {
-    pub(crate) name: String,
-    pub(crate) alias: Option<String>,
-    pub(crate) description: Option<String>,
-    pub(crate) args: Option<ArgsTokens>,
+    name: String,
+    alias: Option<String>,
+    description: Option<String>,
+    args: Option<ArgsTokens>,
 }
 
 impl OptionTokens {
@@ -46,34 +46,28 @@ impl OptionTokens {
     }
 
     pub fn expand(&self) -> TokenStream {
-        let name = parse_to_str_stream2(&self.name);
-
         let alias = if let Some(s) = &self.alias{
             let tokens = parse_to_str_stream2(s);
-            quote!{
-                .set_alias(#tokens)
-            }
+            quote!{ .set_alias(#tokens) }
         } else {
             quote!{}
         };
 
         let description = if let Some(s) = &self.description{
             let tokens = parse_to_str_stream2(s);
-            quote!{
-                .set_description(#tokens)
-            }
+            quote!{ .set_description(#tokens) }
         } else {
             quote!{}
         };
 
         let args = if let Some(args) = &self.args{
             let tokens = args.expand();
-            quote!{
-                .set_args(#tokens)
-            }
+            quote!{ .set_args(#tokens) }
         } else {
             quote!{}
         };
+
+        let name = parse_to_str_stream2(&self.name);
 
         quote!{
             clapi::option::CommandOption::new(#name)
@@ -81,5 +75,11 @@ impl OptionTokens {
             #description
             #args
         }
+    }
+}
+
+impl ToTokens for OptionTokens{
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        tokens.append_all(self.expand().into_iter())
     }
 }

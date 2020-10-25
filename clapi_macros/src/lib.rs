@@ -5,6 +5,8 @@ mod command;
 mod option;
 
 mod ext;
+mod var;
+
 pub(crate) use ext::*;
 
 extern crate proc_macro;
@@ -14,18 +16,25 @@ use proc_macro::TokenTree;
 use quote::*;
 use syn::*;
 use syn::export::fmt::Display;
+use crate::option::OptionTokens;
 
 #[proc_macro_attribute]
 pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let args = syn::parse_macro_input!(attr as AttributeArgs);
-    let func = syn::parse_macro_input!(item as ItemFn);
+    // let args = syn::parse_macro_input!(attr as AttributeArgs);
+    // let func = syn::parse_macro_input!(item as ItemFn);
 
-    let ty : TokenStream = quote! { &[std::alloc::Vec<String>] }.into();
-    let t = syn::parse_macro_input!(ty as Box<Type>);
-    println!("{:#?}", t);
+    let mut opt = OptionTokens::new("test".to_string());
+    opt.set_alias("t".to_string());
+    opt.set_description("enable tests".to_string());
 
     let tokens = quote! {
-        fn main(){}
+        fn main(){
+            let x = #opt;
+            println!("{}", x.name());
+            println!("{:?}", x.aliases());
+            println!("{:?}", x.description());
+            println!("{:#?}", x.args());
+        }
     };
 
     tokens.into()

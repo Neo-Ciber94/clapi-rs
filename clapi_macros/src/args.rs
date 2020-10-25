@@ -19,10 +19,10 @@ use syn::{Attribute, Signature, Type};
 /// ```
 #[derive(Default, Debug)]
 pub struct ArgsTokens {
-    pub(crate) min: Option<usize>,
-    pub(crate) max: Option<usize>,
-    pub(crate) ty: Option<Box<Type>>,
-    pub(crate) default_values: Vec<String>,
+    min: Option<usize>,
+    max: Option<usize>,
+    ty: Option<Box<Type>>,
+    default_values: Vec<String>,
 }
 
 impl ArgsTokens {
@@ -122,5 +122,11 @@ impl ArgsTokens {
             clapi::args::Arguments::new(#min..=#max)
             #default_values
         }
+    }
+}
+
+impl ToTokens for ArgsTokens{
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        tokens.append_all(self.expand().into_iter())
     }
 }
