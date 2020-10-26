@@ -27,8 +27,10 @@ use clapi_macros::command;
     default = false
 )]
 #[args(name = "values", min = 1, max = 2, default = "one", "two", "tree", id(hello=10))]
-fn main(x: u32, y: String, z: bool, values: alloc::vec::Vec<String>) {
-    // cmd one two three
+fn main(x: u32, y: String, z: bool, values: Vec<String>) {
+    fn other(a: String){
+
+    }
 }
 
 #[allow(dead_code)]

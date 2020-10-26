@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 clapi= { path="../clapi" }
 clapi_macros= { path="../clapi_macros" }
+cargo-inspect = "0.10.3"

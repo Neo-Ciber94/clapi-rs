@@ -1,6 +1,4 @@
-use crate::{parse_to_str_stream2, parse_to_stream2, IteratorExt};
-use clapi::args::Arguments;
-use clapi::option::Options;
+use crate::{parse_to_str_stream2, IteratorExt};
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::ToTokens;
@@ -8,19 +6,23 @@ use syn::{GenericArgument, Pat, PatType, PathArguments, Type};
 
 #[derive(Debug, Clone)]
 pub struct LocalVar {
-    path: String,
-    ty: VarType,
-    is_mut: bool,
-    is_args: bool,
+    pub name: String,
+    pub ty: VarType,
+    pub is_mut: bool,
+    pub from_args: bool,
 }
 
 impl LocalVar {
-    pub fn new(pat_type: PatType, is_args: bool) -> LocalVar {
-        new_local_var(pat_type, is_args)
+    pub fn new(pat_type: PatType, from_args: bool) -> LocalVar {
+        new_local_var(None, pat_type, from_args)
+    }
+
+    pub fn with_name(name: String, pat_type: PatType, from_args: bool) -> LocalVar {
+        new_local_var(Some(name), pat_type, from_args)
     }
 
     pub fn expand(&self) -> TokenStream {
-        let path = parse_to_str_stream2(&self.path);
+        let path = parse_to_str_stream2(&self.name);
 
         let mutability = if self.is_mut {
             quote! { mut }
@@ -28,7 +30,7 @@ impl LocalVar {
             quote! {}
         };
 
-        let source = if self.is_args {
+        let source = if self.from_args {
             match &self.ty {
                 VarType::Single(t) => {
                     quote! { args.convert::<#t>().unwrap() }
@@ -44,7 +46,7 @@ impl LocalVar {
                 }
             }
         } else {
-            let name = parse_to_str_stream2(&self.path);
+            let name = parse_to_str_stream2(&self.name);
 
             match &self.ty {
                 VarType::Single(t) => {
@@ -68,14 +70,14 @@ impl LocalVar {
     }
 }
 
-impl ToTokens for LocalVar{
+impl ToTokens for LocalVar {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append_all(self.expand().into_iter())
     }
 }
 
 #[derive(Debug, Clone)]
-enum VarType {
+pub enum VarType {
     Single(Box<Type>),
     Vec(Box<Type>),
     Slice(Box<Type>),
@@ -121,8 +123,8 @@ impl VarType {
     }
 }
 
-fn new_local_var(pat_type: PatType, is_args: bool) -> LocalVar {
-    let path = pat_type.pat.to_token_stream().to_string();
+fn new_local_var(name: Option<String>, pat_type: PatType, from_args: bool) -> LocalVar {
+    let path = name.unwrap_or_else(|| pat_type.pat.to_token_stream().to_string());
     let is_mut = match pat_type.pat.as_ref() {
         Pat::Ident(ident) => ident.mutability.is_some(),
         _ => false,
@@ -151,9 +153,9 @@ fn new_local_var(pat_type: PatType, is_args: bool) -> LocalVar {
                         };
 
                         LocalVar {
-                            path,
+                            name: path,
                             is_mut,
-                            is_args,
+                            from_args,
                             ty: VarType::Vec(ty),
                         }
                     }
@@ -161,9 +163,9 @@ fn new_local_var(pat_type: PatType, is_args: bool) -> LocalVar {
                 }
             } else {
                 LocalVar {
-                    path,
+                    name: path,
                     is_mut,
-                    is_args,
+                    from_args,
                     ty: VarType::Vec(pat_type.ty),
                 }
             }
@@ -171,16 +173,16 @@ fn new_local_var(pat_type: PatType, is_args: bool) -> LocalVar {
         Type::Reference(type_ref) => {
             if type_ref.mutability.is_some() {
                 LocalVar {
-                    path,
+                    name: path,
                     is_mut,
-                    is_args,
+                    from_args,
                     ty: VarType::MutSlice(type_ref.elem.clone()),
                 }
             } else {
                 LocalVar {
-                    path,
+                    name: path,
                     is_mut,
-                    is_args,
+                    from_args,
                     ty: VarType::Slice(type_ref.elem.clone()),
                 }
             }

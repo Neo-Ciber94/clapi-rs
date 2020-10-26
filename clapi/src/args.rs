@@ -321,6 +321,43 @@ impl Arguments {
         }
     }
 
+    /// Converts the value at the given index into the specified type.
+    ///
+    /// # Error
+    /// - If the index is out of bounds.
+    /// - If there is no values to convert.
+    /// - If this takes not args.
+    /// - The value cannot be converted to type `T`.
+    pub fn convert_at<T>(&self, index: usize) -> Result<T>
+    where
+        T: FromStr,
+        <T as FromStr>::Err: Display,
+    {
+        if self.values.is_empty() {
+            return Err(Error::new(ErrorKind::Unknown, "no args to convert"));
+        }
+
+        if self.arity.takes_args() {
+            if index > self.values.len() {
+                return Err(Error::new(
+                    ErrorKind::Unknown,
+                    format!(
+                        "index out of bounds: length is {} but index is {}",
+                        self.values.len(),
+                        index
+                    ),
+                ));
+            }
+
+            try_parse_str(self.values[index].as_str())
+        } else {
+            Err(Error::new(
+                ErrorKind::InvalidArgumentCount,
+                "takes not args",
+            ))
+        }
+    }
+
     /// Returns an iterator that converts the values into the specified type.
     ///
     /// # Error

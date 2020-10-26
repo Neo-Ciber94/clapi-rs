@@ -21,24 +21,21 @@ use crate::option::OptionTokens;
 #[proc_macro_attribute]
 pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
     // let args = syn::parse_macro_input!(attr as AttributeArgs);
-    // let func = syn::parse_macro_input!(item as ItemFn);
+    let func = syn::parse_macro_input!(item as ItemFn);
 
-    let mut opt = OptionTokens::new("test".to_string());
-    opt.set_alias("t".to_string());
-    opt.set_description("enable tests".to_string());
+    println!("{}", func.block.to_token_stream().to_string());
 
     let tokens = quote! {
         fn main(){
-            let x = #opt;
-            println!("{}", x.name());
-            println!("{:?}", x.aliases());
-            println!("{:?}", x.description());
-            println!("{:#?}", x.args());
+           println!("Hello World")
         }
     };
 
     tokens.into()
 }
+
+#[proc_macro_attribute]
+pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream { item }
 
 pub(crate) fn parse_with<T: syn::parse::Parser>(
     parser: T,

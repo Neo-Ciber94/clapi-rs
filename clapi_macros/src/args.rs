@@ -1,11 +1,7 @@
-use crate::attr_data::AttributeData;
-use crate::command::TypedFnArg;
-use crate::{parse_to_str_stream2, parse_to_stream2};
-use clapi::arg_count::ArgCount;
-use clapi::utils::{Also, Then};
+use crate::parse_to_stream2;
 use proc_macro2::TokenStream;
 use quote::*;
-use syn::{Attribute, Signature, Type};
+use syn::Type;
 
 /// Tokens for:
 ///
@@ -30,49 +26,8 @@ impl ArgsTokens {
         ArgsTokens::default()
     }
 
-    pub fn from(fn_arg: TypedFnArg, attribute: Option<AttributeData>) -> Self {
-        let mut args_tokens = ArgsTokens::new();
-        args_tokens.set_arg_type(fn_arg.ty);
-
-        if let Some(attr) = attribute {
-            assert_eq!(attr.path(), "args", "expected attribute named `args`");
-
-            for (key, value) in attr {
-                match key.as_str() {
-                    "min" => {
-                        assert!(args_tokens.min.is_none(), "duplicated args key `min`");
-                        let min = value
-                            .parse_literal::<usize>()
-                            .expect("expected number literal for `min`");
-
-                        args_tokens.set_min(min);
-                    }
-                    "max" => {
-                        assert!(args_tokens.max.is_none(), "duplicated args key `max`");
-                        let max = value
-                            .parse_literal::<usize>()
-                            .expect("expected number literal for `max`");
-
-                        args_tokens.set_max(max);
-                    }
-                    "default" => {
-                        assert!(args_tokens.default_values.is_empty(), "duplicated args key `default`");
-                        let default = value
-                            .clone()
-                            .into_array()
-                            .expect("expect literal or array for `default`");
-
-                        args_tokens.set_default_values(default);
-                    }
-                    _ => panic!(
-                        "unknown args key `{}`. allowed keys: `min`, `max`, `default`",
-                        key
-                    ),
-                }
-            }
-        }
-
-        args_tokens
+    pub fn has_default_values(&self) -> bool{
+        !self.default_values.is_empty()
     }
 
     pub fn set_min(&mut self, min: usize){

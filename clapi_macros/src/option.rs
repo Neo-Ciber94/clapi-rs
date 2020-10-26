@@ -29,7 +29,7 @@ impl OptionTokens {
             name,
             alias: None,
             description: None,
-            args: None
+            args: None,
         }
     }
 
@@ -46,6 +46,7 @@ impl OptionTokens {
     }
 
     pub fn expand(&self) -> TokenStream {
+        // CommandOption::set_alias
         let alias = if let Some(s) = &self.alias{
             let tokens = parse_to_str_stream2(s);
             quote!{ .set_alias(#tokens) }
@@ -53,6 +54,7 @@ impl OptionTokens {
             quote!{}
         };
 
+        // CommandOption::set_description
         let description = if let Some(s) = &self.description{
             let tokens = parse_to_str_stream2(s);
             quote!{ .set_description(#tokens) }
@@ -60,6 +62,15 @@ impl OptionTokens {
             quote!{}
         };
 
+        // `CommandOption::set_required` is args have default values
+        let required = match &self.args {
+            Some(args) if args.has_default_values() => {
+                quote! { .set_required(true) }
+            }
+            _ => quote! {}
+        };
+
+        // CommandOption::set_args
         let args = if let Some(args) = &self.args{
             let tokens = args.expand();
             quote!{ .set_args(#tokens) }
@@ -73,6 +84,7 @@ impl OptionTokens {
             clapi::option::CommandOption::new(#name)
             #alias
             #description
+            #required
             #args
         }
     }

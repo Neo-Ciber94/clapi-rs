@@ -5,16 +5,18 @@ use syn::export::ToTokens;
 use syn::{Attribute, AttributeArgs, Meta, MetaList, MetaNameValue, NestedMeta, Path, Result};
 use std::str::FromStr;
 
+/// Provides a set of methods for query over the data of a macro attribute.
 #[derive(Debug, Clone)]
 pub struct AttributeData {
     path: String,
     data: HashMap<String, Value>,
 }
 
+/// A macro attribute value
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Value {
     /// No value: `#[attribute(key)]`
-    Empty,
+    None,
     /// A literal: `#[attribute(key=literal)]`
     Literal(String),
     /// An array of literals: `#[attribute(key=1,2,3)]`
@@ -24,9 +26,9 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn is_empty(&self) -> bool{
+    pub fn is_none(&self) -> bool{
         match self{
-            Value::Empty => true,
+            Value::None => true,
             _ => false
         }
     }
@@ -49,6 +51,27 @@ impl Value {
         match self{
             Value::Nested(_) => true,
             _ => false
+        }
+    }
+
+    pub fn as_literal(&self) -> Option<&String>{
+        match self{
+            Value::Literal(x) => Some(x),
+            _ => None
+        }
+    }
+
+    pub fn as_array(&self) -> Option<&Vec<String>>{
+        match self{
+            Value::Array(x) => Some(x),
+            _ => None
+        }
+    }
+
+    pub fn as_nested(&self) -> Option<&HashMap<String, Value>>{
+        match self{
+            Value::Nested(x) => Some(x),
+            _ => None
         }
     }
 
@@ -101,7 +124,7 @@ impl AttributeData {
     }
 
     pub fn from_attribute_args(path: String, args: AttributeArgs) -> Self {
-        AttributeVisitor::from_args(path, args).visit()
+        AttributeVisitor::from_attribute_args(path, args).visit()
     }
 
     pub fn path(&self) -> &str {
@@ -165,7 +188,7 @@ impl AttributeVisitor {
         AttributeVisitor { path, args }
     }
 
-    pub fn from_args(path: String, args: AttributeArgs) -> Self{
+    pub fn from_attribute_args(path: String, args: AttributeArgs) -> Self{
         AttributeVisitor { path, args }
     }
 
@@ -198,7 +221,7 @@ impl AttributeVisitor {
 
     fn visit_path(&self, data: &mut HashMap<String, Value>, path: &Path) {
         let key = path.to_token_stream().to_string();
-        data.insert(key, Value::Empty);
+        data.insert(key, Value::None);
     }
 
     fn visit_name_value<'a, I>(
@@ -222,7 +245,7 @@ impl AttributeVisitor {
         debug_assert!(values.len() > 0);
 
         if values.len() == 1 {
-            data.insert(key, Value::Literal(values[0].clone()));
+            data.insert(key, Value::Literal(values.swap_remove(0)));
         } else {
             data.insert(key, Value::Array(values));
         }
@@ -251,7 +274,7 @@ impl AttributeVisitor {
         }
 
         if map.is_empty() {
-            data.insert(key, Value::Empty);
+            data.insert(key, Value::None);
         } else {
             data.insert(key, Value::Nested(map));
         }
