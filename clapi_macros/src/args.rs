@@ -1,7 +1,8 @@
-use crate::parse_to_stream2;
+use crate::{parse_to_stream2, parse_to_str_stream2};
 use proc_macro2::TokenStream;
 use quote::*;
-use syn::Type;
+use syn::{Type, PatType};
+use crate::attr_data::{AttributeData, Value};
 
 /// Tokens for:
 ///
@@ -17,13 +18,16 @@ use syn::Type;
 pub struct ArgsTokens {
     min: Option<usize>,
     max: Option<usize>,
-    ty: Option<Box<Type>>,
     default_values: Vec<String>,
 }
 
 impl ArgsTokens {
     pub fn new() -> Self {
         ArgsTokens::default()
+    }
+
+    pub fn from_attribute_data(attr: AttributeData) -> ArgsTokens {
+        new_arg_tokens_from_attr_data(attr)
     }
 
     pub fn has_default_values(&self) -> bool{
@@ -36,10 +40,6 @@ impl ArgsTokens {
 
     pub fn set_max(&mut self, max: usize){
         self.max = Some(max);
-    }
-
-    pub fn set_arg_type(&mut self, ty: Box<Type>) {
-        self.ty = Some(ty);
     }
 
     pub fn set_default_values(&mut self, default_values: Vec<String>) {
@@ -66,7 +66,9 @@ impl ArgsTokens {
         let default_values = if self.default_values.is_empty() {
             quote! {}
         } else {
-            let tokens = self.default_values.iter().map(|s| parse_to_stream2(s));
+            let tokens = self.default_values
+                .iter()
+                .map(|s| parse_to_str_stream2(s));
 
             quote! {
                 .set_default_values(&[#(#tokens),*])
@@ -84,4 +86,38 @@ impl ToTokens for ArgsTokens{
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append_all(self.expand().into_iter())
     }
+}
+
+fn new_arg_tokens_from_attr_data(attr: AttributeData) -> ArgsTokens {
+    let mut args = ArgsTokens::new();
+
+    for (key, value) in &attr {
+        match key.as_str() {
+            "name" => { /* Ignore */ },
+            "min" => {
+                let min = value.clone()
+                    .clone()
+                    .parse_literal::<usize>()
+                    .expect("option `min` is expected to be an integer literal");
+
+                args.set_min(min);
+            }
+            "max" => {
+                let max = value.clone()
+                    .clone()
+                    .parse_literal::<usize>()
+                    .expect("option `max` is expected to be an integer literal");
+
+                args.set_max(max);
+            }
+            "default" => match value.clone() {
+                Value::Literal(s) => args.set_default_values(vec![s]),
+                Value::Array(array) => args.set_default_values(array),
+                _ => panic!("option `default` expected to be literal or array"),
+            },
+            _ => panic!("invalid {} key `{}`", attr.path(), key),
+        }
+    }
+
+    args
 }

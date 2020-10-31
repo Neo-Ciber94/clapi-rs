@@ -2,7 +2,7 @@ use std::collections::hash_map::{Keys, Iter};
 use std::collections::HashMap;
 use std::iter::Peekable;
 use syn::export::ToTokens;
-use syn::{Attribute, AttributeArgs, Meta, MetaList, MetaNameValue, NestedMeta, Path, Result};
+use syn::{Attribute, AttributeArgs, Meta, MetaList, MetaNameValue, NestedMeta, Path, Result, Lit};
 use std::str::FromStr;
 
 /// Provides a set of methods for query over the data of a macro attribute.
@@ -235,10 +235,10 @@ impl AttributeVisitor {
         let key = name_value.path.to_token_stream().to_string();
         let mut values = Vec::new();
 
-        values.push(name_value.lit.to_token_stream().to_string());
+        values.push(literal_to_string(&name_value.lit));
 
         while let Some(NestedMeta::Lit(lit)) = iter.peek() {
-            values.push(lit.to_token_stream().to_string());
+            values.push(literal_to_string(&name_value.lit));
             iter.next();
         }
 
@@ -285,8 +285,21 @@ pub fn get_attribute_args(att: &Attribute) -> Result<AttributeArgs> {
     let mut token_tree = att.tokens.clone().into_iter();
     if let Some(proc_macro2::TokenTree::Group(group)) = token_tree.next() {
         let stream = group.stream().into();
-        syn::parse_macro_input::parse::<AttributeArgs>(stream)
+        return syn::parse_macro_input::parse::<AttributeArgs>(stream);
     } else {
-        unreachable!()
+        Ok(AttributeArgs::new())
+    }
+}
+
+fn literal_to_string(lit: &Lit) -> String{
+    match lit {
+        Lit::Str(s) => s.value(),
+        Lit::ByteStr(s) =>unsafe { String::from_utf8_unchecked(s.value()) },
+        Lit::Byte(s) => s.value().to_string(),
+        Lit::Char(s) => s.value().to_string(),
+        Lit::Int(s) => s.to_string(),
+        Lit::Float(s) => s.to_string(),
+        Lit::Bool(s) => s.value.to_string(),
+        Lit::Verbatim(s) => s.to_string()
     }
 }

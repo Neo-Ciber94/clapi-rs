@@ -12,18 +12,19 @@ pub(crate) use ext::*;
 extern crate proc_macro;
 use crate::attr_data::AttributeData;
 use proc_macro::TokenStream;
-use proc_macro::TokenTree;
 use quote::*;
 use syn::*;
 use syn::export::fmt::Display;
-use crate::option::OptionTokens;
+use crate::command::CommandTokens;
 
 #[proc_macro_attribute]
 pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
-    // let args = syn::parse_macro_input!(attr as AttributeArgs);
+    let args = syn::parse_macro_input!(attr as AttributeArgs);
     let func = syn::parse_macro_input!(item as ItemFn);
 
-    println!("{}", func.block.to_token_stream().to_string());
+    let command = CommandTokens::from_attribute_args(args, func);
+    let tokens : proc_macro2::TokenStream = command.expand();
+    println!("{}", tokens.to_string());
 
     let tokens = quote! {
         fn main(){
@@ -34,8 +35,8 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
     tokens.into()
 }
 
-#[proc_macro_attribute]
-pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream { item }
+// #[proc_macro_attribute]
+// pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream { item }
 
 pub(crate) fn parse_with<T: syn::parse::Parser>(
     parser: T,

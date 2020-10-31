@@ -1,11 +1,15 @@
 use crate::args::ArgsTokens;
-use crate::attr_data::AttributeData;
+use crate::attr_data::{AttributeData, Value};
 use crate::option::OptionTokens;
-use crate::var::LocalVar;
+use crate::var::{ArgLocalVar, LocalVarSource, ArgType};
+use crate::{parse_to_str_stream2, IteratorExt};
 use clapi::utils::OptionExt;
 use proc_macro2::TokenStream;
+use quote::*;
 use syn::export::ToTokens;
-use syn::{Attribute, AttributeArgs, Block, FnArg, ItemFn, PatType, PathArguments, Signature};
+use syn::{Attribute, AttributeArgs, Block, FnArg, Item, ItemFn, PatType, Pat, PathArguments, Signature, Stmt, Path};
+
+//CommandAttribute, CommandAttr, CommandAttrData
 
 /// Tokens for:
 ///
@@ -15,8 +19,8 @@ use syn::{Attribute, AttributeArgs, Block, FnArg, ItemFn, PatType, PathArguments
 ///     help="Help text",
 /// )]
 /// ```
+#[derive(Debug)]
 pub struct CommandTokens {
-    //CommandAttribute, CommandAttr
     name: String,
     description: Option<String>,
     help: Option<String>,
@@ -24,13 +28,14 @@ pub struct CommandTokens {
     children: Vec<CommandTokens>,
     options: Vec<OptionTokens>,
     args: Option<ArgsTokens>,
-    vars: Vec<LocalVar>,
+    vars: Vec<ArgLocalVar>,
+    is_child: bool,
 }
 
 #[allow(dead_code)]
 #[allow(unused_variable)]
 impl CommandTokens {
-    pub fn new(name: String) -> Self {
+    pub(crate) fn new(name: String) -> Self {
         CommandTokens {
             name,
             description: None,
@@ -40,11 +45,28 @@ impl CommandTokens {
             options: vec![],
             vars: vec![],
             args: None,
+            is_child: false,
         }
     }
 
-    pub fn from_attribute_args(att: AttributeArgs, func: ItemFn) -> Self {
-        new_command_tokens(att, func)
+    pub fn new_child(name: String) -> Self {
+        CommandTokens {
+            name,
+            description: None,
+            help: None,
+            body: None,
+            children: vec![],
+            options: vec![],
+            vars: vec![],
+            args: None,
+            is_child: true,
+        }
+    }
+
+    pub fn from_attribute_args(args: AttributeArgs, func: ItemFn) -> Self {
+        let name = func.sig.ident.to_string();
+        let attr_data = AttributeData::from_attribute_args(name, args);
+        new_command_tokens(attr_data, func, false)
     }
 
     pub fn set_description(&mut self, description: String) {
@@ -63,12 +85,11 @@ impl CommandTokens {
         self.options.push(option);
     }
 
-    pub fn set_args(&mut self, args: ArgsTokens, var: LocalVar) {
+    pub fn set_args(&mut self, args: ArgsTokens) {
         self.args = Some(args);
-        self.vars.push(var);
     }
 
-    pub fn set_var(&mut self, var: LocalVar) {
+    pub fn set_var(&mut self, var: ArgLocalVar) {
         self.vars.push(var);
     }
 
@@ -77,32 +98,157 @@ impl CommandTokens {
     }
 
     pub fn expand(&self) -> TokenStream {
-        todo!()
+        let mut options = Vec::new();
+        let mut children = Vec::new();
+        let mut vars = Vec::new();
+
+        for option in &self.options {
+            options.push(quote! { set_option(#option) });
+        }
+
+        for child in &self.children {
+            children.push(quote! { set_command(#child) });
+        }
+
+        for var in &self.vars {
+            vars.push(quote! { #var });
+        }
+        //println!("{}", self.args.as_ref().unwrap().expand().to_string());
+
+        let args = self
+            .args
+            .as_ref()
+            .map(|tokens| quote! { set_args(#tokens)})
+            .unwrap_or_else(|| quote! {});
+
+        let description = self
+            .description
+            .as_ref()
+            .map(|s| parse_to_str_stream2(s))
+            .map(|tokens| quote! { .set_description(#tokens)})
+            .unwrap_or_else(|| quote! {});
+
+        let help = self
+            .help
+            .as_ref()
+            .map(|s| parse_to_str_stream2(s))
+            .map(|tokens| quote! { .set_help(#tokens)})
+            .unwrap_or_else(|| quote! {});
+
+        let body = if self.is_child {
+            let command_name = self.name.parse::<TokenStream>().unwrap();
+            let input_vars = self.vars.iter()
+                .map(|var| {
+                    let name = var.name().parse::<TokenStream>().unwrap();
+                    let is_ref = match var.arg_type() {
+                        ArgType::Slice(_) => quote!{ & },
+                        ArgType::MutSlice(_) => quote!{ &mut },
+                        _ => quote!{}
+                    };
+
+                    quote! { #is_ref #name }
+                });
+
+            quote!{
+                #(#vars)*
+                #command_name(#(#input_vars,)*);
+                Ok(())
+            }
+        } else {
+            let block = self.body.as_ref();
+            let statements = self.body.as_ref().unwrap().stmts
+                .iter()
+                .filter(|s| match s {
+                    Stmt::Item(item) => !matches!(item, Item::Fn(_)),
+                    _ => true
+                })
+                .cloned()
+                .collect::<Vec<Stmt>>();
+
+            quote!{
+                #(#vars)*
+                #(#statements)*
+                Ok(())
+            }
+        };
+
+        let command = if self.is_child {
+            let name_str = parse_to_str_stream2(&self.name);
+            quote! { clapi::command::Command::new(#name_str) }
+        } else {
+            quote! { clapi::root_command::RootCommand::new() }
+        };
+
+        let tokens = quote! {
+            #command
+                #description
+                #help
+                #args
+                #(#options)*
+                #(#children)*
+                .set_handler(|args, opts|{
+                    #body
+                })
+        };
+
+        if self.is_child {
+            tokens
+        } else {
+            let name  = self.name.as_str().parse::<TokenStream>().unwrap();
+            quote! {
+                #name() { #tokens ; }
+            }
+        }
     }
 }
 
-fn new_command_tokens(args: AttributeArgs, func: ItemFn) -> CommandTokens {
+impl ToTokens for CommandTokens {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        tokens.append_all(self.expand().into_iter())
+    }
+}
+
+pub struct AttributeKeys;
+impl AttributeKeys {
+    const OPTION: &'static str = "option";
+    const ARG: &'static str = "arg";
+    const SUBCOMMAND: &'static str = "subcommand";
+    const DESCRIPTION: &'static str = "description";
+    const ALIAS: &'static str = "alias";
+    const MIN: &'static str = "min";
+    const MAX: &'static str = "max";
+    const DEFAULT: &'static str = "default";
+}
+
+fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) -> CommandTokens {
     let name = func.sig.ident.to_string();
-    let mut root = CommandTokens::new(name.clone());
-    let attr = AttributeData::from_attribute_args(name, args);
+    let mut command = if is_child {
+        CommandTokens::new_child(name)
+    } else {
+        CommandTokens::new(name)
+    };
 
     // Sets the body
-    root.set_body(func.block.clone());
+    command.set_body(func.block.clone());
 
-    // Sets the description if any
-    if let Some(value) = attr.get("description").cloned() {
-        let description = value
-            .into_literal()
-            .expect("`description` is expected to be string literal");
-        root.set_description(description);
-    }
-
-    // Sets the help if any
-    if let Some(value) = attr.get("help").cloned() {
-        let help = value
-            .into_literal()
-            .expect("`help` is expected to be string literal");
-        root.set_description(help);
+    for (key, value) in &attr_data {
+        match key.as_str() {
+            "description" => {
+                let description = value
+                    .clone()
+                    .into_literal()
+                    .expect("`description` is expected to be string literal");
+                command.set_description(description);
+            }
+            "help" => {
+                let help = value
+                    .clone()
+                    .into_literal()
+                    .expect("`help` is expected to be string literal");
+                command.set_description(help);
+            }
+            _ => panic!("invalid {} key `{}`", attr_data.path(), key),
+        }
     }
 
     let attrs = func
@@ -110,25 +256,146 @@ fn new_command_tokens(args: AttributeArgs, func: ItemFn) -> CommandTokens {
         .iter()
         .cloned()
         .map(|att| (att.clone(), AttributeData::new(att)))
-        .filter(|(_, n)| n.path() == "option" || n.path() == "args")
+        .filter(|(_, n)| n.path() == "option" || n.path() == "arg")
         .collect::<Vec<(Attribute, AttributeData)>>();
-
-    //let fn_args = get_fn_args(&func.sig);
 
     // Check all attributes have the `name` key declared, is a literal and is not empty
     assert_attributes_name_is_declared(&attrs);
 
-    // Check all the attributes have an function arg that match the `name` key
-    //assert_attributes_match_arg(&attrs, &fn_args);
+    let named_fn_args = func
+        .sig
+        .inputs
+        .iter()
+        .cloned()
+        .map(|fn_arg| {
+            if let FnArg::Typed(pat_type) = &fn_arg {
+                (pat_type.pat.to_token_stream().to_string(), fn_arg.clone())
+            } else {
+                unreachable!("FnArg is not a free function")
+            }
+        })
+        .collect::<Vec<(String, FnArg)>>();
 
+    let fn_args = get_fn_args(&attrs, &named_fn_args);
 
-    root
+    // Add args
+    for (i, arg) in fn_args.iter().filter(|f| !f.is_option).enumerate() {
+        command.set_var(ArgLocalVar::new(
+            arg.pat_type.clone(),
+            LocalVarSource::Args(i),
+        ));
+    }
+
+    let arg_count = fn_args.iter().filter(|f| !f.is_option).count();
+
+    if arg_count > 0 {
+        if let Some(fn_arg) = fn_args.iter().filter(|f| !f.is_option).single() {
+            let command_args = ArgsTokens::from_attribute_data(fn_arg.attr.clone().unwrap());
+            command.set_args(command_args);
+        } else {
+            let mut command_args = ArgsTokens::new();
+            command_args.set_max(arg_count);
+            command.set_args(command_args);
+        }
+    }
+
+    // Add options
+    for opt in fn_args.iter().filter(|n| n.is_option) {
+        let mut option = OptionTokens::new(opt.arg_name.clone());
+        let mut args = ArgsTokens::new();
+
+        if let Some(att) = &opt.attr {
+            for (key, value) in att {
+                match key.as_str() {
+                    "name" => { /* Ignore */ },
+                    "alias" => {
+                        let alias = value
+                            .clone()
+                            .into_literal()
+                            .expect("option `alias` is expected to be string literal");
+
+                        option.set_alias(alias);
+                    }
+                    "description" => {
+                        let description = value
+                            .clone()
+                            .into_literal()
+                            .expect("option `description` is expected to be string literal");
+                        option.set_description(description);
+                    }
+                    "min" => {
+                        let min = value
+                            .clone()
+                            .parse_literal::<usize>()
+                            .expect("option `min` is expected to be an integer literal");
+
+                        args.set_min(min);
+                    }
+                    "max" => {
+                        let max = value
+                            .clone()
+                            .parse_literal::<usize>()
+                            .expect("option `max` is expected to be an integer literal");
+
+                        args.set_max(max);
+                    }
+                    "default" => match value.clone() {
+                        Value::Literal(s) => args.set_default_values(vec![s]),
+                        Value::Array(array) => args.set_default_values(array),
+                        _ => panic!("option `default` expected to be literal or array"),
+                    },
+                    _ => panic!("invalid {} key `{}`", att.path(), key),
+                }
+            }
+        }
+
+        option.set_args(args);
+        command.set_option(option);
+        command.set_var(ArgLocalVar::new(opt.pat_type.clone(), LocalVarSource::Opts));
+    }
+
+    // Add children
+    for (attr_data, item_fn) in get_children(&func.block) {
+        command.set_child(new_command_tokens(attr_data, item_fn, true));
+    }
+
+    command
 }
 
+#[derive(Debug)]
 struct CommandFnArg {
     arg_name: String,
     pat_type: PatType,
     attr: Option<AttributeData>,
+    is_option: bool,
+}
+
+fn get_children(block: &Block) -> Vec<(AttributeData, ItemFn)> {
+    let mut ret = Vec::new();
+
+    for stmt in &block.stmts {
+        if let Stmt::Item(item) = stmt {
+            if let Item::Fn(item_fn) = item {
+                let mut subcommands = item_fn
+                    .attrs
+                    .iter()
+                    .filter(|att| att.path.to_token_stream().to_string() == "subcommand")
+                    .cloned()
+                    .collect::<Vec<Attribute>>();
+
+                if subcommands.len() > 0 {
+                    assert_eq!(
+                        subcommands.len(), 1,
+                        "multiples `subcommand` attributes defined"
+                    );
+                    let attr_data = AttributeData::new(subcommands.swap_remove(0));
+                    ret.push((attr_data, item_fn.clone()))
+                }
+            }
+        }
+    }
+
+    ret
 }
 
 fn assert_attributes_name_is_declared(fn_attrs: &[(Attribute, AttributeData)]) {
@@ -149,35 +416,111 @@ fn assert_attributes_name_is_declared(fn_attrs: &[(Attribute, AttributeData)]) {
     }
 }
 
-fn get_fn_args(attrs: &[(Attribute, AttributeData)], fn_args: &[FnArg]) -> Vec<CommandFnArg> {
+fn get_fn_args(
+    attrs: &[(Attribute, AttributeData)],
+    fn_args: &[(String, FnArg)],
+) -> Vec<CommandFnArg> {
     let mut ret = Vec::new();
-    let fn_args = fn_args.iter()
-        .cloned()
-        .map(|n| (n.to_token_stream().to_string(), n))
-        .collect::<Vec<(String, FnArg)>>();
+    //println!("{:?}", fn_args.iter().map(|n| n.0.clone()).collect::<Vec<String>>());
 
-    // Checks attributes `name` key match a function arg
+    // Checks attributes key `name` match a function arg
     for (attr, data) in attrs {
-        let name = data.get("name").unwrap().as_literal().unwrap();
-        let contains_arg = fn_args.iter().any(|(arg_name, _)| arg_name == name);
-        assert!(contains_arg, "cannot find arg named `{}`: `{}`", name, attr.to_token_stream().to_string());
+        match data.get("name").unwrap() {
+            Value::Literal(name) => {
+                let contains = fn_args.iter().any(|(arg_name, _)| {
+                    arg_name == name
+                });
+
+                assert!(
+                    contains,
+                    "cannot find arg named `{}` for `{}`",
+                    name,
+                    attr.to_token_stream().to_string()
+                );
+            }
+            _ => panic!("expected string literal for `name`")
+        }
     }
 
     for (arg_name, fn_arg) in fn_args {
         if let FnArg::Typed(pat_type) = fn_arg.clone() {
+            let arg_name = arg_name.clone();
             let attr = attrs
                 .iter()
                 .find(|(_, data)| {
                     data.get("name")
-                        .unwrap()
-                        .as_literal()
+                        .map(|v| v.as_literal())
+                        .flatten()
                         .contains_some(&arg_name)
                 })
                 .map(|n| n.1.clone());
 
-            ret.push(CommandFnArg { arg_name, pat_type, attr, });
+            let is_option = match &attr {
+                None => true,
+                Some(att) => att.path() == "option",
+            };
+
+            ret.push(CommandFnArg {
+                arg_name,
+                pat_type,
+                attr,
+                is_option,
+            });
         }
     }
 
     ret
 }
+
+fn get_fn_arg_ident_name(fn_arg: &FnArg) -> String {
+    if let FnArg::Typed(pat_type) = fn_arg {
+        if let Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
+            return pat_ident.ident.to_string();
+        }
+    }
+
+    unreachable!("Cannot get `FnArg` ident name")
+}
+
+/*
+#[command(description="A program")]
+#[option(name="x", alias="n", description="a number")]
+#[arg(name="args")
+fn main(number: u32, enable: bool, args: Vec<String>){
+    #[subcommand(description="Create an app")]
+    #[option(name="path", alias="p")]
+    fn create(path: String){
+        println!("{}", path);
+    }
+
+    println!("{}, {}", number, enable);
+}
+
+fn main(){
+    fn create(path: String){
+        println!("{}", path);
+    }
+
+    let root = RootCommand::new()
+        .set_description("A program")
+        .set_args(Arguments::new(0..))
+        .set_option(CommandOption::new("number")
+            .set_alias("n")
+            .set_description("a number"))
+        .set_option(CommandOption::new("enable"))
+        .set_command(Command::new("create")
+            .set_option(CommandOption::new("path")
+                .set_alias("p"))
+            .set_handler(|args, opts|{
+                let path = opts.get_args("path").unwrap().convert_at::<String>(0).unwrap();
+                create(path);
+                Ok(())
+            })
+        .set_handler(|args, opts|{
+            let number = opts.get_args("number").unwrap().convert_at::<u32>(0).unwrap();
+            let enable = opts.get_args("enable").unwrap().convert_at::<enable>(0).unwrap();
+            println!("{}, {}", number, enable);
+            Ok(())
+        });
+}
+*/

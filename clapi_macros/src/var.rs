@@ -1,195 +1,244 @@
 use crate::{parse_to_str_stream2, IteratorExt};
-use proc_macro2::TokenStream;
+use proc_macro2::{TokenStream, Ident};
 use quote::*;
 use syn::export::ToTokens;
-use syn::{GenericArgument, Pat, PatType, PathArguments, Type};
+use syn::{GenericArgument, Pat, PatType, Type, AngleBracketedGenericArguments, PathSegment, PathArguments};
 
 #[derive(Debug, Clone)]
-pub struct LocalVar {
-    pub name: String,
-    pub ty: VarType,
-    pub is_mut: bool,
-    pub from_args: bool,
+pub struct ArgLocalVar{
+    name: String,
+    is_mut: bool,
+    source: LocalVarSource,
+    ty: ArgType
 }
 
-impl LocalVar {
-    pub fn new(pat_type: PatType, from_args: bool) -> LocalVar {
-        new_local_var(None, pat_type, from_args)
+impl ArgLocalVar {
+    pub fn new(pat_type: PatType, source: LocalVarSource) -> ArgLocalVar{
+        new_arg_local_var(pat_type, source)
     }
 
-    pub fn with_name(name: String, pat_type: PatType, from_args: bool) -> LocalVar {
-        new_local_var(Some(name), pat_type, from_args)
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    pub fn arg_type(&self) -> &ArgType {
+        &self.ty
     }
 
     pub fn expand(&self) -> TokenStream {
-        let path = parse_to_str_stream2(&self.name);
-
-        let mutability = if self.is_mut {
-            quote! { mut }
-        } else {
-            quote! {}
+        let is_mut = if self.is_mut { quote! { mut }} else { quote! {} };
+        let source = match self.source {
+            LocalVarSource::Args(_) => self.get_args_source(),
+            LocalVarSource::Opts => self.get_opts_source(),
         };
 
-        let source = if self.from_args {
-            match &self.ty {
-                VarType::Single(t) => {
-                    quote! { args.convert::<#t>().unwrap() }
-                }
-                VarType::Vec(t) => {
-                    quote! { args.convert_all::<#t>().unwrap() }
-                }
-                VarType::Slice(t) => {
-                    quote! { args.convert_all::<#t>().unwrap().as_slice() }
-                }
-                VarType::MutSlice(t) => {
-                    quote! { args.convert_all::<#t>().unwrap().as_mut_slice() }
-                }
-            }
-        } else {
-            let name = parse_to_str_stream2(&self.name);
-
-            match &self.ty {
-                VarType::Single(t) => {
-                    quote! { opts.get_args(#name).unwrap().convert::<#t>().unwrap() }
-                }
-                VarType::Vec(t) => {
-                    quote! { opts.get_args(#name).unwrap().convert_all::<#t>().unwrap() }
-                }
-                VarType::Slice(t) => {
-                    quote! { opts.get_args(#name).unwrap().convert_all::<#t>().unwrap().as_slice() }
-                }
-                VarType::MutSlice(t) => {
-                    quote! { opts.get_args(#name).unwrap().convert_all::<#t>().unwrap().as_mut_slice() }
-                }
-            }
-        };
+        let name = parse_to_str_stream2(&self.name);
 
         quote! {
-            let #mutability #path = #source;
+            let #is_mut #name = #source ;
+        }
+    }
+
+    fn get_opts_source(&self) -> TokenStream {
+        let arg_name = parse_to_str_stream2(&self.name);
+
+        match &self.ty {
+            ArgType::Raw(ty) => {
+                quote! { opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0).unwrap() }
+            }
+            ArgType::Vec(ty) => {
+                quote! { opts.get_args(#arg_name).unwrap().convert_all::<#ty>().unwrap() }
+            }
+            ArgType::Slice(ty) => {
+                quote! { opts.get_args(#arg_name).unwrap().convert_all::<#ty>().unwrap().as_slice() }
+            }
+            ArgType::MutSlice(ty) => {
+                quote! { opts.get_args(#arg_name).unwrap().convert_all::<#ty>().unwrap().as_mut_slice() }
+            }
+            ArgType::Option(ty) => {
+                quote! {
+                    match args.values.len(){
+                        0 => None,
+                        _ => Some(opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0).unwrap())
+                    }
+                }
+            }
+        }
+    }
+
+    fn get_args_source(&self) -> TokenStream {
+        match &self.ty {
+            ArgType::Raw(ty) => {
+                if let LocalVarSource::Args(index) = self.source {
+                    quote! { args.convert_at::<#ty>(#index).unwrap() }
+                } else {
+                    unreachable!()
+                }
+            }
+            ArgType::Vec(ty) => {
+                quote! { args.convert_all::<#ty>().unwrap() }
+            }
+            ArgType::Slice(ty) => {
+                quote! { args.convert_all::<#ty>().unwrap().as_slice() }
+            }
+            ArgType::MutSlice(ty) => {
+                quote! { args.convert_all::<#ty>().unwrap().as_mut_slice() }
+            }
+            ArgType::Option(ty) => {
+                quote! {
+                    match args.values.len(){
+                        0 => None,
+                        _ => Some(args.convert_at::<#ty>(0).unwrap())
+                    }
+                }
+            }
         }
     }
 }
 
-impl ToTokens for LocalVar {
+impl ToTokens for ArgLocalVar {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append_all(self.expand().into_iter())
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum LocalVarSource {
+    /// The value from the arguments.
+    Args(usize),
+    /// The value from the options.
+    Opts
+}
+
 #[derive(Debug, Clone)]
-pub enum VarType {
-    Single(Box<Type>),
+pub enum ArgType{
+    Raw(Box<Type>),
     Vec(Box<Type>),
     Slice(Box<Type>),
     MutSlice(Box<Type>),
+    Option(Box<Type>)
 }
 
-impl VarType {
-    pub fn is_single(&self) -> bool {
+impl ArgType {
+    pub fn inner_type(&self) -> &Type{
         match self {
-            VarType::Single(_) => true,
-            _ => false,
+            ArgType::Raw(ty) => ty.as_ref(),
+            ArgType::Vec(ty) => ty.as_ref(),
+            ArgType::Slice(ty) => ty.as_ref(),
+            ArgType::MutSlice(ty) => ty.as_ref(),
+            ArgType::Option(ty) => ty.as_ref()
         }
     }
 
-    pub fn is_vec(&self) -> bool {
-        match self {
-            VarType::Vec(_) => true,
-            _ => false,
-        }
+    pub fn is_raw(&self) -> bool{
+        matches!(self, ArgType::Raw(_))
     }
 
-    pub fn is_slice(&self) -> bool {
-        match self {
-            VarType::Slice(_) => true,
-            _ => false,
-        }
+    pub fn is_vec(&self) -> bool{
+        matches!(self, ArgType::Vec(_))
     }
 
-    pub fn is_mut_slice(&self) -> bool {
-        match self {
-            VarType::MutSlice(_) => true,
-            _ => false,
-        }
+    pub fn is_slice(&self) -> bool{
+        matches!(self, ArgType::Slice(_))
     }
 
-    pub fn inner(&self) -> &Type {
-        match self {
-            VarType::Single(ty) => ty,
-            VarType::Vec(ty) => ty,
-            VarType::Slice(ty) => ty,
-            VarType::MutSlice(ty) => ty,
-        }
+    pub fn is_mut_slice(&self) -> bool{
+        matches!(self, ArgType::MutSlice(_))
+    }
+
+    pub fn is_option(&self) -> bool{
+        matches!(self, ArgType::Option(_))
+    }
+
+    pub fn is_array(&self) -> bool {
+        self.is_vec() || self.is_slice() || self.is_mut_slice()
     }
 }
 
-fn new_local_var(name: Option<String>, pat_type: PatType, from_args: bool) -> LocalVar {
-    let path = name.unwrap_or_else(|| pat_type.pat.to_token_stream().to_string());
+enum OuterType {
+    Vec, Option
+}
+
+fn new_arg_local_var(pat_type: PatType, source: LocalVarSource) -> ArgLocalVar {
+    let name =  pat_type.pat.to_token_stream().to_string();
+    let ty = get_arg_type(&pat_type);
     let is_mut = match pat_type.pat.as_ref() {
         Pat::Ident(ident) => ident.mutability.is_some(),
         _ => false,
     };
 
+    ArgLocalVar { name, is_mut, source, ty, }
+}
+
+fn get_arg_type(pat_type: &PatType) -> ArgType {
     match pat_type.ty.as_ref() {
         Type::Path(type_path) => {
-            let last_path = type_path.path.segments.last().expect("invalid arg type");
+            let last_path = type_path.path.segments
+                .last()
+                .unwrap_or_else(|| panic!("invalid arg type: `{}`", pat_type.to_token_stream().to_string()));
 
-            if last_path.ident.to_string() == "Vec" {
-                match &last_path.arguments {
-                    PathArguments::AngleBracketed(angle_bracketed) => {
-                        let generic_arg =
-                            angle_bracketed.args.iter().single().unwrap_or_else(|| {
-                                panic!(
-                                    "multiple generics defined: `{}`",
-                                    pat_type.to_token_stream().to_string()
-                                )
-                            });
-
-                        let ty = match generic_arg {
-                            GenericArgument::Type(ty) => Box::new(ty.clone()),
-                            _ => {
-                                panic!("invalid arg: `{}`", pat_type.to_token_stream().to_string())
-                            }
-                        };
-
-                        LocalVar {
-                            name: path,
-                            is_mut,
-                            from_args,
-                            ty: VarType::Vec(ty),
-                        }
-                    }
-                    _ => panic!("invalid arg: `{}`", pat_type.to_token_stream().to_string()),
-                }
-            } else {
-                LocalVar {
-                    name: path,
-                    is_mut,
-                    from_args,
-                    ty: VarType::Vec(pat_type.ty),
-                }
+            match last_path.ident.to_string() {
+                ident if is_vec(ident.as_str()) => {
+                    get_inner_type(pat_type, OuterType::Vec, last_path)
+                },
+                ident if is_option(ident.as_str()) => {
+                    get_inner_type(pat_type, OuterType::Option, last_path)
+                },
+                _ => ArgType::Raw(pat_type.ty.clone())
             }
         }
-        Type::Reference(type_ref) => {
-            if type_ref.mutability.is_some() {
-                LocalVar {
-                    name: path,
-                    is_mut,
-                    from_args,
-                    ty: VarType::MutSlice(type_ref.elem.clone()),
-                }
-            } else {
-                LocalVar {
-                    name: path,
-                    is_mut,
-                    from_args,
-                    ty: VarType::Slice(type_ref.elem.clone()),
-                }
+        Type::Reference(ref_type) => {
+            match ref_type.mutability {
+                Some(_) => ArgType::MutSlice(pat_type.ty.clone()),
+                None => ArgType::Slice(pat_type.ty.clone()),
             }
         }
         _ => panic!(
-            "invalid arg type: `{}`",
+            "invalid type: arg `{}`",
             pat_type.to_token_stream().to_string()
         ),
+    }
+}
+
+fn get_inner_type(pat_type: &PatType, outer: OuterType, path_segment: &PathSegment) -> ArgType {
+    match &path_segment.arguments {
+        PathArguments::AngleBracketed(angle_bracketed) => {
+            let generic_arg =
+                angle_bracketed.args.iter().single().unwrap_or_else(|| {
+                    panic!("multiple generics defined: `{}`",
+                           pat_type.to_token_stream().to_string()
+                    )
+                });
+
+            let ty = match generic_arg {
+                GenericArgument::Type(ty) => Box::new(ty.clone()),
+                _ => {
+                    panic!("invalid arg: `{}`", pat_type.to_token_stream().to_string())
+                }
+            };
+
+            match outer {
+                OuterType::Vec => ArgType::Vec(ty.clone()),
+                OuterType::Option => ArgType::Option(ty.clone())
+            }
+        }
+        _ => panic!("invalid arg type: `{}`", pat_type.to_token_stream().to_string())
+    }
+}
+
+fn is_vec(ident: &str) -> bool{
+    match ident {
+        "Vec" => true,
+        "std::vec::Vec" => true,
+        _ => false
+    }
+}
+
+fn is_option(ident: &str) -> bool{
+    match ident {
+        "Option" => true,
+        "std::option::Option" => true,
+        "core::option::Option" => true,
+        _ => false
     }
 }

@@ -11,7 +11,6 @@ use clapi_macros::command;
 #[command(
     description = "A sample description",
     help = "A sample help",
-    default = 1, 2, 3
 )]
 #[option(name = "x", alias = "number", description = "A number", default = 0)]
 #[option(
@@ -26,11 +25,15 @@ use clapi_macros::command;
     description = "A bool",
     default = false
 )]
-#[args(name = "values", min = 1, max = 2, default = "one", "two", "tree", id(hello=10))]
+#[arg(name = "values", default = "one", "two", "tree")]
 fn main(x: u32, y: String, z: bool, values: Vec<String>) {
+    #[subcommand]
     fn other(a: String){
-
+        println!("{}", a);
     }
+
+    println!("{}, {}, {}, {:?}", x, y, z, values);
+
 }
 
 #[allow(dead_code)]
