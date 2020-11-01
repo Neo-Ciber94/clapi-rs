@@ -27,7 +27,7 @@ impl<T> OnceCell<T>{
         match inner {
             Some(n) => n,
             None => {
-                self.set(f());
+                self.set(f()).ok().unwrap();
                 self.get().unwrap()
             }
         }

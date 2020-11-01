@@ -1,10 +1,10 @@
-#[allow(dead_code)]
+#![allow(dead_code)]
+#![allow(unused_must_use)]
+
 mod inner_cell;
-#[allow(dead_code)]
 mod ext;
 mod lazy;
 mod once_cell;
-
 pub use ext::*;
 
 pub trait Then: Sized {

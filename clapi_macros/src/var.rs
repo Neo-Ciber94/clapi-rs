@@ -1,9 +1,10 @@
-use crate::{parse_to_str_stream2, IteratorExt, parse_to_stream2};
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::ToTokens;
 use syn::{GenericArgument, Pat, PatType, Type, PathSegment, PathArguments};
 use syn::spanned::Spanned;
+use crate::parser::{parse_to_stream2, parse_to_str_stream2};
+use crate::IteratorExt;
 
 #[derive(Debug, Clone)]
 pub struct ArgLocalVar{
@@ -33,7 +34,7 @@ impl ArgLocalVar {
             LocalVarSource::Opts => self.get_opts_source(),
         };
 
-        let var_name = parse_to_stream2(&self.name);
+        let var_name = parse_to_stream2(&self.name).unwrap();
 
         match self.ty {
             ArgType::Slice(_) => {
@@ -63,20 +64,21 @@ impl ArgLocalVar {
     }
 
     fn get_opts_source(&self) -> TokenStream {
-        let arg_name = parse_to_str_stream2(&self.name);
+        let arg_name = parse_to_str_stream2(&self.name).unwrap();
+        let msg = format!("`{}` is required", self.name);
 
         match &self.ty {
             ArgType::Raw(ty) => {
-                quote! { opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0).unwrap() }
+                quote! { opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0).expect(#msg) }
             }
             ArgType::Vec(ty) | ArgType::Slice(ty) | ArgType::MutSlice(ty) => {
-                quote! { opts.get_args(#arg_name).unwrap().convert_all::<#ty>().unwrap() }
+                quote! { opts.get_args(#arg_name).unwrap().convert_all::<#ty>().expect(#msg) }
             }
             ArgType::Option(ty) => {
                 quote! {
                     match options.len(){
                         0 => None,
-                        _ => Some(opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0).unwrap())
+                        _ => Some(opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0).expect(#msg))
                     }
                 }
             }
@@ -84,22 +86,24 @@ impl ArgLocalVar {
     }
 
     fn get_args_source(&self) -> TokenStream {
+        let msg = format!("`{}` is required", self.name);
+
         match &self.ty {
             ArgType::Raw(ty) => {
                 if let LocalVarSource::Args(index) = self.source {
-                    quote! { args.convert_at::<#ty>(#index).unwrap() }
+                    quote! { args.convert_at::<#ty>(#index).expect(#msg) }
                 } else {
                     unreachable!()
                 }
             }
             ArgType::Vec(ty) | ArgType::Slice(ty) | ArgType::MutSlice(ty) => {
-                quote! { args.convert_all::<#ty>().unwrap() }
+                quote! { args.convert_all::<#ty>().expect(#msg) }
             }
             ArgType::Option(ty) => {
                 quote! {
                     match args.values.len(){
                         0 => None,
-                        _ => Some(args.convert_at::<#ty>(0).unwrap())
+                        _ => Some(args.convert_at::<#ty>(0).expect(#msg))
                     }
                 }
             }
@@ -131,6 +135,10 @@ pub enum ArgType{
 }
 
 impl ArgType {
+    pub fn new(pat_type: &PatType) -> Self {
+        get_arg_type(pat_type)
+    }
+
     pub fn inner_type(&self) -> &Type{
         match self {
             ArgType::Raw(ty) => ty.as_ref(),

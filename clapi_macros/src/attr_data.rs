@@ -5,14 +5,14 @@ use syn::export::ToTokens;
 use syn::{Attribute, AttributeArgs, Meta, MetaList, MetaNameValue, NestedMeta, Path, Result, Lit};
 use std::str::FromStr;
 
-/// Provides a set of methods for query over the data of a macro attribute.
+/// Represents the data in a macro-attribute like: `#[attribute(name="Amy", age=20)]`.
 #[derive(Debug, Clone)]
 pub struct AttributeData {
     path: String,
     data: HashMap<String, Value>,
 }
 
-/// A macro attribute value
+/// A attribute value.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Value {
     /// No value: `#[attribute(key)]`

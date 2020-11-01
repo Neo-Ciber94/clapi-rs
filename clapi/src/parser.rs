@@ -24,6 +24,7 @@ where
     fn parse(&mut self, context: &Context, args: I) -> Result<ParseResult> {
         let mut tokenizer = DefaultTokenizer::default();
         let tokens = tokenizer.tokenize(context, args)?;
+        println!("{:?}", tokens);
 
         let mut iterator = tokens.iter().peekable();
         let mut result_options = Options::new();
@@ -44,53 +45,56 @@ where
         }
 
         // Gets the commands options
-        while let Some(next_token) = iterator.peek() {
-            if let Token::Opt(s) = next_token {
-                if let Some(mut option) = command.options().get(s.as_str()).cloned() {
-                    // Moves to token
-                    iterator.next();
+        while let Some(Token::Opt(s)) = iterator.peek() {
+            if let Some(mut option) = command.options().get(s.as_str()).cloned() {
+                // Consumes token
+                iterator.next();
 
-                    // If the option take args, add them
-                    if option.args().take_args() {
-                        let mut option_args = Vec::new();
+                // If the option take args, add them
+                if option.args().take_args() {
+                    let mut option_args = Vec::new();
+                    let max_arg_count = option.args().arity().max_arg_count();
 
-                        while let Some(t) = iterator.peek() {
-                            if let Token::Arg(s) = t {
-                                option_args.push(s);
-                                iterator.next();
-                            } else {
-                                if let Token::EOA = t {
-                                    iterator.next();
-                                }
-
-                                break;
-                            }
+                    while let Some(t) = iterator.peek() {
+                        // If the option don't takes more arguments exit
+                        if option_args.len() >= max_arg_count {
+                            break;
                         }
 
-                        option.set_args_values(option_args.clone()).or_else(|e| {
-                            let args = option_args.iter().map(|s| (*s).clone()).collect();
-
-                            Err(Error::new_parse_error(
-                                e.kind().clone(),
-                                command.clone(),
-                                Some(option.clone()),
-                                Some(args),
-                            ))
-                        })?;
+                        if let Token::Arg(s) = t {
+                            option_args.push(s);
+                            iterator.next();
+                        } else {
+                            break;
+                        }
                     }
 
-                    result_options.add(option);
-                } else {
-                    return Err(Error::new_parse_error(
-                        ErrorKind::UnrecognizedOption(s.clone()),
-                        command.clone(),
-                        None,
-                        None,
-                    ));
+                    option.set_args_values(option_args.clone()).or_else(|e| {
+                        let args = option_args.iter().map(|s| (*s).clone()).collect();
+
+                        Err(Error::new_parse_error(
+                            e.kind().clone(),
+                            command.clone(),
+                            Some(option.clone()),
+                            Some(args),
+                        ))
+                    })?;
                 }
+
+                result_options.add(option);
             } else {
-                break;
+                return Err(Error::new_parse_error(
+                    ErrorKind::UnrecognizedOption(s.clone()),
+                    command.clone(),
+                    None,
+                    None,
+                ));
             }
+        }
+
+        // If the current is `end of options` skip it
+        if let Some(Token::EOO) = iterator.peek() {
+            iterator.next();
         }
 
         // Check required options
@@ -116,16 +120,9 @@ where
         }
 
         // Sets the rest of the args to the command
-        let mut rest_args = Vec::new();
-        for token in iterator {
-            if token.is_eoa() {
-                return Err(Error::from(ErrorKind::InvalidArgument(
-                    token.clone().into_string(),
-                )));
-            } else {
-                rest_args.push(token.clone().into_string());
-            }
-        }
+        let mut rest_args = iterator
+            .map(|t| t.clone().into_string())
+            .collect::<Vec<String>>();
 
         // Sets default values if there is not args
         if rest_args.is_empty() && command.args().has_default_values() {
@@ -277,11 +274,11 @@ mod tests {
     fn parser_ok_test() {
         assert!(parse(" ").is_ok());
         assert!(parse("").is_ok());
+        assert!(parse("--").is_ok());
     }
 
     #[test]
     fn parse_error_test() {
-        assert!(parse("--").is_err());
         assert!(parse("create").is_err());
         assert!(parse("create --path=hello.txt").is_err());
         assert!(parse("any --numbers").is_err());

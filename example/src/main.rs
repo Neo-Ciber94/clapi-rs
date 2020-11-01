@@ -26,11 +26,18 @@ use clapi_macros::*;
     default = false
 )]
 #[arg(name = "values")]
-fn main(x: u32, y: String, z: bool, values: &[String]) {
-    #[subcommand(description="A subcommand")]
-    #[arg(name="a")]
-    fn other(a: String){
-        println!("{}", a);
+fn main(x: u32, y: String, z: bool, values: &[u32]) {
+    #[subcommand(description="Prints a value to the console")]
+    #[option(name="times", alias="t", default=1)]
+    #[arg(name="values")]
+    fn echo(times: usize, values: Vec<String>){
+        for _ in 0..times {
+            for value in &values {
+                print!("{} ", value);
+            }
+
+            println!();
+        }
     }
 
     println!("{}, {}, {}, {:?}", x, y, z, values);

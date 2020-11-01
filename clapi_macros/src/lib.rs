@@ -1,22 +1,26 @@
 #![allow(dead_code)]
+extern crate proc_macro;
+
+use crate::command::CommandAttribute;
+pub(crate) use ext::*;
+use proc_macro::TokenStream;
+use syn::{AttributeArgs, ItemFn};
+
 mod args;
 mod attr_data;
 mod command;
-mod option;
-
 mod ext;
+mod option;
+mod parser;
 mod var;
 
-pub(crate) use ext::*;
-
-extern crate proc_macro;
-use proc_macro::TokenStream;
-use quote::*;
-use syn::*;
-use syn::export::fmt::Display;
-use crate::command::CommandAttribute;
-use crate::var::{ArgLocalVar, LocalVarSource};
-
+/// Marks and converts a function as a `Command`.
+///
+/// # Example:
+/// ``` ignore
+/// #[command(description="", help=""]
+/// fn main(){ }
+/// ```
 #[proc_macro_attribute]
 pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = syn::parse_macro_input!(attr as AttributeArgs);
@@ -26,49 +30,47 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
     println!("{}", tokens.to_string());
 
     tokens.into()
-
-    // let t: TokenStream = quote! { x : &[String] }.into();
-    // let vt = syn::parse_macro_input!(t as FnArg);
-    // if let FnArg::Typed(pt) = vt {
-    //     let var = ArgLocalVar::new(pt, LocalVarSource::Opts);
-    //     println!("{}", var.expand().to_token_stream().to_string());
-    // }
-    //
-    // let tokens = quote! {
-    //     fn main(){
-    //        println!("Hello World")
-    //     }
-    // };
-    // tokens.into()
 }
 
+/// Marks a inner function as a subcommand.
+///
+/// # Example:
+/// ```ignore
+/// #[command]
+/// fn main(){
+///     #[subcommand(description="", help=""]
+///     fn test(){ }
+/// }
+/// ```
 #[proc_macro_attribute]
-pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream { item }
+pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
 
+/// Adds command-line option information to a function argument.
+///
+/// # Example:
+/// ```ignore
+///
+/// #[command]
+/// #[option(name="x", description="", min=0, max=3, default=1,2,3)]
+/// fn main(x: Vec<u32>){ }
+/// ```
 #[proc_macro_attribute]
-pub fn option(_: TokenStream, item: TokenStream) -> TokenStream { item }
+pub fn option(_: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
 
+/// Marks a function argument as command-line arguments.
+///
+/// # Example:
+/// ```ignore
+///
+/// #[command]
+/// #[arg(name="args", min=0, max=3, default="one", "two", "three")]
+/// fn main(args: Vec<String>){ }
+/// ```
 #[proc_macro_attribute]
-pub fn arg(_: TokenStream, item: TokenStream) -> TokenStream { item }
-
-pub(crate) fn parse_with<T: syn::parse::Parser>(
-    parser: T,
-    stream: TokenStream,
-) -> syn::Result<T::Output> {
-    syn::parse::Parser::parse(parser, stream)
-}
-
-pub(crate) fn parse_to_stream<S: ToString>(s: S) -> TokenStream {
-    use std::str::FromStr;
-    TokenStream::from_str(&s.to_string()).unwrap()
-}
-
-pub(crate) fn parse_to_stream2<S: ToString>(s: S) -> proc_macro2::TokenStream {
-    use std::str::FromStr;
-    proc_macro2::TokenStream::from_str(&s.to_string()).unwrap()
-}
-
-pub(crate) fn parse_to_str_stream2<S: Display>(s: S) -> proc_macro2::TokenStream{
-    let value = format!("\"{}\"", s.to_string());
-    parse_to_stream2(value)
+pub fn arg(_: TokenStream, item: TokenStream) -> TokenStream {
+    item
 }

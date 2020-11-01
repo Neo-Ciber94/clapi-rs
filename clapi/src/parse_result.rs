@@ -99,7 +99,7 @@ mod tests {
 
     fn parse(value: &str) -> Result<ParseResult> {
         let root = RootCommand::new()
-            .set_args(Arguments::new(0..=1))
+            .set_args(Arguments::new(0..=2))
             .set_option(
                 CommandOption::new("number")
                     .set_alias("n")
@@ -203,6 +203,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_result_test6() {
+        let result = parse("any --A --B -- --C").unwrap();
+
+        assert_eq!(result.command().name(), "any");
+        assert_eq!(result.options().len(), 2);
+        assert!(result.contains_option("A"));
+        assert!(result.contains_option("B"));
+        assert_eq!(result.args().values().len(), 1);
+        assert!(result.contains_arg("--C"));
+    }
+
+    #[test]
     fn parse_result_error_test() {
         assert!(parse("-n").is_err());
         assert!(parse("-l").is_err());
@@ -216,5 +228,8 @@ mod tests {
         assert!(parse("-l a").is_ok());
         assert!(parse("select --sort a b c").is_ok());
         assert!(parse("any -a -b -c \"hello world\"").is_ok());
+        assert!(parse("--letter h --number 1 2 3 4 5").is_ok());
+        assert!(parse("--letter h -- hello").is_ok());
+        assert!(parse("--letter h hello --").is_ok());
     }
 }

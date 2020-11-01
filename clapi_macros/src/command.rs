@@ -2,14 +2,13 @@ use crate::args::ArgAttribute;
 use crate::attr_data::{literal_to_string, AttributeData, Value};
 use crate::option::OptionAttribute;
 use crate::var::{ArgLocalVar, ArgType, LocalVarSource};
-use crate::{parse_to_str_stream2, IteratorExt};
 use clapi::utils::OptionExt;
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::ToTokens;
-use syn::{Attribute, AttributeArgs, Block, FnArg, Item, ItemFn, Pat, PatType, Stmt, AttrStyle};
-
-//CommandAttribute, CommandAttr, CommandAttrData
+use syn::{Attribute, AttributeArgs, Block, FnArg, Item, ItemFn, Pat, PatType, Stmt};
+use crate::IteratorExt;
+use crate::parser::parse_to_str_stream2;
 
 /// Tokens for:
 ///
@@ -121,14 +120,14 @@ impl CommandAttribute {
         let description = self
             .description
             .as_ref()
-            .map(|s| parse_to_str_stream2(s))
+            .map(|s| parse_to_str_stream2(s).unwrap())
             .map(|tokens| quote! { .set_description(#tokens)})
             .unwrap_or_else(|| quote! {});
 
         let help = self
             .help
             .as_ref()
-            .map(|s| parse_to_str_stream2(s))
+            .map(|s| parse_to_str_stream2(s).unwrap())
             .map(|tokens| quote! { .set_help(#tokens)})
             .unwrap_or_else(|| quote! {});
 
@@ -136,7 +135,7 @@ impl CommandAttribute {
         let body = self.get_body(vars.as_slice());
 
         let command = if self.is_child {
-            let name_str = parse_to_str_stream2(&self.name);
+            let name_str = parse_to_str_stream2(&self.name).unwrap();
             quote! { clapi::command::Command::new(#name_str) }
         } else {
             quote! { clapi::root_command::RootCommand::new() }
@@ -311,34 +310,42 @@ fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) ->
         .collect::<Vec<(String, FnArg)>>();
 
     let fn_args = get_fn_args(&attrs, &named_fn_args);
+    let mut arg_count = 0;
+
+    // Pass function arguments in order
+    for arg in &fn_args {
+        if arg.is_option {
+            command.set_var(ArgLocalVar::new(arg.pat_type.clone(), LocalVarSource::Opts));
+        } else {
+            command.set_var(ArgLocalVar::new(
+                arg.pat_type.clone(),
+                LocalVarSource::Args(arg_count),
+            ));
+
+            arg_count += 1;
+        }
+     }
 
     // Add args
-    for (i, arg) in fn_args.iter().filter(|f| !f.is_option).enumerate() {
-        command.set_var(ArgLocalVar::new(
-            arg.pat_type.clone(),
-            LocalVarSource::Args(i),
-        ));
-    }
-
     let arg_count = fn_args.iter().filter(|f| !f.is_option).count();
 
     if arg_count > 0 {
         if let Some(fn_arg) = fn_args.iter().filter(|f| !f.is_option).single() {
-            let command_args = ArgAttribute::from_attribute_data(fn_arg.attr.clone().unwrap());
+            let command_args = ArgAttribute::from_attribute_data(fn_arg.attr.clone().unwrap(), Some(fn_arg.pat_type.clone()));
             command.set_args(command_args);
         } else {
-            let mut command_args = ArgAttribute::new();
+            let mut command_args = ArgAttribute::new(None);
             command_args.set_max(arg_count);
             command.set_args(command_args);
         }
     }
 
     // Add options
-    for opt in fn_args.iter().filter(|n| n.is_option) {
-        let mut option = OptionAttribute::new(opt.arg_name.clone());
-        let mut args = ArgAttribute::new();
+    for arg in fn_args.iter().filter(|n| n.is_option) {
+        let mut option = OptionAttribute::new(arg.arg_name.clone());
+        let mut args = ArgAttribute::new(Some(arg.pat_type.clone()));
 
-        if let Some(att) = &opt.attr {
+        if let Some(att) = &arg.attr {
             for (key, value) in att {
                 match key.as_str() {
                     "name" => { /* Ignore */ }
@@ -391,7 +398,6 @@ fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) ->
 
         option.set_args(args);
         command.set_option(option);
-        command.set_var(ArgLocalVar::new(opt.pat_type.clone(), LocalVarSource::Opts));
     }
 
     // Add children
@@ -400,6 +406,10 @@ fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) ->
     }
 
     command
+}
+
+enum ArgSource {
+    Arg, Option
 }
 
 #[derive(Debug)]
@@ -416,7 +426,7 @@ fn get_children(block: &Block) -> Vec<(AttributeData, ItemFn)> {
     for stmt in &block.stmts {
         if let Stmt::Item(item) = stmt {
             if let Item::Fn(item_fn) = item {
-                let mut subcommands = item_fn
+                let subcommands = item_fn
                     .attrs
                     .iter()
                     .filter(|att| att.path.to_token_stream().to_string() == "subcommand")

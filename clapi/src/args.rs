@@ -4,7 +4,6 @@ use crate::error::{Error, ErrorKind, Result};
 use crate::symbol::Symbol;
 use linked_hash_set::LinkedHashSet;
 use std::fmt::{Debug, Display, Formatter};
-use std::marker::PhantomData;
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -308,7 +307,7 @@ impl Arguments {
         <T as FromStr>::Err: Display,
     {
         if self.values.is_empty() {
-            return Err(Error::new(ErrorKind::Unknown, "no arguments values"));
+            return Err(Error::from(ErrorKind::InvalidArgumentCount));
         }
 
         if self.arity.takes_args() {
@@ -334,7 +333,7 @@ impl Arguments {
         <T as FromStr>::Err: Display,
     {
         if self.values.is_empty() {
-            return Err(Error::new(ErrorKind::Unknown, "no arguments values"));
+            return Err(Error::from(ErrorKind::InvalidArgumentCount));
         }
 
         if self.arity.takes_args() {
@@ -370,7 +369,7 @@ impl Arguments {
         <T as FromStr>::Err: Display,
     {
         if self.values.is_empty() {
-            return Err(Error::new(ErrorKind::Unknown, "no arguments values"));
+            return Err(Error::from(ErrorKind::InvalidArgumentCount));
         }
 
         if self.arity.takes_args() {

@@ -11,12 +11,12 @@ pub enum Token {
     Opt(String),
     // An argument
     Arg(String),
-    // End of arguments
-    EOA,
+    // End of options
+    EOO,
 }
 
 impl Token {
-    const END_OF_ARGS: &'static str = "--";
+    const END_OF_OPTS: &'static str = "--";
 
     /// Returns `true` if the token is a command.
     pub fn is_command(&self) -> bool {
@@ -42,10 +42,10 @@ impl Token {
         }
     }
 
-    /// Returns `true` if the token represents an `end of arguments`.
-    pub fn is_eoa(&self) -> bool {
+    /// Returns `true` if the token represents an `end of options`.
+    pub fn is_eoo(&self) -> bool {
         match self {
-            Token::EOA => true,
+            Token::EOO => true,
             _ => false,
         }
     }
@@ -56,7 +56,7 @@ impl Token {
             Token::Cmd(s) => s,
             Token::Opt(s) => s,
             Token::Arg(s) => s,
-            Token::EOA => String::from(Token::END_OF_ARGS),
+            Token::EOO => String::from(Token::END_OF_OPTS),
         }
     }
 }
@@ -114,10 +114,10 @@ where
             let value: &str = arg.borrow();
 
             // End of the options
-            if value == Token::END_OF_ARGS {
-                tokens.push(Token::EOA);
+            if value == Token::END_OF_OPTS {
+                tokens.push(Token::EOO);
                 iterator.next();
-                continue;
+                break;
             }
 
             if context.is_option_prefixed(value) {
@@ -355,7 +355,7 @@ mod tests {
         assert_eq!(tokens[2], Token::Arg("1".to_owned()));
         assert_eq!(tokens[3], Token::Arg("2".to_owned()));
         assert_eq!(tokens[4], Token::Arg("3".to_owned()));
-        assert_eq!(tokens[5], Token::EOA);
+        assert_eq!(tokens[5], Token::EOO);
         assert_eq!(tokens[6], Token::Arg("red".to_owned()));
     }
 
