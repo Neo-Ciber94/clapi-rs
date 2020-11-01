@@ -1,13 +1,13 @@
 use crate::args::ArgAttribute;
-use crate::attr_data::{AttributeData, Value, literal_to_string};
+use crate::attr_data::{literal_to_string, AttributeData, Value};
 use crate::option::OptionAttribute;
-use crate::var::{ArgLocalVar, LocalVarSource, ArgType};
+use crate::var::{ArgLocalVar, ArgType, LocalVarSource};
 use crate::{parse_to_str_stream2, IteratorExt};
 use clapi::utils::OptionExt;
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::ToTokens;
-use syn::{Attribute, AttributeArgs, Block, FnArg, Item, ItemFn, PatType, Pat, Stmt};
+use syn::{Attribute, AttributeArgs, Block, FnArg, Item, ItemFn, Pat, PatType, Stmt, AttrStyle};
 
 //CommandAttribute, CommandAttr, CommandAttrData
 
@@ -111,7 +111,6 @@ impl CommandAttribute {
         for var in &self.vars {
             vars.push(quote! { #var });
         }
-        //println!("{}", self.args.as_ref().unwrap().expand().to_string());
 
         let args = self
             .args
@@ -170,7 +169,7 @@ impl CommandAttribute {
         if self.is_child {
             tokens
         } else {
-            let name  = self.name.as_str().parse::<TokenStream>().unwrap();
+            let name = self.name.as_str().parse::<TokenStream>().unwrap();
             let outer = self.outer_body();
 
             quote! {
@@ -185,19 +184,18 @@ impl CommandAttribute {
     fn get_body(&self, vars: &[TokenStream]) -> TokenStream {
         if self.is_child {
             let command_name = self.name.parse::<TokenStream>().unwrap();
-            let input_vars = self.vars.iter()
-                .map(|var| {
-                    let name = var.name().parse::<TokenStream>().unwrap();
-                    let is_ref = match var.arg_type() {
-                        ArgType::Slice(_) => quote!{ & },
-                        ArgType::MutSlice(_) => quote!{ &mut },
-                        _ => quote!{}
-                    };
+            let input_vars = self.vars.iter().map(|var| {
+                let name = var.name().parse::<TokenStream>().unwrap();
+                let is_ref = match var.arg_type() {
+                    ArgType::Slice(_) => quote! { & },
+                    ArgType::MutSlice(_) => quote! { &mut },
+                    _ => quote! {},
+                };
 
-                    quote! { #is_ref #name }
-                });
+                quote! { #is_ref #name }
+            });
 
-            quote!{
+            quote! {
                 #(#vars)*
                 #command_name(#(#input_vars,)*);
                 Ok(())
@@ -205,7 +203,7 @@ impl CommandAttribute {
         } else {
             let statements = self.inner_body();
 
-            quote!{
+            quote! {
                 #(#vars)*
                 #(#statements)*
                 Ok(())
@@ -215,7 +213,10 @@ impl CommandAttribute {
 
     fn inner_body(&self) -> Vec<TokenStream> {
         // locals, expressions, ...
-        self.body.as_ref().unwrap().stmts
+        self.body
+            .as_ref()
+            .unwrap()
+            .stmts
             .iter()
             .filter(|s| !matches!(s, Stmt::Item(_)))
             .map(|s| s.to_token_stream())
@@ -224,7 +225,10 @@ impl CommandAttribute {
 
     fn outer_body(&self) -> Vec<TokenStream> {
         // functions, struct, const, statics, ...
-        self.body.as_ref().unwrap().stmts
+        self.body
+            .as_ref()
+            .unwrap()
+            .stmts
             .iter()
             .filter(|s| matches!(s, Stmt::Item(_)))
             .map(|s| s.to_token_stream())
@@ -337,7 +341,7 @@ fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) ->
         if let Some(att) = &opt.attr {
             for (key, value) in att {
                 match key.as_str() {
-                    "name" => { /* Ignore */ },
+                    "name" => { /* Ignore */ }
                     "alias" => {
                         let alias = value
                             .clone()
@@ -369,19 +373,17 @@ fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) ->
 
                         args.set_max(max);
                     }
-                    "default" => {
-                        match value {
-                            Value::Literal(_) => {
-                                let s = value.clone().parse_literal::<String>().unwrap();
-                                args.set_default_values(vec![s])
-                            },
-                            Value::Array(_) => {
-                                let array = value.clone().parse_array::<String>().unwrap();
-                                args.set_default_values(array)
-                            },
-                            _ => panic!("option `default` expected to be literal or array"),
+                    "default" => match value {
+                        Value::Literal(_) => {
+                            let s = value.clone().parse_literal::<String>().unwrap();
+                            args.set_default_values(vec![s])
                         }
-                    }
+                        Value::Array(_) => {
+                            let array = value.clone().parse_array::<String>().unwrap();
+                            args.set_default_values(array)
+                        }
+                        _ => panic!("option `default` expected to be literal or array"),
+                    },
                     _ => panic!("invalid {} key `{}`", att.path(), key),
                 }
             }
@@ -426,8 +428,19 @@ fn get_children(block: &Block) -> Vec<(AttributeData, ItemFn)> {
                         subcommands.len(), 1,
                         "multiples `subcommand` attributes defined"
                     );
-                    let attr_data = AttributeData::new(subcommands.swap_remove(0));
-                    ret.push((attr_data, item_fn.clone()))
+
+                    let mut item_fn = item_fn.clone();
+
+                    let attr_data = if let Some(index) = item_fn.attrs
+                        .iter()
+                        .position(|att| att.path.to_token_stream().to_string() == "subcommand")
+                    {
+                        AttributeData::new(item_fn.attrs.swap_remove(index))
+                    } else {
+                        unreachable!()
+                    };
+
+                    ret.push((attr_data, item_fn))
                 }
             }
         }
@@ -467,9 +480,9 @@ fn get_fn_args(
             Value::Literal(lit) => {
                 let name = literal_to_string(lit);
 
-                let contains = fn_args.iter().any(|(arg_name, _)| {
-                    arg_name == name.as_str()
-                });
+                let contains = fn_args
+                    .iter()
+                    .any(|(arg_name, _)| arg_name == name.as_str());
 
                 assert!(
                     contains,
@@ -478,7 +491,7 @@ fn get_fn_args(
                     attr.to_token_stream().to_string()
                 );
             }
-            _ => panic!("expected string literal for `name`")
+            _ => panic!("expected string literal for `name`"),
         }
     }
 

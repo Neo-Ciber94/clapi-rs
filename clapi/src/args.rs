@@ -308,7 +308,7 @@ impl Arguments {
         <T as FromStr>::Err: Display,
     {
         if self.values.is_empty() {
-            return Err(Error::new(ErrorKind::Unknown, "no args to convert"));
+            return Err(Error::new(ErrorKind::Unknown, "no arguments values"));
         }
 
         if self.arity.takes_args() {
@@ -334,7 +334,7 @@ impl Arguments {
         <T as FromStr>::Err: Display,
     {
         if self.values.is_empty() {
-            return Err(Error::new(ErrorKind::Unknown, "no args to convert"));
+            return Err(Error::new(ErrorKind::Unknown, "no arguments values"));
         }
 
         if self.arity.takes_args() {
@@ -370,7 +370,7 @@ impl Arguments {
         <T as FromStr>::Err: Display,
     {
         if self.values.is_empty() {
-            return Err(Error::new(ErrorKind::Unknown, "no args to convert"));
+            return Err(Error::new(ErrorKind::Unknown, "no arguments values"));
         }
 
         if self.arity.takes_args() {

@@ -15,6 +15,7 @@ use quote::*;
 use syn::*;
 use syn::export::fmt::Display;
 use crate::command::CommandAttribute;
+use crate::var::{ArgLocalVar, LocalVarSource};
 
 #[proc_macro_attribute]
 pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -23,21 +24,32 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let tokens = CommandAttribute::from_attribute_args(args, func).expand();
     println!("{}", tokens.to_string());
+
     tokens.into()
-    // let command = CommandAttribute::from_attribute_args(args, func);
-    // let tokens : proc_macro2::TokenStream = command.expand();
-    // println!("{}", tokens.to_string());
+
+    // let t: TokenStream = quote! { x : &[String] }.into();
+    // let vt = syn::parse_macro_input!(t as FnArg);
+    // if let FnArg::Typed(pt) = vt {
+    //     let var = ArgLocalVar::new(pt, LocalVarSource::Opts);
+    //     println!("{}", var.expand().to_token_stream().to_string());
+    // }
     //
     // let tokens = quote! {
     //     fn main(){
     //        println!("Hello World")
     //     }
     // };
-    //tokens.into()
+    // tokens.into()
 }
 
 #[proc_macro_attribute]
 pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream { item }
+
+#[proc_macro_attribute]
+pub fn option(_: TokenStream, item: TokenStream) -> TokenStream { item }
+
+#[proc_macro_attribute]
+pub fn arg(_: TokenStream, item: TokenStream) -> TokenStream { item }
 
 pub(crate) fn parse_with<T: syn::parse::Parser>(
     parser: T,

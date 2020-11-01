@@ -25,10 +25,6 @@ where
         let mut tokenizer = DefaultTokenizer::default();
         let tokens = tokenizer.tokenize(context, args)?;
 
-        if tokens.is_empty() {
-            return Err(Error::from(ErrorKind::EmptyExpression));
-        }
-
         let mut iterator = tokens.iter().peekable();
         let mut result_options = Options::new();
         let mut command = context.root().as_ref();
@@ -279,13 +275,12 @@ mod tests {
 
     #[test]
     fn parser_ok_test() {
-        assert!(parse("any 5").is_err());
+        assert!(parse(" ").is_ok());
+        assert!(parse("").is_ok());
     }
 
     #[test]
     fn parse_error_test() {
-        assert!(parse(" ").is_err());
-        assert!(parse("").is_err());
         assert!(parse("--").is_err());
         assert!(parse("create").is_err());
         assert!(parse("create --path=hello.txt").is_err());

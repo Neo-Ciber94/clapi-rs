@@ -3,6 +3,7 @@ use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::ToTokens;
 use syn::{GenericArgument, Pat, PatType, Type, PathSegment, PathArguments};
+use syn::spanned::Spanned;
 
 #[derive(Debug, Clone)]
 pub struct ArgLocalVar{
@@ -32,10 +33,32 @@ impl ArgLocalVar {
             LocalVarSource::Opts => self.get_opts_source(),
         };
 
-        let name = parse_to_stream2(&self.name);
+        let var_name = parse_to_stream2(&self.name);
 
-        quote! {
-            let #is_mut #name = #source ;
+        match self.ty {
+            ArgType::Slice(_) => {
+                let concat = format!("tmp_{}", var_name);
+                let temp = syn::Ident::new(&concat, var_name.span());
+
+                quote! {
+                    let #is_mut #temp = #source ;
+                    let #is_mut #var_name = #temp.as_slice() ;
+                }
+            }
+            ArgType::MutSlice(_) => {
+                let concat = format!("tmp_{}", var_name);
+                let temp = syn::Ident::new(&concat, var_name.span());
+
+                quote! {
+                    let #is_mut #temp = #source ;
+                    let #is_mut #var_name = #temp.as_mut_slice() ;
+                }
+            },
+            _ => {
+                quote! {
+                    let #is_mut #var_name = #source ;
+                }
+            }
         }
     }
 
@@ -46,14 +69,8 @@ impl ArgLocalVar {
             ArgType::Raw(ty) => {
                 quote! { opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0).unwrap() }
             }
-            ArgType::Vec(ty) => {
+            ArgType::Vec(ty) | ArgType::Slice(ty) | ArgType::MutSlice(ty) => {
                 quote! { opts.get_args(#arg_name).unwrap().convert_all::<#ty>().unwrap() }
-            }
-            ArgType::Slice(ty) => {
-                quote! { opts.get_args(#arg_name).unwrap().convert_all::<#ty>().unwrap().as_slice() }
-            }
-            ArgType::MutSlice(ty) => {
-                quote! { opts.get_args(#arg_name).unwrap().convert_all::<#ty>().unwrap().as_mut_slice() }
             }
             ArgType::Option(ty) => {
                 quote! {
@@ -75,14 +92,8 @@ impl ArgLocalVar {
                     unreachable!()
                 }
             }
-            ArgType::Vec(ty) => {
+            ArgType::Vec(ty) | ArgType::Slice(ty) | ArgType::MutSlice(ty) => {
                 quote! { args.convert_all::<#ty>().unwrap() }
-            }
-            ArgType::Slice(ty) => {
-                quote! { args.convert_all::<#ty>().unwrap().as_slice() }
-            }
-            ArgType::MutSlice(ty) => {
-                quote! { args.convert_all::<#ty>().unwrap().as_mut_slice() }
             }
             ArgType::Option(ty) => {
                 quote! {
@@ -188,9 +199,13 @@ fn get_arg_type(pat_type: &PatType) -> ArgType {
             }
         }
         Type::Reference(ref_type) => {
-            match ref_type.mutability {
-                Some(_) => ArgType::MutSlice(pat_type.ty.clone()),
-                None => ArgType::Slice(pat_type.ty.clone()),
+            if let Type::Slice(array) = ref_type.elem.as_ref() {
+                match ref_type.mutability {
+                    Some(_) => ArgType::MutSlice(array.elem.clone()),
+                    None => ArgType::Slice(array.elem.clone()),
+                }
+            } else {
+                panic!("expected slice found reference: `{}`", ref_type.to_token_stream().to_string());
             }
         }
         _ => panic!(
