@@ -625,6 +625,17 @@ mod tests {
     }
 
     #[test]
+    fn convert_at_test() {
+        let mut args = Arguments::new(1..).set_name("numbers");
+
+        args.set_values(&["1", "2", "3"]).unwrap();
+
+        assert_eq!(1, args.convert_at(0).unwrap());
+        assert_eq!(2, args.convert_at(1).unwrap());
+        assert_eq!(3, args.convert_at(2).unwrap());
+    }
+
+    #[test]
     fn convert_all_test() {
         let mut args = Arguments::new(1..).set_name("numbers");
 

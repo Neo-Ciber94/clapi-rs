@@ -10,33 +10,34 @@ mod var;
 pub(crate) use ext::*;
 
 extern crate proc_macro;
-use crate::attr_data::AttributeData;
 use proc_macro::TokenStream;
 use quote::*;
 use syn::*;
 use syn::export::fmt::Display;
-use crate::command::CommandTokens;
+use crate::command::CommandAttribute;
 
 #[proc_macro_attribute]
 pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = syn::parse_macro_input!(attr as AttributeArgs);
     let func = syn::parse_macro_input!(item as ItemFn);
 
-    let command = CommandTokens::from_attribute_args(args, func);
-    let tokens : proc_macro2::TokenStream = command.expand();
+    let tokens = CommandAttribute::from_attribute_args(args, func).expand();
     println!("{}", tokens.to_string());
-
-    let tokens = quote! {
-        fn main(){
-           println!("Hello World")
-        }
-    };
-
     tokens.into()
+    // let command = CommandAttribute::from_attribute_args(args, func);
+    // let tokens : proc_macro2::TokenStream = command.expand();
+    // println!("{}", tokens.to_string());
+    //
+    // let tokens = quote! {
+    //     fn main(){
+    //        println!("Hello World")
+    //     }
+    // };
+    //tokens.into()
 }
 
-// #[proc_macro_attribute]
-// pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream { item }
+#[proc_macro_attribute]
+pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream { item }
 
 pub(crate) fn parse_with<T: syn::parse::Parser>(
     parser: T,

@@ -1,4 +1,4 @@
-use crate::args::ArgsTokens;
+use crate::args::ArgAttribute;
 use proc_macro2::TokenStream;
 use quote::*;
 use crate::parse_to_str_stream2;
@@ -16,16 +16,16 @@ use crate::parse_to_str_stream2;
 /// )]
 /// ```
 #[derive(Debug)]
-pub struct OptionTokens {
+pub struct OptionAttribute {
     name: String,
     alias: Option<String>,
     description: Option<String>,
-    args: Option<ArgsTokens>,
+    args: Option<ArgAttribute>,
 }
 
-impl OptionTokens {
+impl OptionAttribute {
     pub fn new(name: String) -> Self {
-        OptionTokens{
+        OptionAttribute {
             name,
             alias: None,
             description: None,
@@ -41,7 +41,7 @@ impl OptionTokens {
         self.description = Some(description);
     }
 
-    pub fn set_args(&mut self, args: ArgsTokens){
+    pub fn set_args(&mut self, args: ArgAttribute){
         self.args = Some(args);
     }
 
@@ -64,7 +64,7 @@ impl OptionTokens {
 
         // `CommandOption::set_required` is args have default values
         let required = match &self.args {
-            Some(args) if args.has_default_values() => {
+            Some(args) if !args.has_default_values() => {
                 quote! { .set_required(true) }
             }
             _ => quote! {}
@@ -90,7 +90,7 @@ impl OptionTokens {
     }
 }
 
-impl ToTokens for OptionTokens{
+impl ToTokens for OptionAttribute {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append_all(self.expand().into_iter())
     }

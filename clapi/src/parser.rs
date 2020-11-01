@@ -131,6 +131,13 @@ where
             }
         }
 
+        // Sets default values if there is not args
+        if rest_args.is_empty() && command.args().has_default_values() {
+            for arg in command.args().default_values() {
+                rest_args.push(arg.clone());
+            }
+        }
+
         // Clones the command and set the options and args
         let mut result_command = command.clone().set_new_options(result_options);
 

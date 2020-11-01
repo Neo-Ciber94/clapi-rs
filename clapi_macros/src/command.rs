@@ -1,13 +1,13 @@
-use crate::args::ArgsTokens;
-use crate::attr_data::{AttributeData, Value};
-use crate::option::OptionTokens;
+use crate::args::ArgAttribute;
+use crate::attr_data::{AttributeData, Value, literal_to_string};
+use crate::option::OptionAttribute;
 use crate::var::{ArgLocalVar, LocalVarSource, ArgType};
 use crate::{parse_to_str_stream2, IteratorExt};
 use clapi::utils::OptionExt;
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::ToTokens;
-use syn::{Attribute, AttributeArgs, Block, FnArg, Item, ItemFn, PatType, Pat, PathArguments, Signature, Stmt, Path};
+use syn::{Attribute, AttributeArgs, Block, FnArg, Item, ItemFn, PatType, Pat, Stmt};
 
 //CommandAttribute, CommandAttr, CommandAttrData
 
@@ -20,23 +20,21 @@ use syn::{Attribute, AttributeArgs, Block, FnArg, Item, ItemFn, PatType, Pat, Pa
 /// )]
 /// ```
 #[derive(Debug)]
-pub struct CommandTokens {
+pub struct CommandAttribute {
     name: String,
     description: Option<String>,
     help: Option<String>,
     body: Option<Box<Block>>,
-    children: Vec<CommandTokens>,
-    options: Vec<OptionTokens>,
-    args: Option<ArgsTokens>,
+    children: Vec<CommandAttribute>,
+    options: Vec<OptionAttribute>,
+    args: Option<ArgAttribute>,
     vars: Vec<ArgLocalVar>,
     is_child: bool,
 }
 
-#[allow(dead_code)]
-#[allow(unused_variable)]
-impl CommandTokens {
+impl CommandAttribute {
     pub(crate) fn new(name: String) -> Self {
-        CommandTokens {
+        CommandAttribute {
             name,
             description: None,
             help: None,
@@ -50,7 +48,7 @@ impl CommandTokens {
     }
 
     pub fn new_child(name: String) -> Self {
-        CommandTokens {
+        CommandAttribute {
             name,
             description: None,
             help: None,
@@ -77,15 +75,15 @@ impl CommandTokens {
         self.help = Some(help);
     }
 
-    pub fn set_child(&mut self, command: CommandTokens) {
+    pub fn set_child(&mut self, command: CommandAttribute) {
         self.children.push(command)
     }
 
-    pub fn set_option(&mut self, option: OptionTokens) {
+    pub fn set_option(&mut self, option: OptionAttribute) {
         self.options.push(option);
     }
 
-    pub fn set_args(&mut self, args: ArgsTokens) {
+    pub fn set_args(&mut self, args: ArgAttribute) {
         self.args = Some(args);
     }
 
@@ -103,11 +101,11 @@ impl CommandTokens {
         let mut vars = Vec::new();
 
         for option in &self.options {
-            options.push(quote! { set_option(#option) });
+            options.push(quote! { .set_option(#option) });
         }
 
         for child in &self.children {
-            children.push(quote! { set_command(#child) });
+            children.push(quote! { .set_command(#child) });
         }
 
         for var in &self.vars {
@@ -118,7 +116,7 @@ impl CommandTokens {
         let args = self
             .args
             .as_ref()
-            .map(|tokens| quote! { set_args(#tokens)})
+            .map(|tokens| quote! { .set_args(#tokens)})
             .unwrap_or_else(|| quote! {});
 
         let description = self
@@ -135,7 +133,57 @@ impl CommandTokens {
             .map(|tokens| quote! { .set_help(#tokens)})
             .unwrap_or_else(|| quote! {});
 
-        let body = if self.is_child {
+        // Get the function body
+        let body = self.get_body(vars.as_slice());
+
+        let command = if self.is_child {
+            let name_str = parse_to_str_stream2(&self.name);
+            quote! { clapi::command::Command::new(#name_str) }
+        } else {
+            quote! { clapi::root_command::RootCommand::new() }
+        };
+
+        let mut tokens = quote! {
+            #command
+                #description
+                #help
+                #args
+                #(#options)*
+                #(#children)*
+                .set_handler(|opts, args|{
+                    #body
+                })
+        };
+
+        if !self.is_child {
+            tokens = quote! {
+                let command = #tokens ;
+
+                clapi::command_line::CommandLine::new(command)
+                    .use_default_help()
+                    .use_default_suggestions()
+                    .run()
+                    .expect("an error occurred");
+            }
+        }
+
+        if self.is_child {
+            tokens
+        } else {
+            let name  = self.name.as_str().parse::<TokenStream>().unwrap();
+            let outer = self.outer_body();
+
+            quote! {
+                fn #name() {
+                    #(#outer)*
+                    #tokens
+                }
+            }
+        }
+    }
+
+    fn get_body(&self, vars: &[TokenStream]) -> TokenStream {
+        if self.is_child {
             let command_name = self.name.parse::<TokenStream>().unwrap();
             let input_vars = self.vars.iter()
                 .map(|var| {
@@ -155,54 +203,36 @@ impl CommandTokens {
                 Ok(())
             }
         } else {
-            let block = self.body.as_ref();
-            let statements = self.body.as_ref().unwrap().stmts
-                .iter()
-                .filter(|s| match s {
-                    Stmt::Item(item) => !matches!(item, Item::Fn(_)),
-                    _ => true
-                })
-                .cloned()
-                .collect::<Vec<Stmt>>();
+            let statements = self.inner_body();
 
             quote!{
                 #(#vars)*
                 #(#statements)*
                 Ok(())
             }
-        };
-
-        let command = if self.is_child {
-            let name_str = parse_to_str_stream2(&self.name);
-            quote! { clapi::command::Command::new(#name_str) }
-        } else {
-            quote! { clapi::root_command::RootCommand::new() }
-        };
-
-        let tokens = quote! {
-            #command
-                #description
-                #help
-                #args
-                #(#options)*
-                #(#children)*
-                .set_handler(|args, opts|{
-                    #body
-                })
-        };
-
-        if self.is_child {
-            tokens
-        } else {
-            let name  = self.name.as_str().parse::<TokenStream>().unwrap();
-            quote! {
-                #name() { #tokens ; }
-            }
         }
+    }
+
+    fn inner_body(&self) -> Vec<TokenStream> {
+        // locals, expressions, ...
+        self.body.as_ref().unwrap().stmts
+            .iter()
+            .filter(|s| !matches!(s, Stmt::Item(_)))
+            .map(|s| s.to_token_stream())
+            .collect()
+    }
+
+    fn outer_body(&self) -> Vec<TokenStream> {
+        // functions, struct, const, statics, ...
+        self.body.as_ref().unwrap().stmts
+            .iter()
+            .filter(|s| matches!(s, Stmt::Item(_)))
+            .map(|s| s.to_token_stream())
+            .collect()
     }
 }
 
-impl ToTokens for CommandTokens {
+impl ToTokens for CommandAttribute {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append_all(self.expand().into_iter())
     }
@@ -220,12 +250,12 @@ impl AttributeKeys {
     const DEFAULT: &'static str = "default";
 }
 
-fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) -> CommandTokens {
+fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) -> CommandAttribute {
     let name = func.sig.ident.to_string();
     let mut command = if is_child {
-        CommandTokens::new_child(name)
+        CommandAttribute::new_child(name)
     } else {
-        CommandTokens::new(name)
+        CommandAttribute::new(name)
     };
 
     // Sets the body
@@ -236,14 +266,14 @@ fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) ->
             "description" => {
                 let description = value
                     .clone()
-                    .into_literal()
+                    .as_string_literal()
                     .expect("`description` is expected to be string literal");
                 command.set_description(description);
             }
             "help" => {
                 let help = value
                     .clone()
-                    .into_literal()
+                    .as_string_literal()
                     .expect("`help` is expected to be string literal");
                 command.set_description(help);
             }
@@ -290,10 +320,10 @@ fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) ->
 
     if arg_count > 0 {
         if let Some(fn_arg) = fn_args.iter().filter(|f| !f.is_option).single() {
-            let command_args = ArgsTokens::from_attribute_data(fn_arg.attr.clone().unwrap());
+            let command_args = ArgAttribute::from_attribute_data(fn_arg.attr.clone().unwrap());
             command.set_args(command_args);
         } else {
-            let mut command_args = ArgsTokens::new();
+            let mut command_args = ArgAttribute::new();
             command_args.set_max(arg_count);
             command.set_args(command_args);
         }
@@ -301,8 +331,8 @@ fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) ->
 
     // Add options
     for opt in fn_args.iter().filter(|n| n.is_option) {
-        let mut option = OptionTokens::new(opt.arg_name.clone());
-        let mut args = ArgsTokens::new();
+        let mut option = OptionAttribute::new(opt.arg_name.clone());
+        let mut args = ArgAttribute::new();
 
         if let Some(att) = &opt.attr {
             for (key, value) in att {
@@ -311,7 +341,7 @@ fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) ->
                     "alias" => {
                         let alias = value
                             .clone()
-                            .into_literal()
+                            .as_string_literal()
                             .expect("option `alias` is expected to be string literal");
 
                         option.set_alias(alias);
@@ -319,7 +349,7 @@ fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) ->
                     "description" => {
                         let description = value
                             .clone()
-                            .into_literal()
+                            .as_string_literal()
                             .expect("option `description` is expected to be string literal");
                         option.set_description(description);
                     }
@@ -339,11 +369,19 @@ fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) ->
 
                         args.set_max(max);
                     }
-                    "default" => match value.clone() {
-                        Value::Literal(s) => args.set_default_values(vec![s]),
-                        Value::Array(array) => args.set_default_values(array),
-                        _ => panic!("option `default` expected to be literal or array"),
-                    },
+                    "default" => {
+                        match value {
+                            Value::Literal(_) => {
+                                let s = value.clone().parse_literal::<String>().unwrap();
+                                args.set_default_values(vec![s])
+                            },
+                            Value::Array(_) => {
+                                let array = value.clone().parse_array::<String>().unwrap();
+                                args.set_default_values(array)
+                            },
+                            _ => panic!("option `default` expected to be literal or array"),
+                        }
+                    }
                     _ => panic!("invalid {} key `{}`", att.path(), key),
                 }
             }
@@ -401,9 +439,9 @@ fn get_children(block: &Block) -> Vec<(AttributeData, ItemFn)> {
 fn assert_attributes_name_is_declared(fn_attrs: &[(Attribute, AttributeData)]) {
     for (att, data) in fn_attrs {
         if let Some(value) = data.get("name") {
-            assert!(value.is_literal(), "`name` must be a string literal");
+            assert!(value.is_str(), "`name` must be a string literal");
             assert!(
-                !value.as_literal().unwrap().is_empty(),
+                !value.as_string_literal().unwrap().is_empty(),
                 "`name` cannot be empty"
             );
         } else {
@@ -426,9 +464,11 @@ fn get_fn_args(
     // Checks attributes key `name` match a function arg
     for (attr, data) in attrs {
         match data.get("name").unwrap() {
-            Value::Literal(name) => {
+            Value::Literal(lit) => {
+                let name = literal_to_string(lit);
+
                 let contains = fn_args.iter().any(|(arg_name, _)| {
-                    arg_name == name
+                    arg_name == name.as_str()
                 });
 
                 assert!(
@@ -449,7 +489,7 @@ fn get_fn_args(
                 .iter()
                 .find(|(_, data)| {
                     data.get("name")
-                        .map(|v| v.as_literal())
+                        .map(|v| v.as_string_literal())
                         .flatten()
                         .contains_some(&arg_name)
                 })
@@ -487,6 +527,13 @@ fn get_fn_arg_ident_name(fn_arg: &FnArg) -> String {
 #[option(name="x", alias="n", description="a number")]
 #[arg(name="args")
 fn main(number: u32, enable: bool, args: Vec<String>){
+    const NUMBER : u32 = 42;
+    static ID : &'static str = "Hello World";
+
+    struct Other;
+
+    fn some_fun(){}
+
     #[subcommand(description="Create an app")]
     #[option(name="path", alias="p")]
     fn create(path: String){

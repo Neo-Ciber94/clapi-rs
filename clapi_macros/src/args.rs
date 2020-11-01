@@ -1,8 +1,7 @@
 use crate::{parse_to_stream2, parse_to_str_stream2};
 use proc_macro2::TokenStream;
 use quote::*;
-use syn::{Type, PatType};
-use crate::attr_data::{AttributeData, Value};
+use crate::attr_data::{AttributeData, Value, literal_to_string};
 
 /// Tokens for:
 ///
@@ -11,22 +10,22 @@ use crate::attr_data::{AttributeData, Value};
 ///     name="args",
 ///     min=0,
 ///     max=100,
-///     default=[1,2,3]
+///     default=1,2,3
 /// )]
 /// ```
 #[derive(Default, Debug)]
-pub struct ArgsTokens {
+pub struct ArgAttribute {
     min: Option<usize>,
     max: Option<usize>,
     default_values: Vec<String>,
 }
 
-impl ArgsTokens {
+impl ArgAttribute {
     pub fn new() -> Self {
-        ArgsTokens::default()
+        ArgAttribute::default()
     }
 
-    pub fn from_attribute_data(attr: AttributeData) -> ArgsTokens {
+    pub fn from_attribute_data(attr: AttributeData) -> ArgAttribute {
         new_arg_tokens_from_attr_data(attr)
     }
 
@@ -76,20 +75,20 @@ impl ArgsTokens {
         };
 
         quote! {
-            clapi::args::Arguments::new(#min..=#max)
+            clapi::args::Arguments::new(clapi::arg_count::ArgCount::new(#min, #max))
             #default_values
         }
     }
 }
 
-impl ToTokens for ArgsTokens{
+impl ToTokens for ArgAttribute {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append_all(self.expand().into_iter())
     }
 }
 
-fn new_arg_tokens_from_attr_data(attr: AttributeData) -> ArgsTokens {
-    let mut args = ArgsTokens::new();
+fn new_arg_tokens_from_attr_data(attr: AttributeData) -> ArgAttribute {
+    let mut args = ArgAttribute::new();
 
     for (key, value) in &attr {
         match key.as_str() {
@@ -110,9 +109,15 @@ fn new_arg_tokens_from_attr_data(attr: AttributeData) -> ArgsTokens {
 
                 args.set_max(max);
             }
-            "default" => match value.clone() {
-                Value::Literal(s) => args.set_default_values(vec![s]),
-                Value::Array(array) => args.set_default_values(array),
+            "default" => match value {
+                Value::Literal(lit) => {
+                    let s = literal_to_string(lit);
+                    args.set_default_values(vec![s])
+                },
+                Value::Array(_) => {
+                    let array = value.parse_array::<String>().unwrap();
+                    args.set_default_values(array)
+                },
                 _ => panic!("option `default` expected to be literal or array"),
             },
             _ => panic!("invalid {} key `{}`", attr.path(), key),

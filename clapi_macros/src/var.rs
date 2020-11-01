@@ -1,8 +1,8 @@
-use crate::{parse_to_str_stream2, IteratorExt};
-use proc_macro2::{TokenStream, Ident};
+use crate::{parse_to_str_stream2, IteratorExt, parse_to_stream2};
+use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::ToTokens;
-use syn::{GenericArgument, Pat, PatType, Type, AngleBracketedGenericArguments, PathSegment, PathArguments};
+use syn::{GenericArgument, Pat, PatType, Type, PathSegment, PathArguments};
 
 #[derive(Debug, Clone)]
 pub struct ArgLocalVar{
@@ -32,7 +32,7 @@ impl ArgLocalVar {
             LocalVarSource::Opts => self.get_opts_source(),
         };
 
-        let name = parse_to_str_stream2(&self.name);
+        let name = parse_to_stream2(&self.name);
 
         quote! {
             let #is_mut #name = #source ;
@@ -57,7 +57,7 @@ impl ArgLocalVar {
             }
             ArgType::Option(ty) => {
                 quote! {
-                    match args.values.len(){
+                    match options.len(){
                         0 => None,
                         _ => Some(opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0).unwrap())
                     }
