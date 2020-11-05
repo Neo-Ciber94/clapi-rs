@@ -23,7 +23,7 @@ pub struct CommandAttribute {
     name: String,
     description: Option<String>,
     help: Option<String>,
-    body: Option<Box<Block>>,
+    item_fn: Option<ItemFn>,
     children: Vec<CommandAttribute>,
     options: Vec<OptionAttribute>,
     args: Option<ArgAttribute>,
@@ -37,7 +37,7 @@ impl CommandAttribute {
             name,
             description: None,
             help: None,
-            body: None,
+            item_fn: None,
             children: vec![],
             options: vec![],
             vars: vec![],
@@ -51,7 +51,7 @@ impl CommandAttribute {
             name,
             description: None,
             help: None,
-            body: None,
+            item_fn: None,
             children: vec![],
             options: vec![],
             vars: vec![],
@@ -90,8 +90,8 @@ impl CommandAttribute {
         self.vars.push(var);
     }
 
-    pub fn set_body(&mut self, body: Box<Block>) {
-        self.body = Some(body);
+    pub fn set_fn(&mut self, item_fn: ItemFn) {
+        self.item_fn = Some(item_fn);
     }
 
     pub fn expand(&self) -> TokenStream {
@@ -141,7 +141,7 @@ impl CommandAttribute {
             quote! { clapi::root_command::RootCommand::new() }
         };
 
-        let mut tokens = quote! {
+        let mut inner = quote! {
             #command
                 #description
                 #help
@@ -154,8 +154,8 @@ impl CommandAttribute {
         };
 
         if !self.is_child {
-            tokens = quote! {
-                let command = #tokens ;
+            inner = quote! {
+                let command = #inner ;
 
                 clapi::command_line::CommandLine::new(command)
                     .use_default_help()
@@ -166,15 +166,18 @@ impl CommandAttribute {
         }
 
         if self.is_child {
-            tokens
+            inner
         } else {
             let name = self.name.as_str().parse::<TokenStream>().unwrap();
+            let attrs = &self.item_fn.as_ref().unwrap().attrs;
             let outer = self.outer_body();
+            //let ret = &self.item_fn.as_ref().unwrap().sig.output;
 
             quote! {
+                #(#attrs)*
                 fn #name() {
+                    #inner
                     #(#outer)*
-                    #tokens
                 }
             }
         }
@@ -212,9 +215,10 @@ impl CommandAttribute {
 
     fn inner_body(&self) -> Vec<TokenStream> {
         // locals, expressions, ...
-        self.body
+        self.item_fn
             .as_ref()
             .unwrap()
+            .block
             .stmts
             .iter()
             .filter(|s| !matches!(s, Stmt::Item(_)))
@@ -224,9 +228,10 @@ impl CommandAttribute {
 
     fn outer_body(&self) -> Vec<TokenStream> {
         // functions, struct, const, statics, ...
-        self.body
+        self.item_fn
             .as_ref()
             .unwrap()
+            .block
             .stmts
             .iter()
             .filter(|s| matches!(s, Stmt::Item(_)))
@@ -253,8 +258,8 @@ impl AttributeKeys {
     const DEFAULT: &'static str = "default";
 }
 
-fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) -> CommandAttribute {
-    let name = func.sig.ident.to_string();
+fn new_command_tokens(attr_data: AttributeData, item_fn: ItemFn, is_child: bool) -> CommandAttribute {
+    let name = item_fn.sig.ident.to_string();
     let mut command = if is_child {
         CommandAttribute::new_child(name)
     } else {
@@ -262,7 +267,7 @@ fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) ->
     };
 
     // Sets the body
-    command.set_body(func.block.clone());
+    // command.set_item_fn(item_fn.clone());
 
     for (key, value) in &attr_data {
         match key.as_str() {
@@ -284,7 +289,7 @@ fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) ->
         }
     }
 
-    let attrs = func
+    let attrs = item_fn
         .attrs
         .iter()
         .cloned()
@@ -295,7 +300,7 @@ fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) ->
     // Check all attributes have the `name` key declared, is a literal and is not empty
     assert_attributes_name_is_declared(&attrs);
 
-    let named_fn_args = func
+    let named_fn_args = item_fn
         .sig
         .inputs
         .iter()
@@ -401,15 +406,12 @@ fn new_command_tokens(attr_data: AttributeData, func: ItemFn, is_child: bool) ->
     }
 
     // Add children
-    for (attr_data, item_fn) in get_children(&func.block) {
+    for (attr_data, item_fn) in get_children(&item_fn.block) {
         command.set_child(new_command_tokens(attr_data, item_fn, true));
     }
 
+    command.set_fn(remove_fn_command_attributes(item_fn));
     command
-}
-
-enum ArgSource {
-    Arg, Option
 }
 
 #[derive(Debug)]
@@ -543,6 +545,21 @@ fn get_fn_arg_ident_name(fn_arg: &FnArg) -> String {
     }
 
     unreachable!("Cannot get `FnArg` ident name")
+}
+
+fn remove_fn_command_attributes(mut item_fn: ItemFn) -> ItemFn {
+    item_fn.attrs = item_fn.attrs.iter()
+        .filter(|att| {
+            let path = att.path.to_token_stream().to_string();
+            match path.as_str() {
+                "command" | "subcommand" | "option" | "arg" => false,
+                _ => true,
+            }
+        })
+        .cloned()
+        .collect::<Vec<Attribute>>();
+
+    item_fn
 }
 
 /*

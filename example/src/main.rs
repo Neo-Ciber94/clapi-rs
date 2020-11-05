@@ -1,3 +1,7 @@
+#![allow(dead_code)]
+extern crate clapi_macros;
+use clapi_macros::*;
+
 use clapi::args::Arguments;
 use clapi::command::Command;
 use clapi::command_line::CommandLine;
@@ -5,31 +9,17 @@ use clapi::error::Result;
 use clapi::option::CommandOption;
 use clapi::root_command::RootCommand;
 
-extern crate clapi_macros;
-use clapi_macros::*;
-
-#[command(
-    description = "A sample description",
-    help = "A sample help",
-)]
+#[command(description = "A sample description", help = "A sample help", )]
 #[option(name = "x", alias = "number", description = "A number", default = 0)]
-#[option(
-    name = "y",
-    alias = "text",
-    description = "A text",
-    default = "Default text"
-)]
-#[option(
-    name = "z",
-    alias = "true or false",
-    description = "A bool",
-    default = false
-)]
+#[option(name = "y", alias = "text", description = "A text", default = "Default text")]
+#[option(name = "z", alias = "true or false", description = "A bool", default = false)]
 #[arg(name = "values")]
 fn main(x: u32, y: String, z: bool, values: &[u32]) {
-    #[subcommand(description="Prints a value to the console")]
-    #[option(name="times", alias="t", default=1)]
-    #[arg(name="values")]
+    println!("{}, {}, {}, {:?}", x, y, z, values);
+
+    // #[subcommand(description="Prints a value to the console")]
+    // #[option(name="times", alias="t", default=1)]
+    // #[arg(name="values")]
     fn echo(times: usize, values: Vec<String>){
         for _ in 0..times {
             for value in &values {
@@ -39,11 +29,8 @@ fn main(x: u32, y: String, z: bool, values: &[u32]) {
             println!();
         }
     }
-
-    println!("{}, {}, {}, {:?}", x, y, z, values);
 }
 
-#[allow(dead_code)]
 fn run_cmd() -> Result<()> {
     let root = RootCommand::new()
         .set_description("A file manager system")

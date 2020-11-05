@@ -8,7 +8,8 @@ edition = "2018"
 proc-macro = true
 
 [dependencies]
+macro_attribute_args = { path = "./macro_attribute_args" }
+clapi = { path="../clapi" }
+proc-macro2 = "1.0.24"
 syn = {version="1.0.45", features=["full", "extra-traits", "parsing"]}
 quote = "1.0.7"
-proc-macro2 = "1.0.24"
-clapi= { path="../clapi"}
