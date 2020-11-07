@@ -35,13 +35,14 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         let tokens = quote! {
-            #[std::p::person(name="jhon", age=20, working=true, child(name="bob"))]
+            #[person(name="jhon", age=20, working=true, child(name="bob"))]
         };
-
         let raw_attr = parse_with(Attribute::parse_outer, tokens.into()).unwrap().remove(0);
         let attr = MacroAttributeArgs::new(raw_attr);
 
-        println!("{:#?}", attr);
+        for data in &attr {
+            println!("{:?}", data);
+        }
     }
 
     let tokens = CommandAttribute::from_attribute_args(args, func).expand();

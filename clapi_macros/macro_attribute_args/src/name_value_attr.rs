@@ -1,4 +1,4 @@
-use crate::{attribute_data_to_string, literal_to_string, AttributeData};
+use crate::{attribute_data_to_string, literal_to_string, MetaItem};
 use std::fmt::{Debug, Formatter};
 use std::str::FromStr;
 use syn::Lit;
@@ -13,7 +13,7 @@ pub struct NameValueAttributeArgs {
 }
 
 impl NameValueAttributeArgs {
-    pub fn new(path: Option<String>, values: Vec<AttributeData>) -> Result<Self, NameValueError> {
+    pub fn new(path: Option<String>, values: Vec<MetaItem>) -> Result<Self, NameValueError> {
         if let Some(index) = values.iter().position(|n| !n.is_name_value()) {
             return Err(NameValueError::InvalidValue(values[index].clone()));
         }
@@ -66,7 +66,7 @@ impl<'a> IntoIterator for &'a NameValueAttributeArgs{
 }
 
 pub enum NameValueError {
-    InvalidValue(AttributeData),
+    InvalidValue(MetaItem),
     DuplicatedKey(String),
 }
 
@@ -152,6 +152,10 @@ impl Value {
         }
     }
 
+    pub fn is_numeric(&self) -> bool {
+        self.is_integer() || self.is_float()
+    }
+
     pub fn as_string_literal(&self) -> Option<String> {
         if let Value::Literal(lit) = self {
             return match lit {
@@ -197,14 +201,14 @@ impl Value {
         None
     }
 
-    pub fn into_literal(self) -> Option<Lit> {
+    pub fn as_literal(&self) -> Option<&Lit> {
         match self {
             Value::Literal(x) => Some(x),
             _ => None,
         }
     }
 
-    pub fn into_array(self) -> Option<Vec<Lit>> {
+    pub fn as_array(&self) -> Option<&Vec<Lit>> {
         match self {
             Value::Array(x) => Some(x),
             _ => None,
