@@ -24,7 +24,6 @@ where
     fn parse(&mut self, context: &Context, args: I) -> Result<ParseResult> {
         let mut tokenizer = DefaultTokenizer::default();
         let tokens = tokenizer.tokenize(context, args)?;
-        println!("{:?}", tokens);
 
         let mut iterator = tokens.iter().peekable();
         let mut result_options = Options::new();

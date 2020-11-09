@@ -97,8 +97,8 @@ impl CommandOption {
     /// Sets the argument values of this option.
     pub fn set_args_values<'a, S, I>(&mut self, args: I) -> Result<()>
     where
-        S: ToString + 'a,
         I: IntoIterator<Item = &'a S>,
+        S: ToString + 'a,
     {
         self.args.set_values(args)
     }

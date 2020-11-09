@@ -3,7 +3,7 @@ use quote::*;
 use syn::export::ToTokens;
 use syn::{GenericArgument, Pat, PatType, Type, PathSegment, PathArguments};
 use syn::spanned::Spanned;
-use crate::parser::{parse_to_stream2, parse_to_str_stream2};
+use crate::utils::{to_stream2, to_str_literal_stream2};
 use crate::IteratorExt;
 
 #[derive(Debug, Clone)]
@@ -34,7 +34,7 @@ impl ArgLocalVar {
             LocalVarSource::Opts => self.get_opts_source(),
         };
 
-        let var_name = parse_to_stream2(&self.name).unwrap();
+        let var_name = to_stream2(&self.name).unwrap();
 
         match self.ty {
             ArgType::Slice(_) => {
@@ -64,7 +64,7 @@ impl ArgLocalVar {
     }
 
     fn get_opts_source(&self) -> TokenStream {
-        let arg_name = parse_to_str_stream2(&self.name).unwrap();
+        let arg_name = to_str_literal_stream2(&self.name).unwrap();
         let msg = format!("`{}` is required", self.name);
 
         match &self.ty {

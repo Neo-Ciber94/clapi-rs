@@ -1,18 +1,20 @@
-#![allow(dead_code)]
+#![feature(proc_macro_span)]
+//#![allow(dead_code)]
 extern crate proc_macro;
 
-use crate::command::CommandAttribute;
+use crate::command::CommandFromFn;
 pub(crate) use ext::*;
-use proc_macro::TokenStream;
-use syn::{AttributeArgs, ItemFn, Attribute};
+use proc_macro::{TokenStream, Span};
+use syn::{AttributeArgs, ItemFn};
+use syn::export::ToTokens;
 
 mod args;
-mod attr_data;
 mod command;
 mod ext;
 mod option;
-mod parser;
+mod utils;
 mod var;
+mod shared;
 
 /// Marks and converts a function as a `Command`.
 ///
@@ -26,27 +28,21 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = syn::parse_macro_input!(attr as AttributeArgs);
     let func = syn::parse_macro_input!(item as ItemFn);
 
-    {
-        use macro_attribute_args::*;
-        use quote::*;
+    // let tokens = if cfg!(target_feature="proc_macro_span") {
+    //     let path = Span::call_site().source_file().path();
+    //     let src = std::fs::read_to_string(path).unwrap();
+    //     let file = syn::parse_file(&src).unwrap();
+    //     CommandFromFn::from_file(args, func, file).expand()
+    // } else {
+    //     CommandFromFn::from_fn(args, func).expand()
+    // };
 
-        fn parse_with<T: syn::parse::Parser>(parser: T, tokens: TokenStream) -> syn::Result<T::Output>{
-            parser.parse(tokens)
-        }
+    let path = Span::call_site().source_file().path();
+    let src = std::fs::read_to_string(path).unwrap();
+    let file = syn::parse_file(&src).unwrap();
+    let tokens = CommandFromFn::from_file(args, func, file).expand();
 
-        let tokens = quote! {
-            #[person(name="jhon", age=20, working=true, child(name="bob"))]
-        };
-        let raw_attr = parse_with(Attribute::parse_outer, tokens.into()).unwrap().remove(0);
-        let attr = MacroAttributeArgs::new(raw_attr);
-
-        for data in &attr {
-            println!("{:?}", data);
-        }
-    }
-
-    let tokens = CommandAttribute::from_attribute_args(args, func).expand();
-    // println!("{}", tokens.to_string());
+    //println!("{}", tokens.to_string());
     tokens.into()
 }
 
@@ -61,9 +57,16 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
-    // This just acts as a marker, the actual operation is performed by `command`
-    item
+pub fn subcommand(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let raw_attr_args = attr.to_string();
+    let raw_item_fn = item.to_string();
+    let func = syn::parse_macro_input!(item as ItemFn);
+
+    shared::get_subcommand_registry().push(shared::CommandRawData::new(raw_attr_args, raw_item_fn));
+
+    command::drop_command_attributes(func)
+        .to_token_stream()
+        .into()
 }
 
 /// Adds command-line option information to a function argument.
@@ -76,9 +79,8 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
 /// fn main(x: Vec<u32>){ }
 /// ```
 #[proc_macro_attribute]
-pub fn option(_: TokenStream, item: TokenStream) -> TokenStream {
-    // This just acts as a marker, the actual operation is performed by `command`
-    item
+pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
+    panic!("option should be placed after a `command` or `subcommand` attribute")
 }
 
 /// Marks a function argument as command-line arguments.
@@ -91,7 +93,6 @@ pub fn option(_: TokenStream, item: TokenStream) -> TokenStream {
 /// fn main(args: Vec<String>){ }
 /// ```
 #[proc_macro_attribute]
-pub fn arg(_: TokenStream, item: TokenStream) -> TokenStream {
-    // This just acts as a marker, the actual operation is performed by `command`
-    item
+pub fn arg(_: TokenStream, _: TokenStream) -> TokenStream {
+    panic!("arg should be placed after a `command` or `subcommand` attribute")
 }

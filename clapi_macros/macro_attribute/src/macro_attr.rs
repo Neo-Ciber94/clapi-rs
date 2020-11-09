@@ -1,67 +1,85 @@
-use crate::{NameValue, NameValueAttributeArgs, NameValueError, Value};
+use crate::{NameValue, NameValueAttribute, NameValueError, Value};
 use std::iter::Peekable;
+use std::ops::Index;
 use syn::{Attribute, AttributeArgs, Lit, Meta, MetaList, MetaNameValue, NestedMeta, Path};
 
-/// Represents the arguments in a macro attribute like:
+/// Represents a macro attribute and its arguments like:
 ///
 /// `#[attribute(key="value")]`
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct MacroAttributeArgs {
-    path: Option<String>,
-    data: Vec<MetaItem>,
+pub struct MacroAttribute {
+    path: String,
+    args: Vec<MetaItem>,
 }
 
-impl MacroAttributeArgs {
+impl MacroAttribute {
     pub fn new(attribute: Attribute) -> Self {
-        let name = join_path_to_string(&attribute.path);
-        let args = get_attribute_args(&attribute).expect("invalid attribute");
-        let data = AttributeVisitor::visit(args);
+        let path = join_path_to_string(&attribute.path);
+        let attr_args = get_attribute_args(&attribute).expect("invalid attribute");
+        let args = AttributeArgsVisitor::visit(attr_args);
 
-        MacroAttributeArgs {
-            path: Some(name),
-            data,
+        MacroAttribute {
+            path: path.to_string(),
+            args
         }
     }
 
-    pub fn from_attribute_args(attribute_args: AttributeArgs) -> Self {
-        let data = AttributeVisitor::visit(attribute_args);
-        MacroAttributeArgs {
-            path: None,
-            data
+    pub fn from_attribute_args(path: &str, attribute_args: AttributeArgs) -> Self {
+        let args = AttributeArgsVisitor::visit(attribute_args);
+        MacroAttribute {
+            path: path.to_string(),
+            args
         }
     }
 
-    pub fn path(&self) -> Option<&str> {
-        self.path.as_ref().map(|n| n.as_str())
+    pub fn path(&self) -> &str {
+        self.path.as_str()
     }
 
-    pub fn data(&self) -> &[MetaItem] {
-        self.data.as_slice()
+    pub fn args(&self) -> &[MetaItem] {
+        self.args.as_slice()
     }
 
     pub fn len(&self) -> usize {
-        self.data.len()
+        self.args.len()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &MetaItem> {
-        self.data.iter()
+        self.args.iter()
     }
 
-    pub fn into_name_values(self) -> Result<NameValueAttributeArgs, NameValueError> {
-        NameValueAttributeArgs::new(self.path, self.data)
+    pub fn into_name_values(self) -> Result<NameValueAttribute, NameValueError> {
+        NameValueAttribute::new(self.path.as_str(), self.args)
     }
 
     pub fn into_inner(self) -> Vec<MetaItem> {
-        self.data
+        self.args
     }
 }
 
-impl<'a> IntoIterator for &'a MacroAttributeArgs {
+impl Index<usize> for MacroAttribute {
+    type Output = MetaItem;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.args[index]
+    }
+}
+
+impl<'a> IntoIterator for &'a MacroAttribute {
     type Item = &'a MetaItem;
     type IntoIter = std::slice::Iter<'a, MetaItem>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.data.iter()
+        self.args.iter()
+    }
+}
+
+impl IntoIterator for MacroAttribute {
+    type Item = MetaItem;
+    type IntoIter = std::vec::IntoIter<MetaItem>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.args.into_iter()
     }
 }
 
@@ -69,13 +87,13 @@ impl<'a> IntoIterator for &'a MacroAttributeArgs {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum MetaItem {
     /// A path like: `#[attribute]`
-    Path(String),
+    Path(String), //Raw(String)
     /// A literal like: `#[attribute("hello world")]`
     Literal(Lit),
     /// A key-value like: `#[attribute(key="value")]` or `#[attribute(array=1,2,3,4)]`
     NameValue(NameValue),
     /// Nested data like: `#[attribute(inner("hello"))]`
-    Nested(Box<MacroAttributeArgs>),
+    Nested(Box<MacroAttribute>),
 }
 
 impl MetaItem {
@@ -116,7 +134,7 @@ impl MetaItem {
         }
     }
 
-    pub fn into_nested(self) -> Option<Box<MacroAttributeArgs>> {
+    pub fn into_nested(self) -> Option<Box<MacroAttribute>> {
         match self {
             MetaItem::Nested(x) => Some(x),
             _ => None,
@@ -124,17 +142,19 @@ impl MetaItem {
     }
 }
 
-struct AttributeVisitor;
+struct AttributeArgsVisitor;
 
-impl AttributeVisitor {
+impl AttributeArgsVisitor {
     pub fn visit(attribute_args: AttributeArgs) -> Vec<MetaItem> {
         let mut data = Vec::new();
         let mut iter = attribute_args.iter().peekable();
 
         while let Some(next) = iter.next() {
             match next {
-                NestedMeta::Lit(lit) => AttributeVisitor::visit_lit(&mut data, lit),
-                NestedMeta::Meta(meta) => AttributeVisitor::visit_meta(&mut iter, &mut data, meta),
+                NestedMeta::Lit(lit) => AttributeArgsVisitor::visit_lit(&mut data, lit),
+                NestedMeta::Meta(meta) => {
+                    AttributeArgsVisitor::visit_meta(&mut iter, &mut data, meta)
+                }
             }
         }
 
@@ -150,10 +170,10 @@ impl AttributeVisitor {
         I: Iterator<Item = &'a NestedMeta>,
     {
         match meta {
-            Meta::Path(path) => AttributeVisitor::visit_path(ret, path),
-            Meta::List(list) => AttributeVisitor::visit_list(ret, list),
+            Meta::Path(path) => AttributeArgsVisitor::visit_path(ret, path),
+            Meta::List(list) => AttributeArgsVisitor::visit_list(ret, list),
             Meta::NameValue(name_value) => {
-                AttributeVisitor::visit_name_value(iter, ret, name_value)
+                AttributeArgsVisitor::visit_name_value(iter, ret, name_value)
             }
         }
     }
@@ -171,15 +191,15 @@ impl AttributeVisitor {
         while let Some(next) = iter.next() {
             match next {
                 NestedMeta::Meta(meta) => {
-                    AttributeVisitor::visit_meta(&mut iter, &mut values, meta)
+                    AttributeArgsVisitor::visit_meta(&mut iter, &mut values, meta)
                 }
-                NestedMeta::Lit(lit) => AttributeVisitor::visit_lit(&mut values, lit),
+                NestedMeta::Lit(lit) => AttributeArgsVisitor::visit_lit(&mut values, lit),
             }
         }
 
-        ret.push(MetaItem::Nested(Box::new(MacroAttributeArgs {
-            path: Some(path),
-            data: values,
+        ret.push(MetaItem::Nested(Box::new(MacroAttribute {
+            path,
+            args: values,
         })));
     }
 
@@ -203,21 +223,19 @@ impl AttributeVisitor {
         match values.len() {
             1 => {
                 let value = Value::Literal(values.remove(0));
-                ret.push(MetaItem::NameValue(NameValue { key, value }))
+                ret.push(MetaItem::NameValue(NameValue { name: key, value }))
             }
             _ => ret.push(MetaItem::NameValue(NameValue {
-                key,
+                name: key,
                 value: Value::Array(values),
             })),
         }
     }
 }
 
-fn get_attribute_args(att: &Attribute) -> syn::Result<AttributeArgs> {
-    let mut token_tree = att.tokens.clone().into_iter();
+fn get_attribute_args(attr: &Attribute) -> syn::Result<AttributeArgs> {
+    let mut token_tree = attr.tokens.clone().into_iter();
     if let Some(proc_macro2::TokenTree::Group(group)) = token_tree.next() {
-        // let stream = group.stream().into();
-        // return syn::parse_macro_input::parse::<AttributeArgs>(stream);
         use syn::parse_macro_input::ParseMacroInput;
         let tokens = group.stream();
         return syn::parse::Parser::parse2(AttributeArgs::parse, tokens);
@@ -227,29 +245,30 @@ fn get_attribute_args(att: &Attribute) -> syn::Result<AttributeArgs> {
 }
 
 fn join_path_to_string(path: &Path) -> String {
-    path.segments.iter()
+    path.segments
+        .iter()
         .map(|s| s.ident.to_string())
         .collect::<Vec<String>>()
         .join("::")
 }
 
-pub fn attribute_data_to_string(data: &MetaItem) -> String {
+pub fn meta_item_to_string(data: &MetaItem) -> String {
     match data {
         MetaItem::Path(path) => path.to_owned(),
         MetaItem::Literal(lit) => literal_to_string(lit),
         MetaItem::NameValue(data) => match &data.value {
-            Value::Literal(x) => format!("{} = {}", data.key, literal_to_string(x)),
+            Value::Literal(x) => format!("{} = {}", data.name, literal_to_string(x)),
             Value::Array(x) => {
                 let s = x.iter().map(literal_to_string).collect::<Vec<String>>();
 
-                format!("{} = {:?}", data.key, s)
+                format!("{} = {:?}", data.name, s)
             }
         },
         MetaItem::Nested(data) => {
             if data.len() > 0 {
-                format!("{}", data.path.clone().unwrap())
+                format!("{}", data.path.clone())
             } else {
-                format!("{}(...)", data.clone().path.unwrap())
+                format!("{}(...)", data.clone().path)
             }
         }
     }
@@ -267,3 +286,28 @@ pub fn literal_to_string(lit: &Lit) -> String {
         Lit::Verbatim(s) => s.to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proc_macro2::TokenStream;
+    use quote::*;
+    use syn::parse_quote::ParseQuote;
+
+    fn parse_attr(tokens: TokenStream) -> Attribute {
+        syn::parse::Parser::parse2(Attribute::parse, tokens).expect("invalid attribute")
+    }
+
+    #[test]
+    fn new_macro_attr_test() {
+        let tokens = quote! { #[person(name="Kaori", age=20, job(salary=200.0))] };
+        let attr = MacroAttribute::new(parse_attr(tokens));
+
+        assert_eq!(attr.path, "person".to_owned());
+        assert_eq!(attr.len(), 3);
+        assert!(attr[0].is_name_value());
+        assert!(attr[1].is_name_value());
+        assert!(attr[2].is_nested());
+    }
+}
+

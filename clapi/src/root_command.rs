@@ -125,8 +125,8 @@ impl RootCommand {
     #[inline]
     pub fn set_args_values<'a, S, I>(&mut self, args: I) -> Result<()>
     where
-        S: ToString + 'a,
         I: IntoIterator<Item = &'a S>,
+        S: ToString + 'a,
     {
         self.inner.set_args_values(args)
     }

@@ -1,7 +1,7 @@
-use crate::args::ArgAttribute;
+use crate::args::ArgFromFn;
 use proc_macro2::TokenStream;
 use quote::*;
-use crate::parser::parse_to_str_stream2;
+use crate::utils::to_str_literal_stream2;
 
 /// Tokens for:
 ///
@@ -16,16 +16,16 @@ use crate::parser::parse_to_str_stream2;
 /// )]
 /// ```
 #[derive(Debug)]
-pub struct OptionAttribute {
+pub struct OptionFromFn {
     name: String,
     alias: Option<String>,
     description: Option<String>,
-    args: Option<ArgAttribute>,
+    args: Option<ArgFromFn>,
 }
 
-impl OptionAttribute {
+impl OptionFromFn {
     pub fn new(name: String) -> Self {
-        OptionAttribute {
+        OptionFromFn {
             name,
             alias: None,
             description: None,
@@ -41,14 +41,14 @@ impl OptionAttribute {
         self.description = Some(description);
     }
 
-    pub fn set_args(&mut self, args: ArgAttribute){
+    pub fn set_args(&mut self, args: ArgFromFn){
         self.args = Some(args);
     }
 
     pub fn expand(&self) -> TokenStream {
         // CommandOption::set_alias
         let alias = if let Some(s) = &self.alias{
-            let tokens = parse_to_str_stream2(s).unwrap();
+            let tokens = to_str_literal_stream2(s).unwrap();
             quote!{ .set_alias(#tokens) }
         } else {
             quote!{}
@@ -56,7 +56,7 @@ impl OptionAttribute {
 
         // CommandOption::set_description
         let description = if let Some(s) = &self.description{
-            let tokens = parse_to_str_stream2(s).unwrap();
+            let tokens = to_str_literal_stream2(s).unwrap();
             quote!{ .set_description(#tokens) }
         } else {
             quote!{}
@@ -78,7 +78,7 @@ impl OptionAttribute {
             quote!{}
         };
 
-        let name = parse_to_str_stream2(&self.name).unwrap();
+        let name = to_str_literal_stream2(&self.name).unwrap();
 
         quote!{
             clapi::option::CommandOption::new(#name)
@@ -90,7 +90,7 @@ impl OptionAttribute {
     }
 }
 
-impl ToTokens for OptionAttribute {
+impl ToTokens for OptionFromFn {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append_all(self.expand().into_iter())
     }
