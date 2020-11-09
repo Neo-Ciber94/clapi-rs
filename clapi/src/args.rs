@@ -66,8 +66,8 @@ impl Arguments {
     /// # Panics
     /// If this `Arguments` is not part of a `Command` or `CommandOption`.
     #[inline]
-    pub fn parent(&self) -> &Symbol {
-        self.parent.as_ref().expect("parent is not set")
+    pub fn parent(&self) -> Option<&Symbol> {
+        self.parent.as_ref()
     }
 
     /// Returns the name of this `Arguments` or `None` if not set.
@@ -157,10 +157,16 @@ impl Arguments {
 
         assert!(
             self.default_values.is_empty(),
-            "already have default values"
+            already_have_values_msg(&self, true)
         );
-        assert!(self.take_args(), "arguments takes not values");
-        assert!(self.values.is_empty(), "arguments already have values");
+        assert!(
+            self.take_args(),
+            take_no_values_msg(&self)
+        );
+        assert!(
+            self.values.is_empty(),
+            already_have_values_msg(&self, false)
+        );
         assert!(
             self.arity.contains(values.len()),
             "invalid number of default values, {} was get but {} was expected",
@@ -217,9 +223,9 @@ impl Arguments {
 
     /// Sets the validator for the valid values of this `Arguments`.
     pub fn set_validator<V: Validator + 'static>(mut self, validator: V) -> Self {
-        assert!(self.valid_values.is_none(), "validator is set");
-        assert!(self.take_args(), "arguments takes not values");
-        assert!(self.values.is_empty(), "arguments already have values");
+        assert!(self.valid_values.is_none(), "this `Arguments` validator is already set");
+        assert!(self.take_args(), "this `Arguments` takes not values");
+        assert!(self.values.is_empty(), "this `Arguments` already have values");
 
         self.valid_values = Some(Rc::new(validator));
         self
@@ -262,22 +268,14 @@ impl Arguments {
         if !self.arity.takes_args() {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
-                format!(
-                    "`{}` takes not arguments",
-                    self.parent.as_ref().map(|s| s.name()).unwrap_or_default()
-                ),
+                take_no_values_msg(&self),
             ));
         }
 
         if !self.arity.contains(values.len()) {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
-                format!(
-                    "\n`{}` expected {} but {} was get",
-                    self.parent.as_ref().map(|s| s.name()).unwrap_or_default(),
-                    self.arity,
-                    values.len()
-                ),
+                invalid_arg_count_msg(&self, values.len()),
             ));
         }
 
@@ -432,6 +430,49 @@ where
     match T::from_str(value) {
         Ok(n) => Ok(n),
         Err(e) => Err(Error::new(ErrorKind::Unknown, e.to_string())),
+    }
+}
+
+fn take_no_values_msg(args: &Arguments) -> String {
+    if let Some(parent) = &args.parent {
+        let kind = match parent {
+            Symbol::Command(_) => "command",
+            Symbol::Option(_) => "option"
+        };
+        return format!("{} `{}` takes no args", kind, parent.name());
+    } else if let Some(name) = &args.name {
+        return format!("`{}` takes no args", name);
+    } else {
+        "takes not args".to_owned()
+    }
+}
+
+fn already_have_values_msg(args: &Arguments, is_default_values: bool) -> String {
+    if let Some(parent) = &args.parent {
+        let kind = match parent {
+            Symbol::Command(_) => "command",
+            Symbol::Option(_) => "option"
+        };
+        format!("{} `{}` already have {}values", kind, parent.name(), if is_default_values { "default" } else {""})
+    } else if let Some(name) = &args.name {
+        format!("`{}` already have {}values", name, if is_default_values { "default" } else {""})
+    } else {
+        format!("already have {}values", if is_default_values { "default" } else {""})
+    }
+}
+
+fn invalid_arg_count_msg(args: &Arguments, actual: usize) -> String {
+    if let Some(parent) = &args.parent {
+        let kind = match parent {
+            Symbol::Command(_) => "command",
+            Symbol::Option(_) => "option"
+        };
+
+        format!("{} `{}` expected `{}` but was `{}`", kind, parent.name(), args.arity, actual)
+    } else if let Some(name) = &args.name {
+        format!("`{}` expected `{}` but was `{}`", name, args.arity, actual)
+    } else {
+        format!("expected `{}` but was `{}`", args.arity, actual)
     }
 }
 

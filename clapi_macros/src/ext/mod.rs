@@ -83,6 +83,9 @@ macro_rules! is_primitive_type {
     };
 }
 
+/// Provides methods for check the type.
+///
+/// This methods are `string` base comparison, so may fail if the type is an type alias.
 pub trait TypeExtensions {
     fn path(&self) -> Option<String>;
 
@@ -101,6 +104,14 @@ pub trait TypeExtensions {
     fn is_option(&self) -> bool {
         if let Some(path) = self.path() {
             path == "Option" || path == "std::option::Option" || path == "core::option::Option"
+        } else {
+            false
+        }
+    }
+
+    fn is_result(&self) -> bool {
+        if let Some(path) = self.path() {
+            path == "Result" || path == "std::result::Result" || path == "core::result::Result"
         } else {
             false
         }
@@ -165,11 +176,11 @@ pub trait TypeExtensions {
     is_primitive_type!(is_u64, u64);
     is_primitive_type!(is_u128, u128);
     is_primitive_type!(is_usize, usize);
-    is_primitive_type!(is_i8, u8);
-    is_primitive_type!(is_i16, u16);
-    is_primitive_type!(is_i32, u32);
-    is_primitive_type!(is_i64, u64);
-    is_primitive_type!(is_i128, u128);
+    is_primitive_type!(is_i8, i8);
+    is_primitive_type!(is_i16, i16);
+    is_primitive_type!(is_i32, i32);
+    is_primitive_type!(is_i64, i64);
+    is_primitive_type!(is_i128, i128);
     is_primitive_type!(is_isize, isize);
     is_primitive_type!(is_f32, f32);
     is_primitive_type!(is_f64, f64);
@@ -178,14 +189,11 @@ pub trait TypeExtensions {
 impl TypeExtensions for syn::Type {
     fn path(&self) -> Option<String> {
         if let syn::Type::Path(type_path) = self {
-            use syn::export::ToTokens;
-
             Some(
-                type_path.to_token_stream()
-                    .into_iter()
-                    .map(|s| s.to_string())
+                type_path.path.segments.iter()
+                    .map(|s| s.ident.to_string())
                     .collect::<Vec<String>>()
-                    .join("::"),
+                    .join("::")
             )
         } else {
             None
@@ -206,17 +214,86 @@ mod tests {
     }
 
     #[test]
-    fn is_type_test() {
-        let u8_type = to_type(quote! { u8 });
-        assert!(u8_type.is_u8());
-        assert!(u8_type.is_type("u8"))
+    fn path_test(){
+        assert_eq!(to_type(quote!{ u8 }).path().unwrap().as_str(), "u8");
+        assert_eq!(to_type(quote!{ str }).path().unwrap().as_str(), "str");
+        assert_eq!(to_type(quote!{ bool }).path().unwrap().as_str(), "bool");
+        assert_eq!(to_type(quote!{ Person }).path().unwrap().as_str(), "Person");
+        assert_eq!(to_type(quote!{ std::option::Option<String> }).path().unwrap().as_str(), "std::option::Option");
+        assert_eq!(to_type(quote!{ lib::Runner }).path().unwrap().as_str(), "lib::Runner");
+    }
+
+    #[test]
+    fn is_primitive_test(){
+        println!("{:?}", to_type(quote! { i8 }).path());
+        assert!(to_type(quote! { str }).is_primitive());
+        assert!(to_type(quote! { char }).is_primitive());
+        assert!(to_type(quote! { bool }).is_primitive());
+        assert!(to_type(quote! { i8 }).is_primitive());
+        assert!(to_type(quote! { i16 }).is_primitive());
+        assert!(to_type(quote! { i32 }).is_primitive());
+        assert!(to_type(quote! { i64 }).is_primitive());
+        assert!(to_type(quote! { i128 }).is_primitive());
+        assert!(to_type(quote! { isize }).is_primitive());
+        assert!(to_type(quote! { u8 }).is_primitive());
+        assert!(to_type(quote! { u16 }).is_primitive());
+        assert!(to_type(quote! { u32 }).is_primitive());
+        assert!(to_type(quote! { u64 }).is_primitive());
+        assert!(to_type(quote! { u128 }).is_primitive());
+        assert!(to_type(quote! { usize }).is_primitive());
+
+        assert!(!to_type(quote! { String }).is_primitive());
+    }
+
+    #[test]
+    fn is_unsigned_integer_test() {
+        assert!(to_type(quote! { i8 }).is_number());
+        assert!(to_type(quote! { u8 }).is_integer());
+        assert!(to_type(quote! { u8 }).is_unsigned_integer());
+
+        assert!(to_type(quote! { u8 }).is_u8());
+        assert!(to_type(quote! { u16 }).is_u16());
+        assert!(to_type(quote! { u32 }).is_u32());
+        assert!(to_type(quote! { u64 }).is_u64());
+        assert!(to_type(quote! { u128 }).is_u128());
+        assert!(to_type(quote! { usize }).is_usize());
+    }
+
+    #[test]
+    fn is_signed_integer_test() {
+        assert!(to_type(quote! { i8 }).is_number());
+        assert!(to_type(quote! { i8 }).is_integer());
+        assert!(to_type(quote! { i8 }).is_signed_integer());
+
+        assert!(to_type(quote! { i8 }).is_i8());
+        assert!(to_type(quote! { i16 }).is_i16());
+        assert!(to_type(quote! { i32 }).is_i32());
+        assert!(to_type(quote! { i64 }).is_i64());
+        assert!(to_type(quote! { i128 }).is_i128());
+        assert!(to_type(quote! { isize }).is_isize());
+    }
+
+    #[test]
+    fn is_float_test() {
+        assert!(to_type(quote! { f32 }).is_f32());
+        assert!(to_type(quote! { f64 }).is_f64());
+        assert!(to_type(quote! { f32 }).is_float());
+        assert!(to_type(quote! { f64 }).is_float());
+        assert!(to_type(quote! { f32 }).is_number());
+        assert!(to_type(quote! { f64 }).is_number());
     }
 
     #[test]
     fn is_option_test(){
-        let u8_type = to_type(quote! { Option<String> });
-        assert!(u8_type.is_type("Option"));
-        assert!(u8_type.is_type("std::option::Option"));
-        assert!(u8_type.is_type("core::option::Option"));
+        assert!(to_type(quote! { Option<String> }).is_option());
+        assert!(to_type(quote! { std::option::Option<String> }).is_option());
+        assert!(to_type(quote! { core::option::Option<String> }).is_option());
+    }
+
+    #[test]
+    fn is_result_test(){
+        assert!(to_type(quote! { Result<String, u32> }).is_result());
+        assert!(to_type(quote! { std::result::Result<String, u32> }).is_result());
+        assert!(to_type(quote! { core::result::Result<String, u32> }).is_result());
     }
 }

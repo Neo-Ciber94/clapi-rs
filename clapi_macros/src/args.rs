@@ -8,7 +8,7 @@ use syn::{Lit, PatType};
 
 /// Tokens for:
 ///
-/// ```ignore
+/// ```text
 /// #[args(
 ///     name="args",
 ///     min=0,
@@ -98,8 +98,11 @@ impl ArgData {
             quote! { .set_default_values(&[#(#tokens),*]) }
         };
 
+        let name = &self.arg.name;
+
         quote! {
             clapi::args::Arguments::new(clapi::arg_count::ArgCount::new(#min, #max))
+            .set_name(#name)
             #default_values
         }
     }

@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::*;
-use syn::{Attribute, AttributeArgs, FnArg, ItemFn, PatType, Stmt};
+use syn::{Attribute, AttributeArgs, FnArg, ItemFn, PatType, Stmt, ReturnType};
 use syn::export::ToTokens;
 use macro_attribute::NameValueAttribute;
 use crate::args::ArgData;
@@ -10,10 +10,11 @@ use crate::var::{ArgLocalVar, ArgType};
 
 use command_file::new_command_from_file;
 use command_fn::new_command_from_fn;
+use crate::TypeExtensions;
 
 /// Tokens for:
 ///
-/// ```ignore
+/// ```text
 /// #[command(
 ///     description="A description",
 ///     help="Help text",
@@ -285,6 +286,13 @@ struct CommandFnArg {
 struct NamedFnArg {
     name: String,
     fn_arg: FnArg,
+}
+
+fn is_result_type(ret: &ReturnType) -> bool {
+    match ret {
+        ReturnType::Default => false,
+        ReturnType::Type(_, ty) => ty.is_result()
+    }
 }
 
 pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {

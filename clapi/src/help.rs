@@ -9,7 +9,7 @@ pub use crate::help::indented_writer::*;
 /// The only method needed to implement is `help` all the other methods provide a default value.
 ///
 /// Example output of `help`:
-/// ```ignore
+/// ```text
 /// NAME:
 ///     test
 ///

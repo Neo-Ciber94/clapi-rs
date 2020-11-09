@@ -5,7 +5,7 @@ use crate::utils::to_str_literal_stream2;
 
 /// Tokens for:
 ///
-/// ```ignore
+/// ```text
 /// #[option(
 ///     name="value",
 ///     alias="v",

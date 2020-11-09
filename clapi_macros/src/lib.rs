@@ -23,7 +23,7 @@ mod shared;
 /// - `help`: help information about the command.
 ///
 /// # Example:
-/// ``` ignore
+/// ```text
 /// #[command(description="", help=""]
 /// fn main(){ }
 /// ```
@@ -48,7 +48,7 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - `help`: help information about the command.
 ///
 /// # Example:
-/// ```ignore
+/// ```text
 /// #[command]
 /// fn main(){
 ///     #[subcommand(description="", help=""]
@@ -78,8 +78,7 @@ pub fn subcommand(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - `default`: default value(s) of the option.
 ///
 /// # Example:
-/// ```ignore
-///
+/// ```text
 /// #[command]
 /// #[option(name="x", description="", min=0, max=3, default=1,2,3)]
 /// fn main(x: Vec<u32>){ }
@@ -99,8 +98,7 @@ pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
 /// - `default`: default value(s) of the option.
 ///
 /// # Example:
-/// ```ignore
-///
+/// ```text
 /// #[command]
 /// #[arg(name="args", min=0, max=3, default="one", "two", "three")]
 /// fn main(args: Vec<String>){ }
