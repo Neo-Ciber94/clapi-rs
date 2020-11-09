@@ -12,7 +12,7 @@ use clapi::root_command::RootCommand;
 #[subcommand(description="Prints a value to the console")]
 #[option(name="times", alias="t", default=1)]
 #[arg(name="values")]
-fn echo(times: usize, values: Vec<String>){
+fn echo(times: usize, values: Vec<String>) {
     for _ in 0..times {
         for value in &values {
             print!("{} ", value);
@@ -23,13 +23,10 @@ fn echo(times: usize, values: Vec<String>){
 }
 
 
-#[command(description = "A sample description", help = "A sample help")]
-#[option(name = "x", alias = "number", description = "A number", default = 0)]
-#[option(name = "y", alias = "text", description = "A text", default = "Default text")]
-#[option(name = "z", alias = "true or false", description = "A bool", default = false)]
-#[arg(name = "values", default=1,2,3)]
-fn main(x: u32, y: String, z: bool, values: &[u32]) {
-    println!("{}, {}, {}, {:?}", x, y, z, values);
+#[command]
+#[arg(name="arg")]
+fn main(number: u32, arg: Option<String>) {
+    println!("number: {}, arg: {:?}", number, arg);
 }
 
 

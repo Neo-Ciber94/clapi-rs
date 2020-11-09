@@ -1,4 +1,4 @@
-use crate::args::ArgFromFn;
+use crate::args::ArgData;
 use proc_macro2::TokenStream;
 use quote::*;
 use crate::utils::to_str_literal_stream2;
@@ -16,16 +16,16 @@ use crate::utils::to_str_literal_stream2;
 /// )]
 /// ```
 #[derive(Debug)]
-pub struct OptionFromFn {
+pub struct OptionData {
     name: String,
     alias: Option<String>,
     description: Option<String>,
-    args: Option<ArgFromFn>,
+    args: Option<ArgData>,
 }
 
-impl OptionFromFn {
+impl OptionData {
     pub fn new(name: String) -> Self {
-        OptionFromFn {
+        OptionData {
             name,
             alias: None,
             description: None,
@@ -41,7 +41,7 @@ impl OptionFromFn {
         self.description = Some(description);
     }
 
-    pub fn set_args(&mut self, args: ArgFromFn){
+    pub fn set_args(&mut self, args: ArgData){
         self.args = Some(args);
     }
 
@@ -90,7 +90,7 @@ impl OptionFromFn {
     }
 }
 
-impl ToTokens for OptionFromFn {
+impl ToTokens for OptionData {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append_all(self.expand().into_iter())
     }

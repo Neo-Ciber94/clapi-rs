@@ -17,7 +17,7 @@ use syn::{Lit, PatType};
 /// )]
 /// ```
 #[derive(Debug)]
-pub struct ArgFromFn {
+pub struct ArgData {
     min: Option<usize>,
     max: Option<usize>,
     arg: NamedArg,
@@ -25,9 +25,13 @@ pub struct ArgFromFn {
 }
 
 #[derive(Debug)]
-struct NamedArg { name: String, ty: ArgType }
+struct NamedArg {
+    name: String,
+    pat_type: PatType,
+    ty: ArgType,
+}
 
-impl ArgFromFn {
+impl ArgData {
     pub fn new(pat_type: &PatType) -> Self {
         let name = if let syn::Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
             pat_ident.ident.to_string()
@@ -35,15 +39,19 @@ impl ArgFromFn {
             unreachable!()
         };
 
-        ArgFromFn {
+        ArgData {
             min: None,
             max: None,
-            arg: NamedArg{ name, ty: ArgType::new(pat_type) },
+            arg: NamedArg {
+                name,
+                pat_type: pat_type.clone(),
+                ty: ArgType::new(pat_type),
+            },
             default_values: vec![],
         }
     }
 
-    pub fn from_attribute_data(attr: NameValueAttribute, pat_type: &PatType) -> ArgFromFn {
+    pub fn from_attribute_data(attr: NameValueAttribute, pat_type: &PatType) -> ArgData {
         new_arg_tokens_from_attr_data(attr, pat_type)
     }
 
@@ -69,34 +77,7 @@ impl ArgFromFn {
             assert_arg_and_default_values_same_type(&self.arg, &self.default_values);
         }
 
-        let is_array = self.arg.ty.is_array();
-
-        let min = if is_array {
-            self.min.unwrap_or(0)
-        } else {
-            self.min.unwrap_or(1)
-        };
-
-        let max = if is_array {
-            self.min.unwrap_or(usize::max_value())
-        } else {
-            self.min.unwrap_or(1)
-        };
-
-        assert!(min <= max, "invalid args `key` values");
-
-        if !is_array {
-            assert_eq!(
-                min, 1,
-                "only `vec` and `slice` allow multiple values: `{}`",
-                self.arg.ty.inner_type().to_token_stream().to_string()
-            );
-            assert_eq!(
-                max, 1,
-                "only `vec` and `slice` allow multiple values: `{}`",
-                self.arg.ty.inner_type().to_token_stream().to_string()
-            );
-        }
+        let (min, max) = self.arg_count();
 
         if !self.default_values.is_empty() {
             assert!(
@@ -114,7 +95,6 @@ impl ArgFromFn {
             quote! {}
         } else {
             let tokens = self.default_values.iter().map(|s| quote! { #s });
-
             quote! { .set_default_values(&[#(#tokens),*]) }
         };
 
@@ -123,16 +103,52 @@ impl ArgFromFn {
             #default_values
         }
     }
+
+    fn arg_count(&self) -> (usize, usize) {
+        let (min, max) = match (self.min, self.max) {
+            (Some(min), Some(max)) => (min, max),
+            (Some(min), None) => (min, usize::max_value()),
+            (None, Some(max)) => (0, max),
+            (None, None) => match self.arg.ty {
+                ArgType::Raw(_) => (1, 1),
+                ArgType::Option(_) => (0, 1),
+                ArgType::Vec(_) | ArgType::Slice(_) | ArgType::MutSlice(_) => {
+                    (0, usize::max_value())
+                }
+            },
+        };
+
+        assert!(
+            min <= max,
+            "invalid arguments range min cannot be greater than max"
+        );
+
+        match self.arg.ty {
+            ArgType::Raw(_) => {
+                if min != 1 || max != 1 {
+                    panic!("invalid number of arguments for `{}` expected 1", pat_type_to_string(&self.arg.pat_type));
+                }
+                (min, max)
+            }
+            ArgType::Option(_) => {
+                if min != 0 || max != 1{
+                    panic!("invalid number of arguments for `{}` expected 0 or 1", pat_type_to_string(&self.arg.pat_type));
+                }
+                (min, max)
+            }
+            ArgType::Vec(_) | ArgType::Slice(_) | ArgType::MutSlice(_) => (min, max),
+        }
+    }
 }
 
-impl ToTokens for ArgFromFn {
+impl ToTokens for ArgData {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append_all(self.expand().into_iter())
     }
 }
 
-fn new_arg_tokens_from_attr_data(attr: NameValueAttribute, pat_type: &PatType) -> ArgFromFn {
-    let mut args = ArgFromFn::new(pat_type);
+fn new_arg_tokens_from_attr_data(attr: NameValueAttribute, pat_type: &PatType) -> ArgData {
+    let mut args = ArgData::new(pat_type);
 
     for (key, value) in &attr {
         match key.as_str() {
@@ -187,9 +203,8 @@ fn assert_same_type_default_values(arg_name: &str, default_values: &[Lit]) {
         );
     }
 
-    let panic_different_types = |left: &Lit, right: &Lit| {
-        panic_different_types_with_name(arg_name, left, right)
-    };
+    let panic_different_types =
+        |left: &Lit, right: &Lit| panic_different_types_with_name(arg_name, left, right);
 
     assert!(default_values.len() > 0, "`default` is empty");
 
@@ -311,4 +326,14 @@ fn assert_arg_and_default_values_same_type(arg: &NamedArg, default_values: &[Lit
             lit_str
         )
     }
+}
+
+fn pat_type_to_string(pat_type: &PatType) -> String {
+    let arg_name = pat_type.pat.to_token_stream().to_string();
+    let type_name = pat_type.ty.to_token_stream().into_iter()
+        .map(|t| t.to_string())
+        .collect::<Vec<String>>()
+        .join("");
+
+    format!("{} : {}", arg_name, type_name)
 }

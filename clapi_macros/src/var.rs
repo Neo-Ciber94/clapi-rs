@@ -1,10 +1,11 @@
 use proc_macro2::TokenStream;
 use quote::*;
-use syn::export::ToTokens;
+use syn::export::{ToTokens, Formatter};
 use syn::{GenericArgument, Pat, PatType, Type, PathSegment, PathArguments};
 use syn::spanned::Spanned;
 use crate::utils::{to_stream2, to_str_literal_stream2};
 use crate::IteratorExt;
+use syn::export::fmt::Display;
 
 #[derive(Debug, Clone)]
 pub struct ArgLocalVar{
@@ -101,7 +102,7 @@ impl ArgLocalVar {
             }
             ArgType::Option(ty) => {
                 quote! {
-                    match args.values.len(){
+                    match args.values().len(){
                         0 => None,
                         _ => Some(args.convert_at::<#ty>(0).expect(#msg))
                     }
@@ -171,6 +172,12 @@ impl ArgType {
 
     pub fn is_array(&self) -> bool {
         self.is_vec() || self.is_slice() || self.is_mut_slice()
+    }
+}
+
+impl Display for ArgType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.inner_type().to_token_stream().to_string())
     }
 }
 

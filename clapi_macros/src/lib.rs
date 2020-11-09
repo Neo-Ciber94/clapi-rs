@@ -1,8 +1,8 @@
 #![feature(proc_macro_span)]
-//#![allow(dead_code)]
+#![allow(dead_code)]
 extern crate proc_macro;
 
-use crate::command::CommandFromFn;
+use crate::command::CommandData;
 pub(crate) use ext::*;
 use proc_macro::{TokenStream, Span};
 use syn::{AttributeArgs, ItemFn};
@@ -18,6 +18,10 @@ mod shared;
 
 /// Marks and converts a function as a `Command`.
 ///
+/// # Options:
+/// - `description`: description of the command.
+/// - `help`: help information about the command.
+///
 /// # Example:
 /// ``` ignore
 /// #[command(description="", help=""]
@@ -28,25 +32,20 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = syn::parse_macro_input!(attr as AttributeArgs);
     let func = syn::parse_macro_input!(item as ItemFn);
 
-    // let tokens = if cfg!(target_feature="proc_macro_span") {
-    //     let path = Span::call_site().source_file().path();
-    //     let src = std::fs::read_to_string(path).unwrap();
-    //     let file = syn::parse_file(&src).unwrap();
-    //     CommandFromFn::from_file(args, func, file).expand()
-    // } else {
-    //     CommandFromFn::from_fn(args, func).expand()
-    // };
-
     let path = Span::call_site().source_file().path();
     let src = std::fs::read_to_string(path).unwrap();
     let file = syn::parse_file(&src).unwrap();
-    let tokens = CommandFromFn::from_file(args, func, file).expand();
 
-    //println!("{}", tokens.to_string());
-    tokens.into()
+    CommandData::from_file(args, func, file)
+        .expand()
+        .into()
 }
 
 /// Marks a inner function as a subcommand.
+///
+/// # Options:
+/// - `description`: description of the command.
+/// - `help`: help information about the command.
 ///
 /// # Example:
 /// ```ignore
@@ -71,6 +70,13 @@ pub fn subcommand(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 /// Adds command-line option information to a function argument.
 ///
+/// # Options
+/// - `name` (required): name of the function argument.
+/// - `description`: description of the option.
+/// - `min`: min number of values the option takes.
+/// - `max`: max number of values the option takes.
+/// - `default`: default value(s) of the option.
+///
 /// # Example:
 /// ```ignore
 ///
@@ -80,10 +86,17 @@ pub fn subcommand(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
+    // This just act as a marker
     panic!("option should be placed after a `command` or `subcommand` attribute")
 }
 
 /// Marks a function argument as command-line arguments.
+///
+/// # Options
+/// - `name` (required): name of the function argument.
+/// - `min`: min number of values the option takes.
+/// - `max`: max number of values the option takes.
+/// - `default`: default value(s) of the option.
 ///
 /// # Example:
 /// ```ignore
@@ -94,5 +107,6 @@ pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn arg(_: TokenStream, _: TokenStream) -> TokenStream {
+    // This just act as a marker
     panic!("arg should be placed after a `command` or `subcommand` attribute")
 }
