@@ -183,8 +183,8 @@ impl AsMut<Command> for RootCommand {
     }
 }
 
-// todo: move to command_line.rs?
-fn current_filename() -> &'static str {
+#[doc(hidden)]
+pub fn current_filename() -> &'static str {
     static mut FILE_NAME: Option<String> = None;
 
     unsafe {
@@ -194,7 +194,8 @@ fn current_filename() -> &'static str {
     }
 }
 
-fn current_filename_internal(include_exe: bool) -> String {
+#[doc(hidden)]
+pub fn current_filename_internal(include_exe: bool) -> String {
     let path = current_exe().unwrap();
     let filename = path.file_name().unwrap();
 

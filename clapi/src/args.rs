@@ -429,7 +429,14 @@ where
 {
     match T::from_str(value) {
         Ok(n) => Ok(n),
-        Err(e) => Err(Error::new(ErrorKind::Unknown, e.to_string())),
+        Err(error) => {
+            use std::any::TypeId;
+
+            return Err(Error::new(
+                ErrorKind::Unknown,
+            format!("failed to parse `{}`\n{}", value, error))
+            );
+        },
     }
 }
 

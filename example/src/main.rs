@@ -9,9 +9,9 @@ use clapi::error::Result;
 use clapi::option::CommandOption;
 use clapi::root_command::RootCommand;
 
-#[subcommand(description="Prints a value to the console")]
-#[option(name="times", alias="t", default=1)]
-#[arg(name="values")]
+// #[subcommand(description="Prints a value to the console")]
+// #[option(name="times", alias="t", default=1)]
+// #[arg(name="values")]
 fn echo(times: usize, values: Vec<String>) {
     for _ in 0..times {
         for value in &values {
@@ -24,11 +24,11 @@ fn echo(times: usize, values: Vec<String>) {
 
 
 #[command]
-#[arg(name="arg")]
-fn main(number: u32, arg: Option<String>) {
-    println!("number: {}, arg: {:?}", number, arg);
+#[arg(name="number")]
+#[arg(name="name")]
+fn main(number: u32, name: Option<String>) {
+    println!("number: {}, arg: {:?}", number, name);
 }
-
 
 fn run_cmd() -> Result<()> {
     let root = RootCommand::new()

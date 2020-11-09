@@ -1,16 +1,16 @@
-use proc_macro2::TokenStream;
-use quote::*;
-use syn::{Attribute, AttributeArgs, FnArg, ItemFn, PatType, Stmt, ReturnType};
-use syn::export::ToTokens;
-use macro_attribute::NameValueAttribute;
 use crate::args::ArgData;
 use crate::option::OptionData;
 use crate::utils::to_str_literal_stream2;
 use crate::var::{ArgLocalVar, ArgType};
+use macro_attribute::NameValueAttribute;
+use proc_macro2::TokenStream;
+use quote::*;
+use syn::export::ToTokens;
+use syn::{Attribute, AttributeArgs, FnArg, ItemFn, PatType, ReturnType, Stmt};
 
+use crate::TypeExtensions;
 use command_file::new_command_from_file;
 use command_fn::new_command_from_fn;
-use crate::TypeExtensions;
 
 /// Tokens for:
 ///
@@ -291,7 +291,7 @@ struct NamedFnArg {
 fn is_result_type(ret: &ReturnType) -> bool {
     match ret {
         ReturnType::Default => false,
-        ReturnType::Type(_, ty) => ty.is_result()
+        ReturnType::Type(_, ty) => ty.is_result(),
     }
 }
 
@@ -313,19 +313,20 @@ pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {
 }
 
 mod command_fn {
-    use syn::{Attribute, FnArg, Item, ItemFn, Stmt};
     use syn::export::ToTokens;
+    use syn::{Attribute, FnArg, Item, ItemFn, Stmt};
 
     use clapi::utils::OptionExt;
     use macro_attribute::{literal_to_string, MacroAttribute, NameValueAttribute, Value};
 
     use crate::args::ArgData;
-    use crate::command::{CommandFnArg, CommandData, drop_command_attributes, NamedFnArg};
-    use crate::IteratorExt;
+    use crate::command::{drop_command_attributes, CommandData, CommandFnArg, NamedFnArg};
     use crate::option::OptionData;
+    use crate::utils::pat_type_to_string;
     use crate::var::{ArgLocalVar, LocalVarSource};
+    use crate::{IteratorExt, TypeExtensions};
 
-    pub(crate) fn new_command_from_fn(
+    pub fn new_command_from_fn(
         name_value_attr: NameValueAttribute,
         item_fn: ItemFn,
         is_child: bool,
@@ -389,41 +390,51 @@ mod command_fn {
         assert_attr_name_match_fn_arg(&item_fn, &named_fn_args, &attrs);
 
         let fn_args = get_fn_args(&attrs, &named_fn_args);
-        let mut arg_count = 0;
+        let arg_count = fn_args.iter().filter(|f| !f.is_option).count();
+        let mut arg_index = 0;
 
         // Pass function arguments in order
         for arg in &fn_args {
             if arg.is_option {
                 command.set_var(ArgLocalVar::new(arg.pat_type.clone(), LocalVarSource::Opts));
             } else {
+                if arg_count > 1 {
+                    let ty = arg.pat_type.ty.as_ref();
+                    assert!(
+                        !ty.is_slice() && !ty.is_vec(),
+                        "invalid argument type for: `{}`\
+                        \nwhen multiples `arg` are defined, arguments cannot be declared as `Vec` or `slice`",
+                        pat_type_to_string(&arg.pat_type)
+                    );
+                }
+
                 command.set_var(ArgLocalVar::new(
                     arg.pat_type.clone(),
-                    LocalVarSource::Args(arg_count),
+                    LocalVarSource::Args(arg_index),
                 ));
 
-                arg_count += 1;
+                arg_index += 1;
             }
         }
 
         // Add args
-        let arg_count = fn_args.iter().filter(|f| !f.is_option).count();
         if arg_count > 0 {
             if let Some(fn_arg) = fn_args.iter().filter(|f| !f.is_option).single() {
-                let command_args =
-                    ArgData::from_attribute_data(fn_arg.attr.clone().unwrap(), &fn_arg.pat_type);
-                command.set_args(command_args);
+                let arg = ArgData::from_attribute(fn_arg.attr.clone().unwrap(), &fn_arg.pat_type);
+                command.set_args(arg);
             } else {
-                unimplemented!("multiple args is not supported");
-                // let mut command_args = ArgAttribute::new(None);
-                // command_args.set_max(arg_count);
-                // command.set_args(command_args);
+                //unimplemented!("multiple args is not supported");
+                let mut args = ArgData::new();
+                args.set_min(arg_count);
+                args.set_max(arg_count);
+                command.set_args(args);
             }
         }
 
         // Add options
         for arg in fn_args.iter().filter(|n| n.is_option) {
             let mut option = OptionData::new(arg.arg_name.clone());
-            let mut args = ArgData::new(&arg.pat_type);
+            let mut args = ArgData::from_pat_type(&arg.pat_type);
 
             if let Some(att) = &arg.attr {
                 for (key, value) in att {
@@ -508,17 +519,16 @@ mod command_fn {
 
                         let mut inner_fn = item_fn.clone();
 
-                        let attr = if let Some(index) = inner_fn
-                            .attrs
-                            .iter()
-                            .position(|att| att.path.to_token_stream().to_string() == "subcommand")
-                        {
-                            MacroAttribute::new(inner_fn.attrs.swap_remove(index))
-                                .into_name_values()
-                                .unwrap()
-                        } else {
-                            unreachable!()
-                        };
+                        let attr =
+                            if let Some(index) = inner_fn.attrs.iter().position(|att| {
+                                att.path.to_token_stream().to_string() == "subcommand"
+                            }) {
+                                MacroAttribute::new(inner_fn.attrs.swap_remove(index))
+                                    .into_name_values()
+                                    .unwrap()
+                            } else {
+                                unreachable!()
+                            };
 
                         ret.push((attr, inner_fn))
                     }
@@ -601,18 +611,14 @@ mod command_fn {
 mod command_file {
     use std::convert::TryFrom;
 
-    use syn::{AttributeArgs, File, Item, ItemFn};
     use syn::export::ToTokens;
+    use syn::{AttributeArgs, File, Item, ItemFn};
 
     use macro_attribute::NameValueAttribute;
 
-    use crate::command::{CommandData, new_command_from_fn};
+    use crate::command::{new_command_from_fn, CommandData};
 
-    pub fn new_command_from_file(
-        args: AttributeArgs,
-        item_fn: ItemFn,
-        file: File,
-    ) -> CommandData {
+    pub fn new_command_from_file(args: AttributeArgs, item_fn: ItemFn, file: File) -> CommandData {
         assert_one_root_command(&item_fn.sig.ident.to_string(), &file);
 
         let attr = NameValueAttribute::from_attribute_args("command", args).unwrap();

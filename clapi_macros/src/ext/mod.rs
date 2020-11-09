@@ -87,6 +87,7 @@ macro_rules! is_primitive_type {
 ///
 /// This methods are `string` base comparison, so may fail if the type is an type alias.
 pub trait TypeExtensions {
+    fn as_type(&self) -> &syn::Type;
     fn path(&self) -> Option<String>;
 
     fn is_type(&self, ty: &str) -> bool {
@@ -98,7 +99,9 @@ pub trait TypeExtensions {
     }
 
     fn is_string(&self) -> bool {
-        self.is_type("String") || self.is_type("std::string::String")
+        self.is_type("String")
+            || self.is_type("std::string::String")
+            || self.is_type("alloc::string::String")
     }
 
     fn is_option(&self) -> bool {
@@ -114,6 +117,29 @@ pub trait TypeExtensions {
             path == "Result" || path == "std::result::Result" || path == "core::result::Result"
         } else {
             false
+        }
+    }
+
+    fn is_vec(&self) -> bool {
+        if let Some(path) = self.path() {
+            path == "Vec" || path == "std::vec::Vec" || path == "alloc::vec::Vec"
+        } else {
+            false
+        }
+    }
+
+    fn is_array(&self) -> bool {
+        matches!(self.as_type(), syn::Type::Array(_))
+    }
+
+    fn is_slice(&self) -> bool {
+        use syn::Type;
+        match self.as_type() {
+            Type::Slice(_) => true,
+            Type::Reference(type_ref) => {
+                type_ref.elem.is_slice()
+            }
+            _ => false
         }
     }
 
@@ -187,6 +213,10 @@ pub trait TypeExtensions {
 }
 
 impl TypeExtensions for syn::Type {
+    fn as_type(&self) -> &syn::Type {
+        &self
+    }
+
     fn path(&self) -> Option<String> {
         if let syn::Type::Path(type_path) = self {
             Some(
@@ -295,5 +325,18 @@ mod tests {
         assert!(to_type(quote! { Result<String, u32> }).is_result());
         assert!(to_type(quote! { std::result::Result<String, u32> }).is_result());
         assert!(to_type(quote! { core::result::Result<String, u32> }).is_result());
+    }
+
+    #[test]
+    fn is_vec_test(){
+        assert!(to_type(quote! { Vec<String> }).is_vec());
+        assert!(to_type(quote! { std::vec::Vec<u32> }).is_vec());
+    }
+
+    #[test]
+    fn is_slice_test(){
+        assert!(to_type(quote! { [u32] }).is_slice());
+        assert!(to_type(quote! { &[u32] }).is_slice());
+        assert!(to_type(quote! { &mut [u32] }).is_slice());
     }
 }

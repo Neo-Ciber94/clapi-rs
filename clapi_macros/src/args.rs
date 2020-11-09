@@ -1,4 +1,4 @@
-use crate::utils::to_stream2;
+use crate::utils::{to_stream2, pat_type_to_string};
 use crate::var::ArgType;
 use crate::{LitExtensions, TypeExtensions};
 use macro_attribute::{literal_to_string, NameValueAttribute, Value};
@@ -20,38 +20,30 @@ use syn::{Lit, PatType};
 pub struct ArgData {
     min: Option<usize>,
     max: Option<usize>,
-    arg: NamedArg,
+    arg: Option<NamedArg>,
     default_values: Vec<Lit>,
 }
 
-#[derive(Debug)]
-struct NamedArg {
-    name: String,
-    pat_type: PatType,
-    ty: ArgType,
-}
-
 impl ArgData {
-    pub fn new(pat_type: &PatType) -> Self {
-        let name = if let syn::Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
-            pat_ident.ident.to_string()
-        } else {
-            unreachable!()
-        };
-
+    pub fn new() -> Self {
         ArgData {
             min: None,
             max: None,
-            arg: NamedArg {
-                name,
-                pat_type: pat_type.clone(),
-                ty: ArgType::new(pat_type),
-            },
+            arg: None,
             default_values: vec![],
         }
     }
 
-    pub fn from_attribute_data(attr: NameValueAttribute, pat_type: &PatType) -> ArgData {
+    pub fn from_pat_type(pat_type: &PatType) -> Self {
+        ArgData {
+            min: None,
+            max: None,
+            arg: Some(NamedArg::new(pat_type)),
+            default_values: vec![],
+        }
+    }
+
+    pub fn from_attribute(attr: NameValueAttribute, pat_type: &PatType) -> ArgData {
         new_arg_tokens_from_attr_data(attr, pat_type)
     }
 
@@ -68,13 +60,17 @@ impl ArgData {
     }
 
     pub fn set_default_values(&mut self, default_values: Vec<Lit>) {
-        assert_same_type_default_values(&self.arg.name, default_values.as_slice());
+        if let Some(arg) = self.arg.as_ref() {
+            assert_same_type_default_values(&arg.name, default_values.as_slice());
+        }
         self.default_values = default_values;
     }
 
     pub fn expand(&self) -> TokenStream {
         if self.has_default_values() {
-            assert_arg_and_default_values_same_type(&self.arg, &self.default_values);
+            if let Some(arg) = self.arg.as_ref() {
+                assert_arg_and_default_values_same_type(arg, &self.default_values);
+            }
         }
 
         let (min, max) = self.arg_count();
@@ -83,8 +79,7 @@ impl ArgData {
             assert!(
                 (min..=max).contains(&self.default_values.len()),
                 "invalid default values count, expected from `{}` to `{}` values",
-                min,
-                max
+                min, max
             );
         }
 
@@ -98,21 +93,33 @@ impl ArgData {
             quote! { .set_default_values(&[#(#tokens),*]) }
         };
 
-        let name = &self.arg.name;
+        let name = self.arg.as_ref()
+            .map(|arg| arg.name.as_str())
+            .map(|name| quote! { .set_name(#name)})
+            .unwrap_or_else(|| quote! {});
 
         quote! {
             clapi::args::Arguments::new(clapi::arg_count::ArgCount::new(#min, #max))
-            .set_name(#name)
+            #name
             #default_values
         }
     }
 
     fn arg_count(&self) -> (usize, usize) {
+        let arg = if let Some(named_arg) = self.arg.as_ref() {
+          named_arg
+        } else {
+            let min = self.min.expect("`min` argument count is not defined");
+            let max = self.max.expect("`max` argument count is not defined");
+            assert!(min <= max, "invalid arguments range `min` cannot be greater than `max`");
+            return (min, max);
+        };
+
         let (min, max) = match (self.min, self.max) {
             (Some(min), Some(max)) => (min, max),
             (Some(min), None) => (min, usize::max_value()),
             (None, Some(max)) => (0, max),
-            (None, None) => match self.arg.ty {
+            (None, None) => match arg.ty {
                 ArgType::Raw(_) => (1, 1),
                 ArgType::Option(_) => (0, 1),
                 ArgType::Vec(_) | ArgType::Slice(_) | ArgType::MutSlice(_) => {
@@ -121,21 +128,18 @@ impl ArgData {
             },
         };
 
-        assert!(
-            min <= max,
-            "invalid arguments range min cannot be greater than max"
-        );
+        assert!(min <= max, "invalid arguments range `min` cannot be greater than `max`");
 
-        match self.arg.ty {
+        match arg.ty {
             ArgType::Raw(_) => {
                 if min != 1 || max != 1 {
-                    panic!("invalid number of arguments for `{}` expected 1", pat_type_to_string(&self.arg.pat_type));
+                    panic!("invalid number of arguments for `{}` expected 1", pat_type_to_string(&arg.pat_type));
                 }
                 (min, max)
             }
             ArgType::Option(_) => {
                 if min != 0 || max != 1{
-                    panic!("invalid number of arguments for `{}` expected 0 or 1", pat_type_to_string(&self.arg.pat_type));
+                    panic!("invalid number of arguments for `{}` expected 0 or 1", pat_type_to_string(&arg.pat_type));
                 }
                 (min, max)
             }
@@ -150,8 +154,31 @@ impl ToTokens for ArgData {
     }
 }
 
+#[derive(Debug)]
+struct NamedArg {
+    name: String,
+    pat_type: PatType,
+    ty: ArgType,
+}
+
+impl NamedArg {
+    pub fn new(pat_type: &PatType) -> Self {
+        let name = if let syn::Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
+            pat_ident.ident.to_string()
+        } else {
+            unreachable!()
+        };
+
+        NamedArg {
+            name,
+            pat_type: pat_type.clone(),
+            ty: ArgType::new(pat_type),
+        }
+    }
+}
+
 fn new_arg_tokens_from_attr_data(attr: NameValueAttribute, pat_type: &PatType) -> ArgData {
-    let mut args = ArgData::new(pat_type);
+    let mut args = ArgData::from_pat_type(pat_type);
 
     for (key, value) in &attr {
         match key.as_str() {
@@ -329,14 +356,4 @@ fn assert_arg_and_default_values_same_type(arg: &NamedArg, default_values: &[Lit
             lit_str
         )
     }
-}
-
-fn pat_type_to_string(pat_type: &PatType) -> String {
-    let arg_name = pat_type.pat.to_token_stream().to_string();
-    let type_name = pat_type.ty.to_token_stream().into_iter()
-        .map(|t| t.to_string())
-        .collect::<Vec<String>>()
-        .join("");
-
-    format!("{} : {}", arg_name, type_name)
 }

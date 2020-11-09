@@ -170,7 +170,7 @@ impl ArgType {
         matches!(self, ArgType::Option(_))
     }
 
-    pub fn is_array(&self) -> bool {
+    pub fn is_vec_or_slice(&self) -> bool {
         self.is_vec() || self.is_slice() || self.is_mut_slice()
     }
 }
