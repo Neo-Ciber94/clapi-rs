@@ -301,11 +301,15 @@ impl Arguments {
     /// - The value cannot be converted to type `T`.
     pub fn convert<T>(&self) -> Result<T>
     where
-        T: FromStr,
+        T: FromStr + 'static,
         <T as FromStr>::Err: Display,
     {
         if self.values.is_empty() {
             return Err(Error::from(ErrorKind::InvalidArgumentCount));
+        }
+
+        if self.values.len() != 1 {
+            return Err(Error::new(ErrorKind::InvalidArgumentCount, "multiple values defined but 1 was expected"));
         }
 
         if self.arity.takes_args() {
@@ -327,7 +331,7 @@ impl Arguments {
     /// - The value cannot be converted to type `T`.
     pub fn convert_at<T>(&self, index: usize) -> Result<T>
     where
-        T: FromStr,
+        T: FromStr + 'static,
         <T as FromStr>::Err: Display,
     {
         if self.values.is_empty() {
@@ -363,7 +367,7 @@ impl Arguments {
     /// - One of the values cannot be converted to type `T`.
     pub fn convert_all<T>(&self) -> Result<Vec<T>>
     where
-        T: FromStr,
+        T: FromStr + 'static,
         <T as FromStr>::Err: Display,
     {
         if self.values.is_empty() {
@@ -422,7 +426,7 @@ impl<'a> IntoIterator for &'a Arguments {
     }
 }
 
-fn try_parse_str<T>(value: &str) -> Result<T>
+fn try_parse_str<T: 'static>(value: &str) -> Result<T>
 where
     T: FromStr,
     <T as FromStr>::Err: Display,
@@ -662,13 +666,17 @@ mod tests {
     }
 
     #[test]
-    fn convert_test() {
+    fn convert_ok_test() {
         let mut args = Arguments::new(1..).set_name("numbers");
+        args.set_values(&["1"]).unwrap();
+        assert_eq!(args.convert::<u32>().ok(), Some(1));
+    }
 
+    #[test]
+    fn convert_err_test() {
+        let mut args = Arguments::new(1..).set_name("numbers");
         args.set_values(&["1", "2", "3"]).unwrap();
-
-        let value = args.convert::<u32>();
-        assert_eq!(1, value.unwrap());
+        assert!(args.convert::<u32>().is_err());
     }
 
     #[test]
@@ -685,7 +693,6 @@ mod tests {
     #[test]
     fn convert_all_test() {
         let mut args = Arguments::new(1..).set_name("numbers");
-
         args.set_values(&["1", "2", "3"]).unwrap();
 
         let values = args.convert_all::<u32>().unwrap();
@@ -693,12 +700,9 @@ mod tests {
     }
 
     #[test]
-    fn convert_error_test() {
+    fn convert_all_err_test() {
         let mut args = Arguments::new(1..);
-
         args.set_values(&["1", "bool", "3"]).unwrap();
-
-        let value = args.convert::<u32>();
-        assert_eq!(1, value.unwrap());
+        assert!(args.convert_all::<u32>().is_err());
     }
 }

@@ -64,7 +64,7 @@ impl ParseResult {
     /// - The value cannot be converted to type `T`.
     pub fn get_option_arg_as<T>(&self, name_or_alias: &str) -> Option<Result<T>>
     where
-        T: FromStr,
+        T: FromStr + 'static,
         <T as FromStr>::Err: Display,
     {
         self.get_option(name_or_alias).map(|o| o.arg_as())
@@ -79,7 +79,7 @@ impl ParseResult {
     /// - One of the values cannot be converted to type `T`.
     pub fn get_option_args_as<T>(&self, name_or_alias: &str) -> Option<Result<Vec<T>>>
     where
-        T: FromStr,
+        T: FromStr + 'static,
         <T as FromStr>::Err: Display,
     {
         self.get_option(name_or_alias).map(|o| o.args_as())

@@ -112,7 +112,7 @@ impl CommandOption {
     #[inline]
     pub fn arg_as<T>(&self) -> Result<T>
     where
-        T: FromStr,
+        T: FromStr + 'static,
         <T as FromStr>::Err: Display,
     {
         self.args.convert()
@@ -127,7 +127,7 @@ impl CommandOption {
     #[inline]
     pub fn args_as<T>(&self) -> Result<Vec<T>>
     where
-        T: FromStr,
+        T: FromStr + 'static,
         <T as FromStr>::Err: Display,
     {
         self.args.convert_all()
