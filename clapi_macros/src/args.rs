@@ -1,4 +1,4 @@
-use crate::utils::{to_stream2, pat_type_to_string};
+use crate::utils::pat_type_to_string;
 use crate::var::ArgType;
 use crate::{LitExtensions, TypeExtensions};
 use macro_attribute::{literal_to_string, NameValueAttribute, Value};
@@ -18,9 +18,10 @@ use syn::{Lit, PatType};
 /// ```
 #[derive(Debug)]
 pub struct ArgData {
+    name: Option<String>,
     min: Option<usize>,
     max: Option<usize>,
-    arg: Option<NamedArg>,
+    fn_arg: Option<NamedFnArg>,
     default_values: Vec<Lit>,
 }
 
@@ -29,16 +30,21 @@ impl ArgData {
         ArgData {
             min: None,
             max: None,
-            arg: None,
+            fn_arg: None,
+            name: None,
             default_values: vec![],
         }
     }
 
     pub fn from_pat_type(pat_type: &PatType) -> Self {
+        let fn_arg = NamedFnArg::new(pat_type);
+        let name = fn_arg.name.clone(); // use the same var name
+
         ArgData {
             min: None,
             max: None,
-            arg: Some(NamedArg::new(pat_type)),
+            fn_arg: Some(fn_arg),
+            name: Some(name),
             default_values: vec![],
         }
     }
@@ -51,6 +57,10 @@ impl ArgData {
         !self.default_values.is_empty()
     }
 
+    pub fn set_name(&mut self, name: Option<String>) {
+        self.name = name;
+    }
+
     pub fn set_min(&mut self, min: usize) {
         self.min = Some(min);
     }
@@ -60,7 +70,7 @@ impl ArgData {
     }
 
     pub fn set_default_values(&mut self, default_values: Vec<Lit>) {
-        if let Some(arg) = self.arg.as_ref() {
+        if let Some(arg) = self.fn_arg.as_ref() {
             assert_same_type_default_values(&arg.name, default_values.as_slice());
         }
         self.default_values = default_values;
@@ -68,7 +78,7 @@ impl ArgData {
 
     pub fn expand(&self) -> TokenStream {
         if self.has_default_values() {
-            if let Some(arg) = self.arg.as_ref() {
+            if let Some(arg) = self.fn_arg.as_ref() {
                 assert_arg_and_default_values_same_type(arg, &self.default_values);
             }
         }
@@ -83,8 +93,8 @@ impl ArgData {
             );
         }
 
-        let min = to_stream2(min).unwrap();
-        let max = to_stream2(max).unwrap();
+        let min = quote!{ #min };
+        let max = quote!{ #max };
 
         let default_values = if self.default_values.is_empty() {
             quote! {}
@@ -93,10 +103,9 @@ impl ArgData {
             quote! { .set_default_values(&[#(#tokens),*]) }
         };
 
-        let name = self.arg.as_ref()
-            .map(|arg| arg.name.as_str())
-            .map(|name| quote! { .set_name(#name)})
-            .unwrap_or_else(|| quote! {});
+        let name = self.name.as_ref()
+            .map(|s| quote!{ .set_name(#s)} )
+            .unwrap_or_else(|| quote!{ });
 
         quote! {
             clapi::args::Arguments::new(clapi::arg_count::ArgCount::new(#min, #max))
@@ -106,7 +115,7 @@ impl ArgData {
     }
 
     fn arg_count(&self) -> (usize, usize) {
-        let arg = if let Some(named_arg) = self.arg.as_ref() {
+        let arg = if let Some(named_arg) = self.fn_arg.as_ref() {
           named_arg
         } else {
             let min = self.min.expect("`min` argument count is not defined");
@@ -155,13 +164,13 @@ impl ToTokens for ArgData {
 }
 
 #[derive(Debug)]
-struct NamedArg {
+struct NamedFnArg {
     name: String,
     pat_type: PatType,
     ty: ArgType,
 }
 
-impl NamedArg {
+impl NamedFnArg {
     pub fn new(pat_type: &PatType) -> Self {
         let name = if let syn::Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
             pat_ident.ident.to_string()
@@ -169,7 +178,7 @@ impl NamedArg {
             unreachable!()
         };
 
-        NamedArg {
+        NamedFnArg {
             name,
             pat_type: pat_type.clone(),
             ty: ArgType::new(pat_type),
@@ -300,7 +309,7 @@ fn assert_same_type_default_values(arg_name: &str, default_values: &[Lit]) {
     }
 }
 
-fn assert_arg_and_default_values_same_type(arg: &NamedArg, default_values: &[Lit]) {
+fn assert_arg_and_default_values_same_type(arg: &NamedFnArg, default_values: &[Lit]) {
     let ty = arg.ty.inner_type();
 
     if cfg!(debug_assertions) {

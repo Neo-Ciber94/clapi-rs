@@ -9,9 +9,9 @@ use clapi::error::Result;
 use clapi::option::CommandOption;
 use clapi::root_command::RootCommand;
 
-// #[subcommand(description="Prints a value to the console")]
-// #[option(name="times", alias="t", default=1)]
-// #[arg(name="values")]
+#[subcommand(description="Prints a value to the console")]
+#[option(name="times", alias="t", default=1)]
+#[arg(name="values")]
 fn echo(times: usize, values: Vec<String>) {
     for _ in 0..times {
         for value in &values {
@@ -22,12 +22,15 @@ fn echo(times: usize, values: Vec<String>) {
     }
 }
 
+//type Vec<T> = std::collections::HashSet<T>;
 
 #[command]
-#[arg(name="number")]
-#[arg(name="name")]
-fn main(number: u32, name: Option<String>) {
-    println!("number: {}, arg: {:?}", number, name);
+#[option(name="repeat", alias="r", default=1)]
+#[arg(name="numbers")]
+fn main(repeat: usize, numbers: Vec<i32>){
+    for _ in 0..repeat {
+        println!("numbers: {:?}", numbers);
+    }
 }
 
 fn run_cmd() -> Result<()> {

@@ -8,15 +8,14 @@ use proc_macro::{TokenStream, Span};
 use syn::{AttributeArgs, ItemFn};
 use syn::export::ToTokens;
 
+#[macro_use]
+mod utils;
 mod args;
 mod command;
 mod ext;
 mod option;
-mod utils;
 mod var;
 mod shared;
-
-static mut COMMAND_IS_DEFINED : bool = false;
 
 /// Marks and converts a function as a `Command`.
 ///
@@ -37,11 +36,6 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
     let path = Span::call_site().source_file().path();
     let src = std::fs::read_to_string(path).unwrap();
     let file = syn::parse_file(&src).unwrap();
-
-    unsafe {
-        //todo!("Use to check duplicated `command` attributes");
-        COMMAND_IS_DEFINED = true;
-    }
 
     CommandData::from_file(args, func, file)
         .expand()
@@ -69,29 +63,6 @@ pub fn subcommand(attr: TokenStream, item: TokenStream) -> TokenStream {
     let func = syn::parse_macro_input!(item as ItemFn);
 
     shared::get_subcommand_registry().push(shared::CommandRawData::new(raw_attr_args, raw_item_fn));
-
-    unsafe {
-        //todo!("Move to other function");
-        let path = Span::call_site().source_file().path();
-        if COMMAND_IS_DEFINED == false {
-            let src = std::fs::read_to_string(path.clone()).unwrap();
-            let file = syn::parse_file(&src).unwrap();
-            COMMAND_IS_DEFINED = file.items.iter()
-                .any(|item| {
-                    match item {
-                        syn::Item::Fn(item_fn) => {
-                          item_fn.attrs.iter().any(|att|{
-                              att.path.to_token_stream().to_string() == "command"
-                          })
-                        },
-                        _ => false
-                    }
-                })
-        }
-
-        assert!(COMMAND_IS_DEFINED, "cannot find `command` attribute on `{}`", path.display())
-    }
-
     command::drop_command_attributes(func)
         .to_token_stream()
         .into()

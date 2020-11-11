@@ -1,6 +1,5 @@
 use crate::args::ArgData;
 use crate::option::OptionData;
-use crate::utils::to_str_literal_stream2;
 use crate::var::{ArgLocalVar, ArgType};
 use macro_attribute::NameValueAttribute;
 use proc_macro2::TokenStream;
@@ -139,7 +138,7 @@ impl CommandData {
         let description = self
             .description
             .as_ref()
-            .map(|s| to_str_literal_stream2(s).unwrap())
+            .map(|s| quote!{ #s })
             .map(|tokens| quote! { .set_description(#tokens)})
             .unwrap_or_else(|| quote! {});
 
@@ -147,7 +146,7 @@ impl CommandData {
         let help = self
             .help
             .as_ref()
-            .map(|s| to_str_literal_stream2(s).unwrap())
+            .map(|s| quote!{ #s })
             .map(|tokens| quote! { .set_help(#tokens)})
             .unwrap_or_else(|| quote! {});
 
@@ -156,8 +155,8 @@ impl CommandData {
 
         // Command or RootCommand `new`
         let mut command = if self.is_child {
-            let name_str = to_str_literal_stream2(&self.name).unwrap();
-            quote! { clapi::command::Command::new(#name_str) }
+            let command_name = quote_expr!(self.name);
+            quote! { clapi::command::Command::new(#command_name) }
         } else {
             quote! { clapi::root_command::RootCommand::new() }
         };
@@ -181,8 +180,11 @@ impl CommandData {
             let ret = &self.item_fn.as_ref().unwrap().sig.output;
             let attrs = &self.item_fn.as_ref().unwrap().attrs;
             let outer = self.outer_body();
+            let error_handling = match ret {
+                ReturnType::Type(_, ty) if ty.is_result() => quote! { },
+                _ => quote! { .expect("an error occurred"); }
+            };
 
-            //let ret = &self.item_fn.as_ref().unwrap().sig.output;
             quote! {
                 #(#attrs)*
                 fn #name() #ret {
@@ -193,13 +195,19 @@ impl CommandData {
                         .use_default_help()
                         .use_default_suggestions()
                         .run()
-                        .expect("an error occurred");
+                        #error_handling
                 }
             }
         }
     }
 
     fn get_body(&self, vars: &[TokenStream]) -> TokenStream {
+        let ret = &self.item_fn.as_ref().unwrap().sig.output;
+        let error_handling = match ret {
+            ReturnType::Type(_, ty) if ty.is_result() => quote!{},
+            _ => quote! { Ok(()) }
+        };
+
         if self.is_child {
             let fn_name = self.name.parse::<TokenStream>().unwrap();
             let inputs = self.vars.iter().map(|var| {
@@ -216,7 +224,7 @@ impl CommandData {
             quote! {
                 #(#vars)*
                 #fn_name(#(#inputs,)*);
-                Ok(())
+                #error_handling
             }
         } else {
             let statements = self.inner_body();
@@ -224,7 +232,7 @@ impl CommandData {
             quote! {
                 #(#vars)*
                 #(#statements)*
-                Ok(())
+                #error_handling
             }
         }
     }
@@ -286,13 +294,6 @@ struct CommandFnArg {
 struct NamedFnArg {
     name: String,
     fn_arg: FnArg,
-}
-
-fn is_result_type(ret: &ReturnType) -> bool {
-    match ret {
-        ReturnType::Default => false,
-        ReturnType::Type(_, ty) => ty.is_result(),
-    }
 }
 
 pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {
@@ -435,6 +436,9 @@ mod command_fn {
         for arg in fn_args.iter().filter(|n| n.is_option) {
             let mut option = OptionData::new(arg.arg_name.clone());
             let mut args = ArgData::from_pat_type(&arg.pat_type);
+
+            // Arguments that belong to options don't will be named
+            args.set_name(None);
 
             if let Some(att) = &arg.attr {
                 for (key, value) in att {
@@ -581,12 +585,13 @@ mod command_fn {
             if let Some(Value::Literal(lit)) = name_value.get("name") {
                 let name = literal_to_string(lit);
                 let contains_name = fn_args.iter().any(|arg| arg.name == name);
+
                 assert!(
                     contains_name,
-                    "cannot find function argument named `{}` in function `{}`",
-                    name,
-                    item_fn.sig.ident.to_string()
+                    "cannot find function argument named `{}` in `{}` function",
+                    name, item_fn.sig.ident.to_string()
                 )
+
             } else {
                 panic!("expected string literal for `name`")
             }
@@ -612,18 +617,32 @@ mod command_file {
     use std::convert::TryFrom;
 
     use syn::export::ToTokens;
-    use syn::{AttributeArgs, File, Item, ItemFn};
+    use syn::{AttributeArgs, File, Item, ItemFn, ItemMod};
 
     use macro_attribute::NameValueAttribute;
 
     use crate::command::{new_command_from_fn, CommandData};
+    use crate::FileExt;
 
     pub fn new_command_from_file(args: AttributeArgs, item_fn: ItemFn, file: File) -> CommandData {
         assert_one_root_command(&item_fn.sig.ident.to_string(), &file);
 
         let attr = NameValueAttribute::from_attribute_args("command", args).unwrap();
-        let mut command = new_command_from_fn(attr, item_fn, false, true);
-        let mut subcommands = get_subcommands_from_file(&file);
+        let mut command = new_command_from_fn(attr, item_fn.clone(), false, true);
+
+        let fn_module = file.find_fn_module(&item_fn);
+        let mut subcommands = match fn_module {
+            Some(item_mod) => get_subcommands_from_module(&item_mod),
+            None => {
+                file.get_fns().iter().filter_map(|item_fn| {
+                    if let Some(attr) = get_subcommand_attr(item_fn) {
+                        Some((attr, item_fn.clone()))
+                    } else {
+                        None
+                    }
+                }).collect()
+            }
+        };
 
         // Push all the registered commands
         subcommands.extend(get_registered_subcommands());
@@ -638,7 +657,6 @@ mod command_file {
 
     fn get_registered_subcommands() -> Vec<(NameValueAttribute, ItemFn)> {
         let mut ret = Vec::new();
-
         for data in crate::shared::get_subcommand_registry().iter() {
             let args = data.parse_args().expect("invalid attribute");
             let item_fn = data
@@ -650,18 +668,24 @@ mod command_file {
         ret
     }
 
-    fn get_subcommands_from_file(file: &File) -> Vec<(NameValueAttribute, ItemFn)> {
+    fn get_subcommand_attr(item_fn: &ItemFn) -> Option<NameValueAttribute> {
+        if let Some(att) = item_fn.attrs
+            .iter()
+            .find(|a| a.path.to_token_stream().to_string() == "subcommand") {
+            Some(NameValueAttribute::try_from(att.clone()).unwrap())
+        } else {
+            None
+        }
+    }
+
+    fn get_subcommands_from_module(module: &ItemMod) -> Vec<(NameValueAttribute, ItemFn)> {
         let mut ret = Vec::new();
 
-        for item in &file.items {
-            if let Item::Fn(item_fn) = item {
-                if let Some(att) = item_fn
-                    .attrs
-                    .iter()
-                    .find(|a| a.path.to_token_stream().to_string() == "subcommand")
-                {
-                    let attr = NameValueAttribute::try_from(att.clone()).unwrap();
-                    ret.push((attr, item_fn.clone()))
+        if let Some((_, content)) = module.content.as_ref() {
+            for item in content {
+                if let Item::Fn(item_fn) = item {
+                    let attr = get_subcommand_attr(item_fn).unwrap();
+                    ret.push((attr, item_fn.clone()));
                 }
             }
         }

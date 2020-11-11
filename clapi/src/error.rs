@@ -95,7 +95,13 @@ impl Display for Error {
         match &self.inner {
             Inner::Simple(kind) => Display::fmt(kind, f),
             Inner::Parsed(error) => Display::fmt(&error.kind, f),
-            Inner::Custom(custom) => write!(f, "{}. {}", custom.kind, custom.error),
+            Inner::Custom(custom) => {
+                if matches!(custom.kind, ErrorKind::Unknown) {
+                    write!(f, "{}", custom.error)
+                } else {
+                    write!(f, "{}. {}", custom.kind, custom.error)
+                }
+            },
         }
     }
 }

@@ -434,11 +434,10 @@ where
     match T::from_str(value) {
         Ok(n) => Ok(n),
         Err(error) => {
-            use std::any::TypeId;
-
+            let type_name = std::any::type_name::<T>();
             return Err(Error::new(
                 ErrorKind::Unknown,
-            format!("failed to parse `{}`\n{}", value, error))
+            format!("failed to parse `{:?}` to `{}`\n{}", value, type_name, error))
             );
         },
     }

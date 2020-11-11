@@ -1,7 +1,6 @@
 use crate::args::ArgData;
 use proc_macro2::TokenStream;
 use quote::*;
-use crate::utils::to_str_literal_stream2;
 
 /// Tokens for:
 ///
@@ -48,16 +47,14 @@ impl OptionData {
     pub fn expand(&self) -> TokenStream {
         // CommandOption::set_alias
         let alias = if let Some(s) = &self.alias{
-            let tokens = to_str_literal_stream2(s).unwrap();
-            quote!{ .set_alias(#tokens) }
+            quote!{ .set_alias(#s) }
         } else {
             quote!{}
         };
 
         // CommandOption::set_description
         let description = if let Some(s) = &self.description{
-            let tokens = to_str_literal_stream2(s).unwrap();
-            quote!{ .set_description(#tokens) }
+            quote!{ .set_description(#s) }
         } else {
             quote!{}
         };
@@ -78,7 +75,7 @@ impl OptionData {
             quote!{}
         };
 
-        let name = to_str_literal_stream2(&self.name).unwrap();
+        let name = quote_expr!(self.name);
 
         quote!{
             clapi::option::CommandOption::new(#name)

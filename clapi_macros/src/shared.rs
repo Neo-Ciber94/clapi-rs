@@ -26,9 +26,9 @@ impl CommandRawData {
     }
 }
 
-static mut SUBCOMMANDS : Option<RefCell<Vec<CommandRawData>>> = None;
-
 pub fn get_subcommand_registry() -> RefMut<'static, Vec<CommandRawData>> {
+    static mut SUBCOMMANDS : Option<RefCell<Vec<CommandRawData>>> = None;
+
     let subcommands = unsafe {
         SUBCOMMANDS.get_or_insert_with(|| {
             RefCell::new(Vec::new())

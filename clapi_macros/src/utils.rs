@@ -1,16 +1,12 @@
-use std::fmt::Display;
-use std::str::FromStr;
-use proc_macro2::{TokenStream, LexError};
 use syn::PatType;
 use syn::export::ToTokens;
 
-pub fn to_stream2<S: Display>(s: S) -> Result<TokenStream, LexError> {
-    TokenStream::from_str(&s.to_string())
-}
-
-pub fn to_str_literal_stream2<S: Display>(s: S) -> Result<TokenStream, LexError> {
-    let value = format!("\"{}\"", s.to_string());
-    to_stream2(value)
+/// Quote the result of an expression
+macro_rules! quote_expr {
+    ($value:expr) => {{
+        let val = &$value;
+        quote::quote!(#val)
+    }};
 }
 
 pub fn pat_type_to_string(pat_type: &PatType) -> String {
