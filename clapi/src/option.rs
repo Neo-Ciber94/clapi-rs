@@ -184,6 +184,18 @@ impl Options {
             .find(|o| o.name == name_or_alias || o.aliases.contains(name_or_alias))
     }
 
+    /// Returns the `CommandOption` with the given name or `None` if not found.
+    pub fn get_by_name(&self, name: &str) -> Option<&CommandOption> {
+        self.inner.iter()
+            .find(|opt| opt.name() == name)
+    }
+
+    /// Returns the `CommandOption` with the given alias or `None` if not found.
+    pub fn get_by_alias(&self, alias: &str) -> Option<&CommandOption> {
+        self.inner.iter()
+            .find(|opt| opt.has_alias(alias))
+    }
+
     /// Returns the `Arguments` for the option with the given name or alias
     /// or `None` if the option is not found.
     pub fn get_args(&self, name_or_alias: &str) -> Option<&Arguments> {

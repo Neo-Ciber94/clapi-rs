@@ -1,10 +1,11 @@
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, Result};
-use crate::option::Options;
+use crate::option::{Options, CommandOption};
 use crate::parse_result::ParseResult;
 use crate::tokenizer::{DefaultTokenizer, Token, Tokenizer};
 use crate::utils::Then;
 use std::borrow::Borrow;
+use crate::command::Command;
 
 /// A trait for parse command arguments.
 pub trait Parser<Args> {
@@ -44,8 +45,8 @@ where
         }
 
         // Gets the commands options
-        while let Some(Token::Opt(s)) = iterator.peek() {
-            if let Some(mut option) = command.options().get(s.as_str()).cloned() {
+        while let Some(Token::Opt(prefix, s)) = iterator.peek() {
+            if let Some(mut option) = get_option_prefixed(context, command, prefix, s).cloned() {
                 // Consumes token
                 iterator.next();
 
@@ -146,6 +147,18 @@ where
 
         Ok(ParseResult::new(result_command))
     }
+}
+
+fn get_option_prefixed<'a>(context: &'a Context, command: &'a Command, prefix: &'a str, option: &'a str) -> Option<&'a CommandOption>{
+    if context.is_name_prefix(prefix) {
+        return command.options().get_by_name(option);
+    }
+
+    if context.is_alias_prefix(prefix) {
+        return command.options().get_by_alias(option);
+    }
+
+    None
 }
 
 #[cfg(test)]
@@ -274,6 +287,10 @@ mod tests {
         assert!(parse(" ").is_ok());
         assert!(parse("").is_ok());
         assert!(parse("--").is_ok());
+        assert!(parse("--version").is_ok());
+        assert!(parse("--author").is_ok());
+        assert!(parse("-v").is_ok());
+        assert!(parse("-a").is_ok());
     }
 
     #[test]
@@ -282,5 +299,9 @@ mod tests {
         assert!(parse("create --path=hello.txt").is_err());
         assert!(parse("any --numbers").is_err());
         assert!(parse("any 5").is_err());
+        assert!(parse("-version").is_err());
+        assert!(parse("-author").is_err());
+        assert!(parse("--v").is_err());
+        assert!(parse("--a").is_err());
     }
 }

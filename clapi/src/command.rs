@@ -162,19 +162,18 @@ impl Command {
     }
 
     /// Adds a new child `Command`.
-    pub fn set_command(mut self, mut command: Command) -> Self {
-        command.parent = Some(Symbol::Command(self.name.clone()));
-        self.children.insert(command);
+    pub fn set_command(mut self, command: Command) -> Self {
+        self.add_command(command);
         self
     }
 
     #[inline]
     pub(crate) fn add_command(&mut self, mut command: Command) {
+        // todo: panic if duplicated command
         command.parent = Some(Symbol::Command(self.name.clone()));
         self.children.insert(command);
     }
 
-    #[inline]
     pub(crate) fn full_name(&self) -> String {
         if let Some(parent) = &self.parent {
             format!("{} {}", parent.name(), self.name)

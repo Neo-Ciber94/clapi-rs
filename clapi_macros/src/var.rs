@@ -3,7 +3,7 @@ use quote::*;
 use syn::export::{ToTokens, Formatter};
 use syn::{GenericArgument, Pat, PatType, Type, PathSegment, PathArguments};
 use syn::spanned::Spanned;
-use crate::IteratorExt;
+use crate::{IteratorExt, TypeExtensions};
 use syn::export::fmt::Display;
 
 #[derive(Debug, Clone)]
@@ -28,31 +28,26 @@ impl ArgLocalVar {
     }
 
     pub fn expand(&self) -> TokenStream {
+        let var_name = self.name.parse::<TokenStream>().unwrap();
         let is_mut = if self.is_mut { quote! { mut }} else { quote! {} };
         let source = match self.source {
             LocalVarSource::Args(_) => self.get_args_source(),
             LocalVarSource::Opts => self.get_opts_source(),
         };
 
-        let var_name = self.name.parse::<TokenStream>().unwrap();
-
         match self.ty {
-            ArgType::Slice(_) => {
+            ArgType::Slice(_) | ArgType::MutSlice(_) => {
                 let concat = format!("tmp_{}", var_name);
                 let temp = syn::Ident::new(&concat, var_name.span());
+                let as_slice = match &self.ty {
+                    ArgType::Slice(_) => quote! { .as_slice() },
+                    ArgType::MutSlice(_) => quote! { .as_mut_slice() },
+                    _ => unreachable!()
+                };
 
                 quote! {
                     let #is_mut #temp = #source ;
-                    let #is_mut #var_name = #temp.as_slice() ;
-                }
-            }
-            ArgType::MutSlice(_) => {
-                let concat = format!("tmp_{}", var_name);
-                let temp = syn::Ident::new(&concat, var_name.span());
-
-                quote! {
-                    let #is_mut #temp = #source ;
-                    let #is_mut #var_name = #temp.as_mut_slice() ;
+                    let #is_mut #var_name = #temp #as_slice ;
                 }
             },
             _ => {
@@ -69,7 +64,11 @@ impl ArgLocalVar {
 
         match &self.ty {
             ArgType::Raw(ty) => {
-                quote! { opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0).expect(#msg) }
+                if ty.is_bool() {
+                    quote! { opts.contains(#arg_name) }
+                } else {
+                    quote! { opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0).expect(#msg) }
+                }
             }
             ArgType::Vec(ty) | ArgType::Slice(ty) | ArgType::MutSlice(ty) => {
                 quote! { opts.get_args(#arg_name).unwrap().convert_all::<#ty>().expect(#msg) }
@@ -145,7 +144,7 @@ impl ArgType {
             ArgType::Vec(ty) => ty.as_ref(),
             ArgType::Slice(ty) => ty.as_ref(),
             ArgType::MutSlice(ty) => ty.as_ref(),
-            ArgType::Option(ty) => ty.as_ref()
+            ArgType::Option(ty) => ty.as_ref(),
         }
     }
 

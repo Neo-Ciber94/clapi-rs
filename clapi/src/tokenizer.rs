@@ -1,5 +1,6 @@
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, Result};
+use crate::utils::Then;
 use std::borrow::Borrow;
 
 /// Represents a command-line token.
@@ -8,7 +9,7 @@ pub enum Token {
     // A command
     Cmd(String),
     // An option
-    Opt(String),
+    Opt(String, String),
     // An argument
     Arg(String),
     // End of options
@@ -29,7 +30,7 @@ impl Token {
     /// Returns `true` if the token is an option.
     pub fn is_option(&self) -> bool {
         match self {
-            Token::Opt(_) => true,
+            Token::Opt(_, _) => true,
             _ => false,
         }
     }
@@ -54,7 +55,7 @@ impl Token {
     pub fn into_string(self) -> String {
         match self {
             Token::Cmd(s) => s,
-            Token::Opt(s) => s,
+            Token::Opt(_, s) => s,
             Token::Arg(s) => s,
             Token::EOO => String::from(Token::END_OF_OPTS),
         }
@@ -121,8 +122,13 @@ where
             }
 
             if context.is_option_prefixed(value) {
-                let (option, args) = try_split_option_and_args(context, value)?;
-                tokens.push(Token::Opt(option.clone()));
+                let OptionAndArgs {
+                    prefix,
+                    option,
+                    args,
+                } = try_split_option_and_args(context, value)?;
+
+                tokens.push(Token::Opt(prefix, option.clone()));
 
                 // Moves to the next value
                 iterator.next();
@@ -163,10 +169,13 @@ where
     }
 }
 
-fn try_split_option_and_args(
-    context: &Context,
-    value: &str,
-) -> Result<(String, Option<Vec<String>>)> {
+struct OptionAndArgs {
+    prefix: String,
+    option: String,
+    args: Option<Vec<String>>,
+}
+
+fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAndArgs> {
     // Check if the value contains a delimiter
     if let Some(delimiter) = context
         .arg_delimiters()
@@ -181,11 +190,15 @@ fn try_split_option_and_args(
         return if option_and_args.len() != 2 {
             Err(Error::from(ErrorKind::InvalidExpression))
         } else {
-            let option = context
-                .trim_prefix(&option_and_args[0])
-                .trim_matches('"')
-                .trim()
-                .to_string();
+            let (prefix, option) =
+                context
+                    .trim_and_get_prefix(&option_and_args[0])
+                    .then_apply(|(p, o)| {
+                        (
+                            p.unwrap().trim().to_string(),
+                            o.trim_matches('"').trim().to_string(),
+                        )
+                    });
 
             let args = option_and_args[1]
                 .split(",")
@@ -198,20 +211,29 @@ fn try_split_option_and_args(
                 return Err(Error::new(ErrorKind::InvalidExpression, "option is empty"));
             }
 
-            Ok((option, Some(args)))
+            Ok(OptionAndArgs {
+                prefix,
+                option,
+                args: Some(args),
+            })
         };
     } else {
-        let option = context
-            .trim_prefix(value)
-            .trim_matches('"')
-            .trim()
-            .to_string();
+        let (prefix, option) = context.trim_and_get_prefix(value).then_apply(|(p, o)| {
+            (
+                p.unwrap().trim().to_string(),
+                o.trim_matches('"').trim().to_string(),
+            )
+        });
 
         if option.is_empty() {
             return Err(Error::new(ErrorKind::InvalidExpression, "option is empty"));
         }
 
-        Ok((option, None))
+        Ok(OptionAndArgs {
+            prefix,
+            option,
+            args: None,
+        })
     }
 }
 
@@ -255,13 +277,13 @@ mod tests {
     #[test]
     fn tokenize_test1() {
         let tokens = tokenize("--version").unwrap();
-        assert_eq!(tokens[0], Token::Opt("version".to_owned()));
+        assert_eq!(tokens[0], Token::Opt("--".to_owned(), "version".to_owned()));
     }
 
     #[test]
     fn tokenize_test2() {
         let tokens = tokenize("-a").unwrap();
-        assert_eq!(tokens[0], Token::Opt("a".to_owned()));
+        assert_eq!(tokens[0], Token::Opt("-".to_owned(),"a".to_owned()));
     }
 
     #[test]
@@ -284,7 +306,7 @@ mod tests {
     fn tokenize_test5() {
         let tokens = tokenize("pick --color red one two").unwrap();
         assert_eq!(tokens[0], Token::Cmd("pick".to_owned()));
-        assert_eq!(tokens[1], Token::Opt("color".to_owned()));
+        assert_eq!(tokens[1], Token::Opt("--".to_owned(), "color".to_owned()));
         assert_eq!(tokens[2], Token::Arg("red".to_owned()));
         assert_eq!(tokens[3], Token::Arg("one".to_owned()));
         assert_eq!(tokens[4], Token::Arg("two".to_owned()));
@@ -294,7 +316,7 @@ mod tests {
     fn tokenize_test6() {
         let tokens = tokenize("pick --color=red one two").unwrap();
         assert_eq!(tokens[0], Token::Cmd("pick".to_owned()));
-        assert_eq!(tokens[1], Token::Opt("color".to_owned()));
+        assert_eq!(tokens[1], Token::Opt("--".to_owned(), "color".to_owned()));
         assert_eq!(tokens[2], Token::Arg("red".to_owned()));
         assert_eq!(tokens[3], Token::Arg("one".to_owned()));
         assert_eq!(tokens[4], Token::Arg("two".to_owned()));
@@ -304,7 +326,7 @@ mod tests {
     fn tokenize_test7() {
         let tokens = tokenize("pick --color:red one two").unwrap();
         assert_eq!(tokens[0], Token::Cmd("pick".to_owned()));
-        assert_eq!(tokens[1], Token::Opt("color".to_owned()));
+        assert_eq!(tokens[1], Token::Opt("--".to_owned(), "color".to_owned()));
         assert_eq!(tokens[2], Token::Arg("red".to_owned()));
         assert_eq!(tokens[3], Token::Arg("one".to_owned()));
         assert_eq!(tokens[4], Token::Arg("two".to_owned()));
@@ -314,7 +336,7 @@ mod tests {
     fn tokenize_test8() {
         let tokens = tokenize("pick --color:red one two").unwrap();
         assert_eq!(tokens[0], Token::Cmd("pick".to_owned()));
-        assert_eq!(tokens[1], Token::Opt("color".to_owned()));
+        assert_eq!(tokens[1], Token::Opt("--".to_owned(), "color".to_owned()));
         assert_eq!(tokens[2], Token::Arg("red".to_owned()));
         assert_eq!(tokens[3], Token::Arg("one".to_owned()));
         assert_eq!(tokens[4], Token::Arg("two".to_owned()));
@@ -324,7 +346,7 @@ mod tests {
     fn tokenize_test9() {
         let tokens = tokenize("any --numbers=3,1,2").unwrap();
         assert_eq!(tokens[0], Token::Cmd("any".to_owned()));
-        assert_eq!(tokens[1], Token::Opt("numbers".to_owned()));
+        assert_eq!(tokens[1], Token::Opt("--".to_owned(), "numbers".to_owned()));
         assert_eq!(tokens[2], Token::Arg("3".to_owned()));
         assert_eq!(tokens[3], Token::Arg("1".to_owned()));
         assert_eq!(tokens[4], Token::Arg("2".to_owned()));
@@ -334,7 +356,7 @@ mod tests {
     fn tokenize_test10() {
         let tokens = tokenize("any --numbers:3,1,2").unwrap();
         assert_eq!(tokens[0], Token::Cmd("any".to_owned()));
-        assert_eq!(tokens[1], Token::Opt("numbers".to_owned()));
+        assert_eq!(tokens[1], Token::Opt("--".to_owned(), "numbers".to_owned()));
         assert_eq!(tokens[2], Token::Arg("3".to_owned()));
         assert_eq!(tokens[3], Token::Arg("1".to_owned()));
         assert_eq!(tokens[4], Token::Arg("2".to_owned()));
@@ -343,15 +365,15 @@ mod tests {
     #[test]
     fn tokenize_test11() {
         let tokens = tokenize("--version --author").unwrap();
-        assert_eq!(tokens[0], Token::Opt("version".to_owned()));
-        assert_eq!(tokens[1], Token::Opt("author".to_owned()));
+        assert_eq!(tokens[0], Token::Opt("--".to_owned(), "version".to_owned()));
+        assert_eq!(tokens[1], Token::Opt("--".to_owned(), "author".to_owned()));
     }
 
     #[test]
     fn tokenize_test12() {
         let tokens = tokenize("any --numbers 1 2 3 -- red").unwrap();
         assert_eq!(tokens[0], Token::Cmd("any".to_owned()));
-        assert_eq!(tokens[1], Token::Opt("numbers".to_owned()));
+        assert_eq!(tokens[1], Token::Opt("--".to_owned(), "numbers".to_owned()));
         assert_eq!(tokens[2], Token::Arg("1".to_owned()));
         assert_eq!(tokens[3], Token::Arg("2".to_owned()));
         assert_eq!(tokens[4], Token::Arg("3".to_owned()));
@@ -363,7 +385,7 @@ mod tests {
     fn tokenize_test13() {
         let tokens = tokenize("any --numbers=1,2,3, 4").unwrap();
         assert_eq!(tokens[0], Token::Cmd("any".to_owned()));
-        assert_eq!(tokens[1], Token::Opt("numbers".to_owned()));
+        assert_eq!(tokens[1], Token::Opt("--".to_owned(), "numbers".to_owned()));
         assert_eq!(tokens[2], Token::Arg("1".to_owned()));
         assert_eq!(tokens[3], Token::Arg("2".to_owned()));
         assert_eq!(tokens[4], Token::Arg("3".to_owned()));
@@ -374,7 +396,7 @@ mod tests {
     fn tokenize_test14() {
         let tokens = tokenize("any --numbers::1,:2,:3,:4").unwrap();
         assert_eq!(tokens[0], Token::Cmd("any".to_owned()));
-        assert_eq!(tokens[1], Token::Opt("numbers".to_owned()));
+        assert_eq!(tokens[1], Token::Opt("--".to_owned(), "numbers".to_owned()));
         assert_eq!(tokens[2], Token::Arg(":1".to_owned()));
         assert_eq!(tokens[3], Token::Arg(":2".to_owned()));
         assert_eq!(tokens[4], Token::Arg(":3".to_owned()));
@@ -385,7 +407,7 @@ mod tests {
     fn tokenize_test15() {
         let tokens = tokenize("any --numbers \". 1\" \". 2\" \". 3\"").unwrap();
         assert_eq!(tokens[0], Token::Cmd("any".to_owned()));
-        assert_eq!(tokens[1], Token::Opt("numbers".to_owned()));
+        assert_eq!(tokens[1], Token::Opt("--".to_owned(), "numbers".to_owned()));
         assert_eq!(tokens[2], Token::Arg(". 1".to_owned()));
         assert_eq!(tokens[3], Token::Arg(". 2".to_owned()));
         assert_eq!(tokens[4], Token::Arg(". 3".to_owned()));

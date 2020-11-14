@@ -78,6 +78,16 @@ impl Context {
         context
     }
 
+    /// Returns `true` if the value is a name prefix.
+    pub fn is_name_prefix(&self, value: &str) -> bool {
+        self.name_prefixes.contains(value)
+    }
+
+    /// Returns `true` if the value is an alias prefix.
+    pub fn is_alias_prefix(&self, value: &str) -> bool {
+        self.alias_prefixes.contains(value)
+    }
+
     /// Returns an `ExactSizeIterator` over the option name prefixes of this context.
     pub fn name_prefixes(&self) -> impl ExactSizeIterator<Item = &String> {
         self.name_prefixes.iter()
@@ -141,6 +151,30 @@ impl Context {
         }
 
         value
+    }
+
+    pub fn trim_and_get_prefix<'a>(&self, value: &'a str) -> (Option<&'a str>, &'a str) {
+        if let Some(prefix) = self
+            .name_prefixes()
+            .find(|prefix| value.starts_with(prefix.as_str()))
+        {
+            if let Some(index) = value.find(prefix){
+                let (prefix, value) = value.split_at(index + prefix.len());
+                return (Some(prefix), value);
+            }
+        }
+
+        if let Some(prefix) = self
+            .alias_prefixes()
+            .find(|prefix| value.starts_with(prefix.as_str()))
+        {
+            if let Some(index) = value.find(prefix){
+                let (prefix, value) = value.split_at(index + prefix.len());
+                return (Some(prefix), value);
+            }
+        }
+
+        (None, value)
     }
 
     /// Returns `true` if there is a `CommandOption` with the specified name or alias in this context.

@@ -1,4 +1,10 @@
 #![allow(dead_code)]
+
+mod count;
+mod utils;
+
+//use count::count;
+
 extern crate clapi_macros;
 use clapi_macros::*;
 
@@ -22,14 +28,33 @@ fn echo(times: usize, values: Vec<String>) {
     }
 }
 
-//type Vec<T> = std::collections::HashSet<T>;
-
 #[command]
 #[option(name="repeat", alias="r", default=1)]
 #[arg(name="numbers")]
 fn main(repeat: usize, numbers: Vec<i32>){
     for _ in 0..repeat {
         println!("numbers: {:?}", numbers);
+    }
+}
+
+#[subcommand]
+#[arg(name="min")]
+#[arg(name="max")]
+#[option(name="closed", alias="c", default = false)]
+pub fn count(min: usize, max: usize, closed: bool) {
+    println!("closed: {}", closed);
+    assert!(min < max);
+
+    let min = min;
+    let max = if closed { max + 1 } else { max };
+    let mut iter = (min..max).into_iter().peekable();
+
+    while let Some(i) = iter.next(){
+        print!("{}", i);
+
+        if iter.peek().is_some() {
+            print!(", ");
+        }
     }
 }
 
