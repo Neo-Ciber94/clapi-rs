@@ -40,9 +40,9 @@ fn main(repeat: usize, numbers: Vec<i32>){
 #[subcommand]
 #[arg(name="min")]
 #[arg(name="max")]
-#[option(name="closed", alias="c", default = false)]
+#[option(name="closed", alias="c")]
 pub fn count(min: usize, max: usize, closed: bool) {
-    println!("closed: {}", closed);
+    println!("closed: {:?}", closed);
     assert!(min < max);
 
     let min = min;

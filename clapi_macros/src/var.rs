@@ -3,19 +3,19 @@ use quote::*;
 use syn::export::{ToTokens, Formatter};
 use syn::{GenericArgument, Pat, PatType, Type, PathSegment, PathArguments};
 use syn::spanned::Spanned;
-use crate::{IteratorExt, TypeExtensions};
+use crate::IteratorExt;
 use syn::export::fmt::Display;
 
 #[derive(Debug, Clone)]
 pub struct ArgLocalVar{
     name: String,
     is_mut: bool,
-    source: LocalVarSource,
+    source: VarSource,
     ty: ArgType
 }
 
 impl ArgLocalVar {
-    pub fn new(pat_type: PatType, source: LocalVarSource) -> ArgLocalVar{
+    pub fn new(pat_type: PatType, source: VarSource) -> Self {
         new_arg_local_var(pat_type, source)
     }
 
@@ -31,8 +31,12 @@ impl ArgLocalVar {
         let var_name = self.name.parse::<TokenStream>().unwrap();
         let is_mut = if self.is_mut { quote! { mut }} else { quote! {} };
         let source = match self.source {
-            LocalVarSource::Args(_) => self.get_args_source(),
-            LocalVarSource::Opts => self.get_opts_source(),
+            VarSource::Args(_) => self.get_args_source(),
+            VarSource::Opts => self.get_opts_source(),
+            VarSource::OptBool => {
+                let opt_name = quote_expr!(self.name);
+                quote! { opts.contains(#opt_name) }
+            }
         };
 
         match self.ty {
@@ -64,18 +68,14 @@ impl ArgLocalVar {
 
         match &self.ty {
             ArgType::Raw(ty) => {
-                if ty.is_bool() {
-                    quote! { opts.contains(#arg_name) }
-                } else {
-                    quote! { opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0).expect(#msg) }
-                }
+                quote! { opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0).expect(#msg) }
             }
             ArgType::Vec(ty) | ArgType::Slice(ty) | ArgType::MutSlice(ty) => {
                 quote! { opts.get_args(#arg_name).unwrap().convert_all::<#ty>().expect(#msg) }
             }
             ArgType::Option(ty) => {
                 quote! {
-                    match options.len(){
+                    match opts.len(){
                         0 => None,
                         _ => Some(opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0).expect(#msg))
                     }
@@ -89,7 +89,7 @@ impl ArgLocalVar {
 
         match &self.ty {
             ArgType::Raw(ty) => {
-                if let LocalVarSource::Args(index) = self.source {
+                if let VarSource::Args(index) = self.source {
                     quote! { args.convert_at::<#ty>(#index).expect(#msg) }
                 } else {
                     unreachable!()
@@ -117,11 +117,13 @@ impl ToTokens for ArgLocalVar {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum LocalVarSource {
+pub enum VarSource {
     /// The value from the arguments.
     Args(usize),
     /// The value from the options.
-    Opts
+    Opts,
+    /// The value from an option flag
+    OptBool
 }
 
 #[derive(Debug, Clone)]
@@ -138,7 +140,7 @@ impl ArgType {
         get_arg_type(pat_type)
     }
 
-    pub fn inner_type(&self) -> &Type{
+    pub fn get_type(&self) -> &Type{
         match self {
             ArgType::Raw(ty) => ty.as_ref(),
             ArgType::Vec(ty) => ty.as_ref(),
@@ -167,15 +169,11 @@ impl ArgType {
     pub fn is_option(&self) -> bool{
         matches!(self, ArgType::Option(_))
     }
-
-    pub fn is_vec_or_slice(&self) -> bool {
-        self.is_vec() || self.is_slice() || self.is_mut_slice()
-    }
 }
 
 impl Display for ArgType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.inner_type().to_token_stream().to_string())
+        write!(f, "{}", self.get_type().to_token_stream().to_string())
     }
 }
 
@@ -183,7 +181,7 @@ enum OuterType {
     Vec, Option
 }
 
-fn new_arg_local_var(pat_type: PatType, source: LocalVarSource) -> ArgLocalVar {
+fn new_arg_local_var(pat_type: PatType, source: VarSource) -> ArgLocalVar {
     let name =  pat_type.pat.to_token_stream().to_string();
     let ty = get_arg_type(&pat_type);
     let is_mut = match pat_type.pat.as_ref() {

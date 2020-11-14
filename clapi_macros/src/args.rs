@@ -310,7 +310,7 @@ fn assert_same_type_default_values(arg_name: &str, default_values: &[Lit]) {
 }
 
 fn assert_arg_and_default_values_same_type(arg: &NamedFnArg, default_values: &[Lit]) {
-    let ty = arg.ty.inner_type();
+    let ty = arg.ty.get_type();
 
     if cfg!(debug_assertions) {
         assert_same_type_default_values(&arg.name, default_values);

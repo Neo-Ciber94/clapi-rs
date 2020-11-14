@@ -300,7 +300,7 @@ mod command_fn {
     use crate::keys;
     use crate::option::OptionData;
     use crate::utils::pat_type_to_string;
-    use crate::var::{ArgLocalVar, LocalVarSource};
+    use crate::var::{ArgLocalVar, VarSource};
     use crate::{IteratorExt, TypeExtensions};
 
     pub fn new_command(
@@ -377,19 +377,20 @@ mod command_fn {
         let mut arg_index = 0;
 
         // Pass function arguments in order
-        for arg in &fn_args {
-            if arg.is_option {
-                command.set_var(ArgLocalVar::new(arg.pat_type.clone(), LocalVarSource::Opts));
+        for fn_arg in &fn_args {
+            if fn_arg.is_option {
+                let source = if is_implicit_bool_arg(fn_arg) { VarSource::OptBool } else { VarSource::Opts };
+                command.set_var(ArgLocalVar::new(fn_arg.pat_type.clone(), source));
             } else {
                 if arg_count > 1 {
-                    let ty = arg.pat_type.ty.as_ref();
+                    let ty = fn_arg.pat_type.ty.as_ref();
                     if ty.is_slice() || ty.is_vec() {
                         panic!("invalid argument type for: `{}`\
                         \nwhen multiples `arg` are defined, arguments cannot be declared as `Vec` or `slice`",
-                          pat_type_to_string(&arg.pat_type));
+                          pat_type_to_string(&fn_arg.pat_type));
                     }
 
-                    if let Some(attr) = &arg.attr {
+                    if let Some(attr) = &fn_arg.attr {
                         assert!(
                             attr.get("default").is_none(),
                             "`default` is not supported when multiple arguments are defined"
@@ -406,8 +407,8 @@ mod command_fn {
                 }
 
                 command.set_var(ArgLocalVar::new(
-                    arg.pat_type.clone(),
-                    LocalVarSource::Args(arg_index),
+                    fn_arg.pat_type.clone(),
+                    VarSource::Args(arg_index),
                 ));
 
                 arg_index += 1;
@@ -451,9 +452,10 @@ mod command_fn {
                             option.set_alias(alias);
                         }
                         keys::DESCRIPTION => {
-                            let description = value.clone().as_string_literal().expect(
-                                "option `description` is expected to be string literal",
-                            );
+                            let description = value
+                                .clone()
+                                .as_string_literal()
+                                .expect("option `description` is expected to be string literal");
                             option.set_description(description);
                         }
                         keys::MIN => {
@@ -481,17 +483,10 @@ mod command_fn {
                 }
             }
 
-            // Special case for `bool`.
-            // `min` and `max` are only valid for `Vec<T>` or `slice` types,
-            // if `default` is defined you need to pass the `bool` the value directly
-            // otherwise will be implicit.
-            let attr = fn_arg.attr.as_ref().unwrap();
-            let ignore_arg = fn_arg.pat_type.ty.is_bool()
-                && (attr.contains_name("min")
-                || attr.contains_name("max")
-                || attr.contains_name("default"));
-
-            if !ignore_arg {
+            // An argument is considered implicit if:
+            // - Is bool type
+            // - Don't contains `min`, `max` or `default`
+            if !is_implicit_bool_arg(fn_arg) {
                 option.set_args(args);
             }
 
@@ -582,6 +577,17 @@ mod command_fn {
         }
 
         ret
+    }
+
+    fn is_implicit_bool_arg(fn_arg: &CommandFnArg) -> bool {
+        if let Some(attr) = &fn_arg.attr {
+            fn_arg.pat_type.ty.is_bool()
+                && !(attr.contains_name("min")
+                    || attr.contains_name("max")
+                    || attr.contains_name("default"))
+        } else {
+            fn_arg.pat_type.ty.is_bool()
+        }
     }
 
     fn assert_is_non_vec_or_slice(ty: &Type, pat_type: &PatType) {
