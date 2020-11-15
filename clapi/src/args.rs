@@ -305,11 +305,15 @@ impl Arguments {
         <T as FromStr>::Err: Display,
     {
         if self.values.is_empty() {
-            return Err(Error::from(ErrorKind::InvalidArgumentCount));
+            return Err(Error::new(
+                ErrorKind::InvalidArgumentCount,
+                format!("expected {} but {} was found", 1, self.arity)
+            ));
+            //return Err(Error::from(ErrorKind::InvalidArgumentCount));
         }
 
         if self.values.len() != 1 {
-            return Err(Error::new(ErrorKind::InvalidArgumentCount, "multiple values defined but 1 was expected"));
+            return Err(Error::new(ErrorKind::InvalidArgumentCount, "multiple values found but 1 was expected"));
         }
 
         if self.arity.takes_args() {
@@ -335,7 +339,11 @@ impl Arguments {
         <T as FromStr>::Err: Display,
     {
         if self.values.is_empty() {
-            return Err(Error::from(ErrorKind::InvalidArgumentCount));
+            return Err(Error::new(
+                ErrorKind::InvalidArgumentCount,
+                format!("expected {} but {} was found", index, self.arity)
+            ));
+            //return Err(Error::from(ErrorKind::InvalidArgumentCount));
         }
 
         if self.arity.takes_args() {
@@ -371,7 +379,11 @@ impl Arguments {
         <T as FromStr>::Err: Display,
     {
         if self.values.is_empty() {
-            return Err(Error::from(ErrorKind::InvalidArgumentCount));
+            return Err(Error::new(
+                ErrorKind::InvalidArgumentCount,
+                "no values found"
+            ));
+            //return Err(Error::from(ErrorKind::InvalidArgumentCount));
         }
 
         if self.arity.takes_args() {
@@ -393,7 +405,7 @@ impl Eq for Arguments {}
 
 impl PartialEq for Arguments {
     fn eq(&self, other: &Self) -> bool {
-        self.arity == other.arity
+        self.values == other.values
     }
 }
 
@@ -478,11 +490,11 @@ fn invalid_arg_count_msg(args: &Arguments, actual: usize) -> String {
             Symbol::Option(_) => "option"
         };
 
-        format!("{} `{}` expected `{}` but was `{}`", kind, parent.name(), args.arity, actual)
+        format!("{} `{}` expected {} but was {}", kind, parent.name(), args.arity, actual)
     } else if let Some(name) = &args.name {
-        format!("`{}` expected `{}` but was `{}`", name, args.arity, actual)
+        format!("`{}` expected {} but was {}", name, args.arity, actual)
     } else {
-        format!("expected `{}` but was `{}`", args.arity, actual)
+        format!("expected {} but was {}", args.arity, actual)
     }
 }
 

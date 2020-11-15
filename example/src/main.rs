@@ -31,17 +31,19 @@ fn echo(times: usize, values: Vec<String>) {
 #[command]
 #[option(name="repeat", alias="r", default=1)]
 #[arg(name="numbers")]
-fn main(repeat: usize, numbers: Vec<i32>){
+fn main(repeat: usize, numbers: Vec<i32>)  -> Result<()> {
     for _ in 0..repeat {
         println!("numbers: {:?}", numbers);
     }
+
+    Ok(())
 }
 
 #[subcommand]
 #[arg(name="min")]
 #[arg(name="max")]
 #[option(name="closed", alias="c")]
-pub fn count(min: usize, max: usize, closed: bool) {
+pub fn count(min: usize, max: usize, closed: bool) -> Result<()> {
     println!("closed: {:?}", closed);
     assert!(min < max);
 
@@ -56,6 +58,8 @@ pub fn count(min: usize, max: usize, closed: bool) {
             print!(", ");
         }
     }
+
+    Ok(())
 }
 
 fn run_cmd() -> Result<()> {

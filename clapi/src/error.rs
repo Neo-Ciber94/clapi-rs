@@ -42,19 +42,19 @@ impl Error {
     /// Constructs a new parse error.
     ///
     /// # Parameters
-    /// - `kind`: the type of the error.
+    /// - `inner`: the inner error.
     /// - `command`: the command or parent command where the error occurred.
     /// - `option`: the option where the error occurred.
     /// - `args`: the args being passed to the command or option, if the `option` is not set
     /// the args will be considered part of the command.
     pub fn new_parse_error(
-        kind: ErrorKind,
+        inner: Error,
         command: Command,
         option: Option<CommandOption>,
         args: Option<Vec<String>>,
     ) -> Self {
         Error {
-            inner: Parsed(Box::new(ParseError::new(kind, command, option, args))),
+            inner: Parsed(Box::new(ParseError::new(inner, command, option, args))),
         }
     }
 
@@ -62,7 +62,7 @@ impl Error {
     pub fn kind(&self) -> &ErrorKind {
         match &self.inner {
             Inner::Simple(kind) => kind,
-            Inner::Parsed(error) => &error.kind,
+            Inner::Parsed(error) => &error.kind(),
             Inner::Custom(custom) => &custom.kind,
         }
     }
@@ -94,12 +94,12 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.inner {
             Inner::Simple(kind) => Display::fmt(kind, f),
-            Inner::Parsed(error) => Display::fmt(&error.kind, f),
+            Inner::Parsed(error) => Display::fmt(error.inner(), f),
             Inner::Custom(custom) => {
                 if matches!(custom.kind, ErrorKind::Unknown) {
                     write!(f, "{}", custom.error)
                 } else {
-                    write!(f, "{}. {}", custom.kind, custom.error)
+                    write!(f, "{}: {}", custom.kind, custom.error)
                 }
             },
         }
@@ -117,6 +117,12 @@ impl From<ErrorKind> for Error {
         Error {
             inner: Simple(kind),
         }
+    }
+}
+
+impl From<ParseError> for Error {
+    fn from(parse_error: ParseError) -> Self {
+        Error { inner: Inner::Parsed(Box::new(parse_error)) }
     }
 }
 
@@ -169,7 +175,7 @@ struct CustomError {
 
 /// Represents an error occurred in a parse operation.
 pub struct ParseError {
-    kind: ErrorKind,
+    inner: Error,
     command: Command,
     option: Option<CommandOption>,
     args: Option<Vec<String>>,
@@ -177,22 +183,27 @@ pub struct ParseError {
 
 impl ParseError {
     fn new(
-        kind: ErrorKind,
+        inner: Error,
         command: Command,
         option: Option<CommandOption>,
         args: Option<Vec<String>>,
     ) -> Self {
         ParseError {
-            kind,
+            inner,
             command,
             option,
             args,
         }
     }
 
+    /// Returns the inner error.
+    pub fn inner(&self) -> &Error {
+        &self.inner
+    }
+
     /// Returns the type of the error.
     pub fn kind(&self) -> &ErrorKind {
-        &self.kind
+        &self.inner.kind()
     }
 
     /// Returns the `Command` where the error occurred.

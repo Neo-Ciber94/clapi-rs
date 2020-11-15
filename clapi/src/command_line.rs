@@ -225,11 +225,11 @@ impl CommandLine {
         Ok(())
     }
 
-    fn display_suggestions(&self, error: ParseError) -> Error {
-        let kind = error.kind();
-        let message = match kind {
+    fn display_suggestions(&self, parse_error: ParseError) -> Error {
+        let kind = parse_error.kind();
+        let suggestions = match kind {
             ErrorKind::UnrecognizedCommand(s) => {
-                let command_names = error
+                let command_names = parse_error
                     .command()
                     .children()
                     .map(|c| c.name().to_string())
@@ -241,7 +241,7 @@ impl CommandLine {
                     .suggestion_message_for(&s, &command_names)
             }
             ErrorKind::UnrecognizedOption(s) => {
-                let option_names = error
+                let option_names = parse_error
                     .command()
                     .options()
                     .iter()
@@ -255,14 +255,14 @@ impl CommandLine {
             }
             _ => {
                 // Forwards the error
-                return Error::from(error.kind().clone());
+                return Error::from(parse_error);
             }
         };
 
-        if let Some(msg) = message {
+        if let Some(msg) = suggestions {
             Error::new(kind.clone(), msg)
         } else {
-            Error::from(kind.clone())
+            Error::from(parse_error)
         }
     }
 }

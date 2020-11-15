@@ -34,7 +34,7 @@ where
         while let Some(Token::Cmd(name)) = iterator.peek() {
             command = command.get_child(name.as_str()).ok_or_else(|| {
                 Error::new_parse_error(
-                    ErrorKind::UnrecognizedCommand(name.clone()),
+                    Error::from(ErrorKind::UnrecognizedCommand(name.clone())),
                     command.clone(),
                     None,
                     None,
@@ -69,11 +69,11 @@ where
                         }
                     }
 
-                    option.set_args_values(option_args.clone()).or_else(|e| {
+                    option.set_args_values(option_args.clone()).or_else(|error| {
                         let args = option_args.iter().map(|s| (*s).clone()).collect();
 
                         Err(Error::new_parse_error(
-                            e.kind().clone(),
+                            error,
                             command.clone(),
                             Some(option.clone()),
                             Some(args),
@@ -84,7 +84,7 @@ where
                 result_options.add(option);
             } else {
                 return Err(Error::new_parse_error(
-                    ErrorKind::UnrecognizedOption(s.clone()),
+                    Error::from(ErrorKind::UnrecognizedOption(s.clone())),
                     command.clone(),
                     None,
                     None,
@@ -136,9 +136,9 @@ where
 
         result_command
             .set_args_values(rest_args.as_slice())
-            .or_else(|e| {
+            .or_else(|error| {
                 Err(Error::new_parse_error(
-                    e.kind().clone(),
+                    error,
                     result_command.clone(),
                     None,
                     Some(rest_args),

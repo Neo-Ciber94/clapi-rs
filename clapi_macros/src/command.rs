@@ -196,7 +196,8 @@ impl CommandData {
         let ret = &self.item_fn.as_ref().unwrap().sig.output;
         let error_handling = match ret {
             ReturnType::Type(_, ty) if ty.is_result() => quote! {},
-            _ => quote! { Ok(()) },
+            // If function is not `Result` we need return `fn_name(args) ; Ok(())`
+            _ => quote! { ; Ok(()) },
         };
 
         if self.is_child {
@@ -214,7 +215,7 @@ impl CommandData {
 
             quote! {
                 #(#vars)*
-                #fn_name(#(#inputs,)*);
+                #fn_name(#(#inputs,)*)
                 #error_handling
             }
         } else {
