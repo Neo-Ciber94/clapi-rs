@@ -60,7 +60,7 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn subcommand(attr: TokenStream, item: TokenStream) -> TokenStream {
     let (path, file) = get_call_site_source_file();
 
-    shared::add_subcommand(shared::CommandRawData::new(
+    shared::load_subcommand(shared::CommandRawData::new(
         attr.to_string(),
         item.to_string(),
         path
@@ -68,7 +68,6 @@ pub fn subcommand(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let func = syn::parse_macro_input!(item as ItemFn);
     assertions::is_top_function(&func, &file);
-    //assertions::is_public(&func);
 
     command::drop_command_attributes(func)
         .into_token_stream()

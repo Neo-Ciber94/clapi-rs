@@ -2,17 +2,17 @@ use std::path::PathBuf;
 
 use proc_macro2::TokenStream;
 use quote::*;
-use syn::{Attribute, AttributeArgs, FnArg, ItemFn, PatType, ReturnType, Stmt};
-use syn::export::{Formatter, ToTokens};
 use syn::export::fmt::Display;
+use syn::export::{Formatter, ToTokens};
+use syn::{Attribute, AttributeArgs, FnArg, ItemFn, PatType, ReturnType, Stmt};
 
 use macro_attribute::NameValueAttribute;
 
 use crate::args::ArgData;
 use crate::keys;
 use crate::option::OptionData;
-use crate::TypeExtensions;
 use crate::var::{ArgLocalVar, ArgType};
+use crate::TypeExtensions;
 
 /// Tokens for:
 ///
@@ -26,6 +26,7 @@ use crate::var::{ArgLocalVar, ArgType};
 pub struct CommandData {
     fn_name: FnName,
     is_child: bool,
+    version: Option<String>,
     description: Option<String>,
     help: Option<String>,
     item_fn: Option<ItemFn>,
@@ -40,6 +41,7 @@ impl CommandData {
         CommandData {
             fn_name: name,
             is_child,
+            version: None,
             description: None,
             help: None,
             item_fn: None,
@@ -58,6 +60,12 @@ impl CommandData {
 
     pub fn from_path(args: AttributeArgs, func: ItemFn, path: PathBuf) -> Self {
         cmd::new_command_from_path(args, func, path)
+    }
+
+    pub fn set_version(&mut self, version: String) {
+        assert!(!version.is_empty(), "command version cannot be empty");
+        assert!(!self.is_child, "only root `command` can define a version");
+        self.version = Some(version);
     }
 
     pub fn set_description(&mut self, description: String) {
@@ -124,6 +132,13 @@ impl CommandData {
             .map(|tokens| quote! { .set_args(#tokens)})
             .unwrap_or_else(|| quote! {});
 
+        // Command version
+        let version = self.version
+            .as_ref()
+            .map(|_| {
+                quote! { .set_option(clapi::option::CommandOption::new("version").set_alias("v")) }
+            }).unwrap_or_else(|| quote!{});
+
         // Command description
         let description = self
             .description
@@ -151,15 +166,35 @@ impl CommandData {
             quote! { clapi::root_command::RootCommand::new() }
         };
 
+        // Show version
+        let show_version = self.version
+            .as_ref()
+            .map(|s| {
+                let ret = match &self.item_fn.as_ref().unwrap().sig.output{
+                    ReturnType::Default => quote! { return; },
+                    ReturnType::Type(_, ty) if ty.is_result() => quote! { return Ok(()) },
+                    _ => panic!("invalid return type for `{}`, expected `()` or `Result`", self.fn_name.name)
+                };
+
+                quote!{
+                    if opts.contains("version"){
+                        println!("{} {}", clapi::root_command::current_filename(), #s);
+                        #ret
+                    }
+                }
+            }).unwrap_or_else(|| quote!{});
+
         // Build the command
         command = quote! {
             #command
                 #description
                 #help
                 #args
+                #version
                 #(#options)*
                 #(#children)*
                 .set_handler(|opts, args|{
+                    #show_version
                     #body
                 })
         };
@@ -280,15 +315,15 @@ struct NamedFnArg {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct FnName {
     path: Option<String>,
-    name: String
+    name: String,
 }
 
 impl FnName {
     pub fn new(path: Option<String>, name: String) -> Self {
-        FnName { path, name: name }
+        FnName { path, name }
     }
 
-    pub fn path(&self) -> Option<&str>{
+    pub fn path(&self) -> Option<&str> {
         self.path.as_ref().map(|s| s.as_str())
     }
 
@@ -326,19 +361,19 @@ mod cmd {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use syn::{Attribute, AttributeArgs, File, FnArg, Item, ItemFn, ItemMod, PatType, Stmt, Type};
     use syn::export::ToTokens;
+    use syn::{Attribute, AttributeArgs, File, FnArg, Item, ItemFn, ItemMod, PatType, Stmt, Type};
 
     use clapi::utils::OptionExt;
     use macro_attribute::{literal_to_string, MacroAttribute, NameValueAttribute, Value};
 
-    use crate::{IteratorExt, TypeExtensions};
-    use crate::{AttrQuery, keys};
     use crate::args::ArgData;
-    use crate::command::{CommandData, CommandFnArg, drop_command_attributes, FnName, NamedFnArg};
+    use crate::command::{drop_command_attributes, CommandData, CommandFnArg, FnName, NamedFnArg};
     use crate::option::OptionData;
     use crate::utils::pat_type_to_string;
     use crate::var::{ArgLocalVar, VarSource};
+    use crate::{keys, AttrQuery};
+    use crate::{IteratorExt, TypeExtensions};
 
     // Create a new command from an `ItemFn`
 
@@ -349,7 +384,13 @@ mod cmd {
         get_subcommands: bool,
     ) -> CommandData {
         let name = item_fn.sig.ident.to_string();
-        new_command_with_name(name_value_attr, item_fn, FnName::new(None, name), is_child, get_subcommands)
+        new_command_with_name(
+            name_value_attr,
+            item_fn,
+            FnName::new(None, name),
+            is_child,
+            get_subcommands,
+        )
     }
 
     pub fn new_command_with_name(
@@ -376,6 +417,13 @@ mod cmd {
                         .as_string_literal()
                         .expect("`help` is expected to be string literal");
                     command.set_description(help);
+                }
+                keys::VERSION => {
+                    assert!(
+                        value.is_integer() || value.is_float() || value.is_string(),
+                        "`version` must be an integer, float or string literal"
+                    );
+                    command.set_version(value.parse_literal::<String>().unwrap());
                 }
                 _ => panic!("invalid {} key `{}`", name_value_attr.path(), key),
             }
@@ -708,7 +756,7 @@ mod cmd {
         let attr = NameValueAttribute::from_attribute_args(keys::COMMAND, args).unwrap();
         let mut command = new_command(attr, item_fn.clone(), false, true);
 
-        for (path, attr, item_fn) in find_subcommands(&root_path, &file){
+        for (path, attr, item_fn) in find_subcommands(&root_path, &file) {
             if path == root_path {
                 command.set_child(new_command(attr, item_fn, true, true));
             } else {
@@ -723,15 +771,21 @@ mod cmd {
 
     fn get_item_fn_path_name(path: &Path, item_fn: &ItemFn) -> FnName {
         let mut ret = Vec::new();
-        let iter = path.iter()
+
+        // Iterate from `src/`
+        let iter = path
+            .iter()
             .map(|s| s.to_str().unwrap())
             .skip_while(|s| *s != "src")
             .skip(1);
 
         for item in iter {
-            if item != "mod.rs"{
-                ret.push(item.trim_end_matches(".rs").to_string());
+            // `mod.rs` is not necessary to access the module
+            if item == "mod.rs" {
+                break;
             }
+
+            ret.push(item.trim_end_matches(".rs").to_string());
         }
 
         if ret.is_empty() {
@@ -741,8 +795,11 @@ mod cmd {
         FnName::new(Some(ret.join("::")), item_fn.sig.ident.to_string())
     }
 
-    fn find_subcommands(root_path: &Path, file: &File) -> Vec<(PathBuf, NameValueAttribute, ItemFn)> {
-        fn get_attr_and_item_fn(f: &ItemFn) -> (NameValueAttribute, ItemFn){
+    fn find_subcommands(
+        root_path: &Path,
+        file: &File,
+    ) -> Vec<(PathBuf, NameValueAttribute, ItemFn)> {
+        fn get_attr_and_item_fn(f: &ItemFn) -> (NameValueAttribute, ItemFn) {
             let attr = get_subcommand_attribute(f).unwrap();
             let item_fn = f.clone();
             (attr, item_fn)
@@ -753,7 +810,9 @@ mod cmd {
         let mut subcommands = find_subcommand_item_fn_from_path_recursive(root_path, file)
             .iter()
             .filter(|(f, _)| {
-                !registered.iter().any(|(_, _, item_fn)| item_fn.sig.ident == f.sig.ident)
+                !registered
+                    .iter()
+                    .any(|(_, _, item_fn)| item_fn.sig.ident == f.sig.ident)
             })
             .map(|(f, p)| (p.clone(), get_subcommand_attribute(f).unwrap(), f.clone()))
             .collect::<Vec<(PathBuf, NameValueAttribute, ItemFn)>>();
@@ -776,7 +835,7 @@ mod cmd {
 
     fn get_registered_and_attr_subcommands() -> Vec<(PathBuf, NameValueAttribute, ItemFn)> {
         let mut ret = Vec::new();
-        for data in crate::shared::get_subcommand_registry().iter() {
+        for data in crate::shared::get_registered_subcommands().iter() {
             let args = data.parse_args().expect("invalid attribute");
             let item_fn = data
                 .parse_item_fn()

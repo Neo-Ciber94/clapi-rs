@@ -6,6 +6,7 @@ pub const OPTION: &'static str = "option";
 pub const ARG: &'static str = "arg";
 pub const NAME : &'static str = "name";
 pub const ALIAS: &'static str = "alias";
+pub const VERSION: &'static str = "version";
 pub const DESCRIPTION: &'static str = "description";
 pub const HELP: &'static str = "help";
 pub const MIN: &'static str = "min";

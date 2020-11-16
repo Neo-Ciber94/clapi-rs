@@ -1,4 +1,4 @@
-use std::cell::{RefCell, RefMut};
+use std::cell::{RefCell, Ref};
 use syn::{AttributeArgs, ItemFn};
 use std::path::{PathBuf, Path};
 
@@ -33,7 +33,7 @@ impl CommandRawData {
     }
 }
 
-pub fn get_subcommand_registry() -> RefMut<'static, Vec<CommandRawData>> {
+pub fn get_registry() -> &'static RefCell<Vec<CommandRawData>> {
     use std::sync::Once;
     use std::ptr::null_mut;
 
@@ -45,10 +45,22 @@ pub fn get_subcommand_registry() -> RefMut<'static, Vec<CommandRawData>> {
             SUBCOMMANDS = Box::into_raw(Box::new(RefCell::new(Vec::new())));
         });
 
-        (*SUBCOMMANDS).borrow_mut()
+        &*SUBCOMMANDS
     }
 }
 
-pub fn add_subcommand(command: CommandRawData) {
-    get_subcommand_registry().push(command)
+pub fn get_registered_subcommands() -> Ref<'static, Vec<CommandRawData>> {
+    get_registry().borrow()
+}
+
+pub fn load_subcommand(command: CommandRawData) {
+    get_registry().borrow_mut().push(command)
+}
+
+
+mod t{
+    fn get_registry(){}
+
+    fn get_subcommands(){}
+    fn load_subcommands(){}
 }

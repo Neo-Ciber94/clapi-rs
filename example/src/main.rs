@@ -25,7 +25,7 @@ fn echo(times: usize, values: Vec<String>) {
     }
 }
 
-#[command]
+#[command(version=1.0)]
 #[option(name="repeat", alias="r", default=1)]
 #[arg(name="numbers")]
 fn main(repeat: usize, numbers: Vec<i32>)  -> Result<()> {
