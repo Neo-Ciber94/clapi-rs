@@ -1,10 +1,9 @@
 #![allow(dead_code)]
+extern crate clapi_macros;
+use clapi_macros::*;
 
 mod count;
 mod utils;
-
-extern crate clapi_macros;
-use clapi_macros::*;
 
 use clapi::args::Arguments;
 use clapi::command::Command;

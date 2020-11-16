@@ -1,18 +1,18 @@
+use std::path::PathBuf;
+
+use proc_macro2::TokenStream;
+use quote::*;
+use syn::{Attribute, AttributeArgs, FnArg, ItemFn, PatType, ReturnType, Stmt};
+use syn::export::{Formatter, ToTokens};
+use syn::export::fmt::Display;
+
+use macro_attribute::NameValueAttribute;
+
 use crate::args::ArgData;
 use crate::keys;
 use crate::option::OptionData;
-use crate::var::{ArgLocalVar, ArgType};
-use macro_attribute::NameValueAttribute;
-use proc_macro2::TokenStream;
-use quote::*;
-use syn::export::{ToTokens, Formatter};
-use syn::{Attribute, AttributeArgs, FnArg, ItemFn, PatType, ReturnType, Stmt};
-
 use crate::TypeExtensions;
-use command_file::new_command_from_path;
-use command_fn::new_command;
-use std::path::PathBuf;
-use syn::export::fmt::Display;
+use crate::var::{ArgLocalVar, ArgType};
 
 /// Tokens for:
 ///
@@ -24,7 +24,7 @@ use syn::export::fmt::Display;
 /// ```
 #[derive(Debug)]
 pub struct CommandData {
-    path_name: PathName,
+    fn_name: FnName,
     is_child: bool,
     description: Option<String>,
     help: Option<String>,
@@ -36,9 +36,9 @@ pub struct CommandData {
 }
 
 impl CommandData {
-    fn new(name: PathName, is_child: bool) -> Self {
+    fn new(name: FnName, is_child: bool) -> Self {
         CommandData {
-            path_name: name,
+            fn_name: name,
             is_child,
             description: None,
             help: None,
@@ -53,11 +53,11 @@ impl CommandData {
     pub fn from_fn(args: AttributeArgs, func: ItemFn) -> Self {
         let name = func.sig.ident.to_string();
         let attr_data = NameValueAttribute::from_attribute_args(name.as_str(), args).unwrap();
-        new_command(attr_data, func, false, true)
+        cmd::new_command(attr_data, func, false, true)
     }
 
     pub fn from_path(args: AttributeArgs, func: ItemFn, path: PathBuf) -> Self {
-        new_command_from_path(args, func, path)
+        cmd::new_command_from_path(args, func, path)
     }
 
     pub fn set_description(&mut self, description: String) {
@@ -93,7 +93,7 @@ impl CommandData {
         assert!(
             self.item_fn.is_some(),
             "`ItemFn` is not set for command `{}`",
-            self.path_name
+            self.fn_name
         );
 
         // Command options
@@ -145,7 +145,7 @@ impl CommandData {
 
         // Instantiate `Command` or `RootCommand`
         let mut command = if self.is_child {
-            let command_name = quote_expr!(self.path_name.name());
+            let command_name = quote_expr!(self.fn_name.name());
             quote! { clapi::command::Command::new(#command_name) }
         } else {
             quote! { clapi::root_command::RootCommand::new() }
@@ -167,7 +167,7 @@ impl CommandData {
         if self.is_child {
             command
         } else {
-            let name = self.path_name.name().parse::<TokenStream>().unwrap();
+            let name = self.fn_name.name().parse::<TokenStream>().unwrap();
             let ret = &self.item_fn.as_ref().unwrap().sig.output;
             let attrs = &self.item_fn.as_ref().unwrap().attrs;
             let outer = self.outer_body();
@@ -202,7 +202,7 @@ impl CommandData {
         };
 
         if self.is_child {
-            let fn_name = self.path_name.to_string().parse::<TokenStream>().unwrap();
+            let fn_name = self.fn_name.to_string().parse::<TokenStream>().unwrap();
             let inputs = self.vars.iter().map(|var| {
                 let var_name = var.name().parse::<TokenStream>().unwrap();
                 let is_ref = match var.arg_type() {
@@ -278,14 +278,14 @@ struct NamedFnArg {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct PathName{
+pub struct FnName {
     path: Option<String>,
     name: String
 }
 
-impl PathName {
+impl FnName {
     pub fn new(path: Option<String>, name: String) -> Self {
-        PathName { path, name }
+        FnName { path, name: name }
     }
 
     pub fn path(&self) -> Option<&str>{
@@ -297,7 +297,7 @@ impl PathName {
     }
 }
 
-impl Display for PathName {
+impl Display for FnName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(path) = &self.path {
             write!(f, "{}::{}", path, self.name)
@@ -321,19 +321,26 @@ pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {
     item_fn
 }
 
-mod command_fn {
+mod cmd {
+    use std::convert::TryFrom;
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use syn::{Attribute, AttributeArgs, File, FnArg, Item, ItemFn, ItemMod, PatType, Stmt, Type};
+    use syn::export::ToTokens;
+
     use clapi::utils::OptionExt;
     use macro_attribute::{literal_to_string, MacroAttribute, NameValueAttribute, Value};
-    use syn::export::ToTokens;
-    use syn::{Attribute, FnArg, Item, ItemFn, PatType, Stmt, Type};
 
+    use crate::{IteratorExt, TypeExtensions};
+    use crate::{AttrQuery, keys};
     use crate::args::ArgData;
-    use crate::command::{drop_command_attributes, CommandData, CommandFnArg, NamedFnArg, PathName};
-    use crate::keys;
+    use crate::command::{CommandData, CommandFnArg, drop_command_attributes, FnName, NamedFnArg};
     use crate::option::OptionData;
     use crate::utils::pat_type_to_string;
     use crate::var::{ArgLocalVar, VarSource};
-    use crate::{IteratorExt, TypeExtensions};
+
+    // Create a new command from an `ItemFn`
 
     pub fn new_command(
         name_value_attr: NameValueAttribute,
@@ -342,13 +349,13 @@ mod command_fn {
         get_subcommands: bool,
     ) -> CommandData {
         let name = item_fn.sig.ident.to_string();
-        new_command_with_name(name_value_attr, item_fn, PathName::new(None, name), is_child, get_subcommands)
+        new_command_with_name(name_value_attr, item_fn, FnName::new(None, name), is_child, get_subcommands)
     }
 
     pub fn new_command_with_name(
         name_value_attr: NameValueAttribute,
         item_fn: ItemFn,
-        name: PathName,
+        name: FnName,
         is_child: bool,
         get_subcommands: bool,
     ) -> CommandData {
@@ -671,18 +678,8 @@ mod command_fn {
             }
         }
     }
-}
 
-pub mod command_file {
-    use crate::command::{new_command, CommandData, PathName};
-    use crate::{keys, AttrQuery};
-    use macro_attribute::NameValueAttribute;
-    use std::convert::TryFrom;
-    use std::path::{Path, PathBuf};
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use syn::export::ToTokens;
-    use syn::{AttributeArgs, File, Item, ItemFn, ItemMod};
-    use crate::command::command_fn::new_command_with_name;
+    // Create a new command from a path
 
     pub fn new_command_from_path(
         args: AttributeArgs,
@@ -708,12 +705,6 @@ pub mod command_file {
         // Any command must be a top function
         crate::assertions::is_top_function(&item_fn, &file);
 
-        if cfg!(debug_assertions) {
-            for (item_fn, path) in find_subcommand_item_fn_from_path_recursive(&root_path, &file) {
-                println!("fn: {}, path: {}", item_fn.sig.ident, path.display());
-            }
-        }
-
         let attr = NameValueAttribute::from_attribute_args(keys::COMMAND, args).unwrap();
         let mut command = new_command(attr, item_fn.clone(), false, true);
 
@@ -730,7 +721,7 @@ pub mod command_file {
         command
     }
 
-    fn get_item_fn_path_name(path: &Path, item_fn: &ItemFn) -> PathName {
+    fn get_item_fn_path_name(path: &Path, item_fn: &ItemFn) -> FnName {
         let mut ret = Vec::new();
         let iter = path.iter()
             .map(|s| s.to_str().unwrap())
@@ -738,14 +729,16 @@ pub mod command_file {
             .skip(1);
 
         for item in iter {
-            ret.push(item.trim_end_matches(".rs").to_string());
+            if item != "mod.rs"{
+                ret.push(item.trim_end_matches(".rs").to_string());
+            }
         }
 
         if ret.is_empty() {
-            return PathName::new(None, item_fn.sig.ident.to_string());
+            return FnName::new(None, item_fn.sig.ident.to_string());
         }
 
-        PathName::new(Some(ret.join("::")), item_fn.sig.ident.to_string())
+        FnName::new(Some(ret.join("::")), item_fn.sig.ident.to_string())
     }
 
     fn find_subcommands(root_path: &Path, file: &File) -> Vec<(PathBuf, NameValueAttribute, ItemFn)> {
@@ -769,6 +762,18 @@ pub mod command_file {
         subcommands
     }
 
+    fn get_subcommand_attribute(item_fn: &ItemFn) -> Option<NameValueAttribute> {
+        if let Some(att) = item_fn
+            .attrs
+            .iter()
+            .find(|a| a.path.to_token_stream().to_string() == keys::SUBCOMMAND)
+        {
+            Some(NameValueAttribute::try_from(att.clone()).unwrap())
+        } else {
+            None
+        }
+    }
+
     fn get_registered_and_attr_subcommands() -> Vec<(PathBuf, NameValueAttribute, ItemFn)> {
         let mut ret = Vec::new();
         for data in crate::shared::get_subcommand_registry().iter() {
@@ -782,33 +787,7 @@ pub mod command_file {
         ret
     }
 
-    fn get_subcommand_attribute(item_fn: &ItemFn) -> Option<NameValueAttribute> {
-        if let Some(att) = item_fn
-            .attrs
-            .iter()
-            .find(|a| a.path.to_token_stream().to_string() == keys::SUBCOMMAND)
-        {
-            Some(NameValueAttribute::try_from(att.clone()).unwrap())
-        } else {
-            None
-        }
-    }
-
-    fn get_subcommands_item_fn_from_file(file: &File) -> Vec<ItemFn> {
-        let mut ret = Vec::new();
-        for item in &file.items {
-            match item {
-                Item::Fn(item_fn) if item_fn.contains_attribute(keys::SUBCOMMAND) => {
-                    ret.push(item_fn.clone());
-                }
-                _ => {}
-            }
-        }
-
-        ret
-    }
-
-    fn get_subcommands_item_fn_from_path(path: &Path) -> Vec<ItemFn> {
+    fn find_subcommands_item_fn_from_path(path: &Path) -> Vec<ItemFn> {
         let mut ret = Vec::new();
         let src = std::fs::read_to_string(path).unwrap();
         let file = syn::parse_file(&src).unwrap();
@@ -840,7 +819,7 @@ pub mod command_file {
                         // If is a file find the `subcommands` and add all
                         if path.is_file() {
                             ret.extend(
-                                get_subcommands_item_fn_from_path(&path)
+                                find_subcommands_item_fn_from_path(&path)
                                     .iter()
                                     .map(|f| (f.clone(), path.clone())),
                             );
@@ -929,20 +908,3 @@ pub mod command_file {
         }
     }
 }
-/*
-- src/
-    - utils/
-        - printer.rs
-        - unsafe/
-            - pointer.rs
-    - create.rs
-    - main.rs
-*/
-
-/*
-mod create;
-mod delete;
-mod utils;
-
-fn main(){}
-*/
