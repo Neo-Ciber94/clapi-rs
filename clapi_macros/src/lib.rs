@@ -18,6 +18,7 @@ mod keys;
 mod option;
 mod shared;
 mod var;
+mod assertions;
 
 /// Marks and converts a function as a command.
 ///
@@ -36,10 +37,9 @@ mod var;
 pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = syn::parse_macro_input!(attr as AttributeArgs);
     let func = syn::parse_macro_input!(item as ItemFn);
-    let (path, file) = get_call_site_source_file();
+    let path = get_call_site_path();
 
-    assertions::is_top_function(&func, &file);
-    CommandData::from_file(args, func, path, file).expand().into()
+    CommandData::from_path(args, func, path).expand().into()
 }
 
 /// Marks a inner function as a subcommand.
@@ -68,6 +68,8 @@ pub fn subcommand(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let func = syn::parse_macro_input!(item as ItemFn);
     assertions::is_top_function(&func, &file);
+    //assertions::is_public(&func);
+
     command::drop_command_attributes(func)
         .into_token_stream()
         .into()
@@ -114,38 +116,12 @@ pub fn arg(_: TokenStream, _: TokenStream) -> TokenStream {
     panic!("arg should be placed after a `command` or `subcommand` attribute")
 }
 
-pub(crate) fn get_call_site_source_file() -> (PathBuf, File) {
-    let path = Span::call_site().source_file().path();
-    let src = std::fs::read_to_string(path.clone()).unwrap();
-    (path, syn::parse_file(&src).unwrap())
+pub(crate) fn get_call_site_path() -> PathBuf {
+    Span::call_site().source_file().path()
 }
 
-mod assertions {
-    use syn::{File, Item, ItemFn, Visibility};
-
-    pub fn is_top_function(item_fn: &ItemFn, file: &File) {
-        let found = file
-            .items
-            .iter()
-            .filter_map(|item| matches_map!(item, Item::Fn(f) => f))
-            // We don't compare attribute because we don't know the order they are expanded
-            .any(|f| f.sig == item_fn.sig && f.vis == item_fn.vis && f.block == item_fn.block);
-
-        if !found {
-            panic!(
-                "`{}` is not a top function.\
-                \nCommand functions must be free functions and be declared outside a module.",
-                item_fn.sig.ident
-            )
-        }
-    }
-
-    pub fn is_public(item_fn: &ItemFn) {
-        match item_fn.vis {
-            Visibility::Public(_) => {},
-            _ => {
-                panic!("subcommands must be declared public: `{}` is not public", item_fn.sig.ident);
-            }
-        }
-    }
+pub(crate) fn get_call_site_source_file() -> (PathBuf, File) {
+    let path = get_call_site_path();
+    let src = std::fs::read_to_string(&path).unwrap();
+    (path, syn::parse_file(&src).unwrap())
 }

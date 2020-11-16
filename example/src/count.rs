@@ -1,9 +1,9 @@
-// use clapi_macros::*;
+use clapi_macros::*;
 
-// #[subcommand]
-// #[arg(name="min", default=0)]
-// #[arg(name="max")]
-// #[option(name="closed", default=true)]
+#[subcommand]
+#[arg(name="min")]
+#[arg(name="max")]
+#[option(name="closed", default=true)]
 pub fn count(min: usize, max: usize, closed: bool) {
     assert!(min <= max);
 

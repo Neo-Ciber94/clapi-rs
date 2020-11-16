@@ -5,13 +5,14 @@ use crate::var::{ArgLocalVar, ArgType};
 use macro_attribute::NameValueAttribute;
 use proc_macro2::TokenStream;
 use quote::*;
-use syn::export::ToTokens;
+use syn::export::{ToTokens, Formatter};
 use syn::{Attribute, AttributeArgs, FnArg, ItemFn, PatType, ReturnType, Stmt};
 
 use crate::TypeExtensions;
-use command_file::new_command_from_file;
+use command_file::new_command_from_path;
 use command_fn::new_command;
 use std::path::PathBuf;
+use syn::export::fmt::Display;
 
 /// Tokens for:
 ///
@@ -23,7 +24,7 @@ use std::path::PathBuf;
 /// ```
 #[derive(Debug)]
 pub struct CommandData {
-    name: String,
+    path_name: PathName,
     is_child: bool,
     description: Option<String>,
     help: Option<String>,
@@ -35,9 +36,9 @@ pub struct CommandData {
 }
 
 impl CommandData {
-    fn new(name: String, is_child: bool) -> Self {
+    fn new(name: PathName, is_child: bool) -> Self {
         CommandData {
-            name,
+            path_name: name,
             is_child,
             description: None,
             help: None,
@@ -55,8 +56,8 @@ impl CommandData {
         new_command(attr_data, func, false, true)
     }
 
-    pub fn from_file(args: AttributeArgs, func: ItemFn, path: PathBuf, file: syn::File) -> Self {
-        new_command_from_file(args, func, path, file)
+    pub fn from_path(args: AttributeArgs, func: ItemFn, path: PathBuf) -> Self {
+        new_command_from_path(args, func, path)
     }
 
     pub fn set_description(&mut self, description: String) {
@@ -92,7 +93,7 @@ impl CommandData {
         assert!(
             self.item_fn.is_some(),
             "`ItemFn` is not set for command `{}`",
-            self.name
+            self.path_name
         );
 
         // Command options
@@ -144,7 +145,7 @@ impl CommandData {
 
         // Instantiate `Command` or `RootCommand`
         let mut command = if self.is_child {
-            let command_name = quote_expr!(self.name);
+            let command_name = quote_expr!(self.path_name.name());
             quote! { clapi::command::Command::new(#command_name) }
         } else {
             quote! { clapi::root_command::RootCommand::new() }
@@ -166,7 +167,7 @@ impl CommandData {
         if self.is_child {
             command
         } else {
-            let name = self.name.as_str().parse::<TokenStream>().unwrap();
+            let name = self.path_name.name().parse::<TokenStream>().unwrap();
             let ret = &self.item_fn.as_ref().unwrap().sig.output;
             let attrs = &self.item_fn.as_ref().unwrap().attrs;
             let outer = self.outer_body();
@@ -196,12 +197,12 @@ impl CommandData {
         let ret = &self.item_fn.as_ref().unwrap().sig.output;
         let error_handling = match ret {
             ReturnType::Type(_, ty) if ty.is_result() => quote! {},
-            // If function is not `Result` we need return `fn_name(args) ; Ok(())`
+            // If return type is not `Result` we need return `fn_name(args) ; Ok(())`
             _ => quote! { ; Ok(()) },
         };
 
         if self.is_child {
-            let fn_name = self.name.parse::<TokenStream>().unwrap();
+            let fn_name = self.path_name.to_string().parse::<TokenStream>().unwrap();
             let inputs = self.vars.iter().map(|var| {
                 let var_name = var.name().parse::<TokenStream>().unwrap();
                 let is_ref = match var.arg_type() {
@@ -276,6 +277,36 @@ struct NamedFnArg {
     fn_arg: FnArg,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct PathName{
+    path: Option<String>,
+    name: String
+}
+
+impl PathName {
+    pub fn new(path: Option<String>, name: String) -> Self {
+        PathName { path, name }
+    }
+
+    pub fn path(&self) -> Option<&str>{
+        self.path.as_ref().map(|s| s.as_str())
+    }
+
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
+}
+
+impl Display for PathName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(path) = &self.path {
+            write!(f, "{}::{}", path, self.name)
+        } else {
+            write!(f, "{}", self.name)
+        }
+    }
+}
+
 pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {
     item_fn.attrs = item_fn
         .attrs
@@ -297,7 +328,7 @@ mod command_fn {
     use syn::{Attribute, FnArg, Item, ItemFn, PatType, Stmt, Type};
 
     use crate::args::ArgData;
-    use crate::command::{drop_command_attributes, CommandData, CommandFnArg, NamedFnArg};
+    use crate::command::{drop_command_attributes, CommandData, CommandFnArg, NamedFnArg, PathName};
     use crate::keys;
     use crate::option::OptionData;
     use crate::utils::pat_type_to_string;
@@ -311,13 +342,13 @@ mod command_fn {
         get_subcommands: bool,
     ) -> CommandData {
         let name = item_fn.sig.ident.to_string();
-        new_command_with_name(name_value_attr, item_fn, name, is_child, get_subcommands)
+        new_command_with_name(name_value_attr, item_fn, PathName::new(None, name), is_child, get_subcommands)
     }
 
     pub fn new_command_with_name(
         name_value_attr: NameValueAttribute,
         item_fn: ItemFn,
-        name: String,
+        name: PathName,
         is_child: bool,
         get_subcommands: bool,
     ) -> CommandData {
@@ -380,7 +411,11 @@ mod command_fn {
         // Pass function arguments in order
         for fn_arg in &fn_args {
             if fn_arg.is_option {
-                let source = if is_implicit_bool_arg(fn_arg) { VarSource::OptBool } else { VarSource::Opts };
+                let source = if is_implicit_bool_arg(fn_arg) {
+                    VarSource::OptBool
+                } else {
+                    VarSource::Opts
+                };
                 command.set_var(ArgLocalVar::new(fn_arg.pat_type.clone(), source));
             } else {
                 if arg_count > 1 {
@@ -638,28 +673,21 @@ mod command_fn {
     }
 }
 
-mod command_file {
-    use crate::command::{new_command, CommandData};
-    use crate::keys;
-    use crate::utils::path_to_string;
+pub mod command_file {
+    use crate::command::{new_command, CommandData, PathName};
+    use crate::{keys, AttrQuery};
     use macro_attribute::NameValueAttribute;
     use std::convert::TryFrom;
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, Ordering};
     use syn::export::ToTokens;
     use syn::{AttributeArgs, File, Item, ItemFn, ItemMod};
+    use crate::command::command_fn::new_command_with_name;
 
-    pub struct CommandFromPath {
-        path: PathBuf,
-        attr: NameValueAttribute,
-        item_fn: ItemFn,
-    }
-
-    pub fn new_command_from_file(
+    pub fn new_command_from_path(
         args: AttributeArgs,
         item_fn: ItemFn,
-        path: PathBuf,
-        file: File,
+        root_path: PathBuf,
     ) -> CommandData {
         static IS_DEFINED: AtomicBool = AtomicBool::new(false);
 
@@ -672,21 +700,86 @@ mod command_file {
             IS_DEFINED.store(true, Ordering::Relaxed);
         }
 
+        let src = std::fs::read_to_string(&root_path)
+            .unwrap_or_else(|_| panic!("failed to read: {}", root_path.display()));
+        let file = syn::parse_file(&src)
+            .unwrap_or_else(|_| panic!("failed to parse: {:?}", root_path.file_name().unwrap()));
+
+        // Any command must be a top function
+        crate::assertions::is_top_function(&item_fn, &file);
+
+        if cfg!(debug_assertions) {
+            for (item_fn, path) in find_subcommand_item_fn_from_path_recursive(&root_path, &file) {
+                println!("fn: {}, path: {}", item_fn.sig.ident, path.display());
+            }
+        }
+
         let attr = NameValueAttribute::from_attribute_args(keys::COMMAND, args).unwrap();
         let mut command = new_command(attr, item_fn.clone(), false, true);
 
-        for (att, item_fn) in find_subcommands(path.as_path(), &file) {
-            let subcommand = new_command(att.clone(), item_fn.clone(), true, true);
-            command.set_child(subcommand);
+        for (path, attr, item_fn) in find_subcommands(&root_path, &file){
+            if path == root_path {
+                command.set_child(new_command(attr, item_fn, true, true));
+            } else {
+                let name = get_item_fn_path_name(&path, &item_fn);
+                let subcommand = new_command_with_name(attr, item_fn, name, true, true);
+                command.set_child(subcommand);
+            }
         }
 
         command
     }
 
-    fn find_subcommands(path: &Path, file: &File) -> Vec<(NameValueAttribute, ItemFn)> {
-        let mut subcommands = get_subcommands_from_file(file);
-        subcommands.extend(get_registered_subcommands(path));
+    fn get_item_fn_path_name(path: &Path, item_fn: &ItemFn) -> PathName {
+        let mut ret = Vec::new();
+        let iter = path.iter()
+            .map(|s| s.to_str().unwrap())
+            .skip_while(|s| *s != "src")
+            .skip(1);
+
+        for item in iter {
+            ret.push(item.trim_end_matches(".rs").to_string());
+        }
+
+        if ret.is_empty() {
+            return PathName::new(None, item_fn.sig.ident.to_string());
+        }
+
+        PathName::new(Some(ret.join("::")), item_fn.sig.ident.to_string())
+    }
+
+    fn find_subcommands(root_path: &Path, file: &File) -> Vec<(PathBuf, NameValueAttribute, ItemFn)> {
+        fn get_attr_and_item_fn(f: &ItemFn) -> (NameValueAttribute, ItemFn){
+            let attr = get_subcommand_attribute(f).unwrap();
+            let item_fn = f.clone();
+            (attr, item_fn)
+        }
+
+        let registered = get_registered_and_attr_subcommands();
+
+        let mut subcommands = find_subcommand_item_fn_from_path_recursive(root_path, file)
+            .iter()
+            .filter(|(f, _)| {
+                !registered.iter().any(|(_, _, item_fn)| item_fn.sig.ident == f.sig.ident)
+            })
+            .map(|(f, p)| (p.clone(), get_subcommand_attribute(f).unwrap(), f.clone()))
+            .collect::<Vec<(PathBuf, NameValueAttribute, ItemFn)>>();
+
+        subcommands.extend(registered);
         subcommands
+    }
+
+    fn get_registered_and_attr_subcommands() -> Vec<(PathBuf, NameValueAttribute, ItemFn)> {
+        let mut ret = Vec::new();
+        for data in crate::shared::get_subcommand_registry().iter() {
+            let args = data.parse_args().expect("invalid attribute");
+            let item_fn = data
+                .parse_item_fn()
+                .expect("invalid item for attribute, expected function");
+            let attr = NameValueAttribute::from_attribute_args(keys::SUBCOMMAND, args).unwrap();
+            ret.push((data.path().to_path_buf(), attr, item_fn));
+        }
+        ret
     }
 
     fn get_subcommand_attribute(item_fn: &ItemFn) -> Option<NameValueAttribute> {
@@ -701,36 +794,84 @@ mod command_file {
         }
     }
 
-    fn get_registered_subcommands(path: &Path) -> Vec<(NameValueAttribute, ItemFn)> {
-        let mut ret = Vec::new();
-        for data in crate::shared::get_subcommand_registry().iter() {
-            let args = data.parse_args().expect("invalid attribute");
-            let item_fn = data
-                .parse_item_fn()
-                .expect("invalid item for attribute, expected function");
-
-            if path != data.path() {
-                panic!(
-                    "`{}` subcommand must be defined in the same file than the root `command`.\
-                \nbut was defined in `{}`",
-                    item_fn.sig.ident,
-                    data.path().display()
-                );
-            }
-
-            let attr = NameValueAttribute::from_attribute_args(keys::SUBCOMMAND, args).unwrap();
-            ret.push((attr, item_fn));
-        }
-        ret
-    }
-
-    fn get_subcommands_from_file(file: &File) -> Vec<(NameValueAttribute, ItemFn)> {
+    fn get_subcommands_item_fn_from_file(file: &File) -> Vec<ItemFn> {
         let mut ret = Vec::new();
         for item in &file.items {
             match item {
+                Item::Fn(item_fn) if item_fn.contains_attribute(keys::SUBCOMMAND) => {
+                    ret.push(item_fn.clone());
+                }
+                _ => {}
+            }
+        }
+
+        ret
+    }
+
+    fn get_subcommands_item_fn_from_path(path: &Path) -> Vec<ItemFn> {
+        let mut ret = Vec::new();
+        let src = std::fs::read_to_string(path).unwrap();
+        let file = syn::parse_file(&src).unwrap();
+
+        for item in &file.items {
+            match item {
+                Item::Fn(item_fn) if item_fn.contains_attribute(keys::SUBCOMMAND) => {
+                    ret.push(item_fn.clone());
+                }
+                _ => {}
+            }
+        }
+
+        ret
+    }
+
+    fn find_subcommand_item_fn_from_path_recursive(
+        root_path: &Path,
+        file: &File,
+    ) -> Vec<(ItemFn, PathBuf)> {
+        let mut ret = Vec::new();
+
+        for item in &file.items {
+            match item {
+                // If the item is a module, find the `subcommands` in the files
+                Item::Mod(item_mod) => {
+                    // Find the `path` of the module, which is either a module path or a file
+                    if let Some(path) = find_item_mod_path(root_path, item_mod) {
+                        // If is a file find the `subcommands` and add all
+                        if path.is_file() {
+                            ret.extend(
+                                get_subcommands_item_fn_from_path(&path)
+                                    .iter()
+                                    .map(|f| (f.clone(), path.clone())),
+                            );
+                        } else {
+                            // If is a directory find the `mod.rs` to locate all the files
+                            if let Ok(read_dir) = path.read_dir() {
+                                for e in read_dir {
+                                    if let Ok(entry) = e {
+                                        // File path
+                                        let path = entry.path();
+                                        if path.is_file() && entry.file_name() == "mod.rs" {
+                                            let src =
+                                                std::fs::read_to_string(entry.path()).unwrap();
+                                            let file = syn::parse_file(&src).unwrap();
+                                            let subcommands =
+                                                find_subcommand_item_fn_from_path_recursive(
+                                                    &path, &file,
+                                                );
+                                            ret.extend(subcommands);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // If the item is a function, add it if is a `subcommand`
                 Item::Fn(item_fn) => {
-                    if let Some(attr) = get_subcommand_attribute(item_fn) {
-                        ret.push((attr, item_fn.clone()));
+                    if item_fn.contains_attribute(keys::SUBCOMMAND) {
+                        ret.push((item_fn.clone(), root_path.to_path_buf()));
                     }
                 }
                 _ => {}
@@ -740,44 +881,68 @@ mod command_file {
         ret
     }
 
-    fn get_subcommands_from_module(module: &ItemMod) -> Vec<(NameValueAttribute, ItemFn)> {
-        let mut ret = Vec::new();
-
-        if let Some((_, content)) = module.content.as_ref() {
-            for item in content {
-                if let Item::Fn(item_fn) = item {
-                    let attr = get_subcommand_attribute(item_fn).unwrap();
-                    ret.push((attr, item_fn.clone()));
-                }
-            }
+    fn find_item_mod_path(root_path: &Path, mod_item: &ItemMod) -> Option<PathBuf> {
+        if mod_item.content.is_some() {
+            Some(root_path.to_path_buf())
+        } else {
+            let mod_name = mod_item.ident.to_string();
+            find_item_mod_path_by_name(root_path, mod_name)
         }
-
-        ret
     }
 
-    fn get_subcommands_from_path(path: &Path) -> Vec<CommandFromPath> {
-        let content = std::fs::read_to_string(path).unwrap();
-        let file = syn::parse_file(content.as_str()).unwrap();
-        let mut subcommands = Vec::new();
+    fn find_item_mod_path_by_name(cur_path: &Path, mod_item_name: String) -> Option<PathBuf> {
+        if cur_path.is_file() {
+            if let Some(parent) = cur_path.parent() {
+                return find_item_mod_path_by_name(parent, mod_item_name.clone());
+            }
+        }
 
-        for item in file.items {
-            if let Some(item_fn) = matches_map!(item, Item::Fn(f) => f) {
-                let name_value_attr = item_fn
-                    .attrs
-                    .iter()
-                    .find(|att| keys::is_subcommand(&path_to_string(&att.path)))
-                    .map(|att| NameValueAttribute::try_from(att.clone()).unwrap());
-
-                if let Some(attr) = name_value_attr {
-                    subcommands.push(CommandFromPath {
-                        path: path.to_path_buf(),
-                        attr,
-                        item_fn,
-                    })
+        for dir in cur_path.read_dir().ok()? {
+            if let Ok(entry) = dir {
+                let path = entry.path();
+                if path.is_file() {
+                    if path.file_stem().unwrap() == mod_item_name.as_str() {
+                        if path.extension().unwrap() != "rs" {
+                            return None;
+                        }
+                        return Some(path);
+                    }
+                } else {
+                    // Is is a directory and the name matches is a `mod`
+                    if path.file_name().unwrap() == mod_item_name.as_str() {
+                        return Some(path);
+                    }
+                    return find_item_mod_path_by_name(&path, mod_item_name.clone());
                 }
             }
         }
 
-        subcommands
+        if let Some(parent) = cur_path.parent() {
+            // Don't go after the `src/` parent
+            if cur_path.file_name().unwrap() == "src" {
+                return None;
+            }
+
+            return find_item_mod_path_by_name(parent, mod_item_name.clone());
+        } else {
+            None
+        }
     }
 }
+/*
+- src/
+    - utils/
+        - printer.rs
+        - unsafe/
+            - pointer.rs
+    - create.rs
+    - main.rs
+*/
+
+/*
+mod create;
+mod delete;
+mod utils;
+
+fn main(){}
+*/
