@@ -167,8 +167,16 @@ impl Options {
     /// # Returns
     /// `false` if there is an option with the same alias than the provided one.
     pub fn add(&mut self, option: CommandOption) -> bool {
-        for alias in option.aliases() {
-            if self.contains(alias) {
+        // Check for duplicated aliases
+        for alias in &option.aliases {
+            if self.contains(alias){
+                return false;
+            }
+        }
+
+        // Check if any of the aliases is equals to the option name
+        for opt in &self.inner {
+            if option.aliases.contains(opt.name()) || opt.aliases.contains(option.name()){
                 return false;
             }
         }

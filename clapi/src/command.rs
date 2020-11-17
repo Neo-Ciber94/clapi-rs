@@ -115,7 +115,12 @@ impl Command {
 
     /// Adds an `CommandOption` to this command.
     pub fn set_option(mut self, option: CommandOption) -> Self {
-        self.options.add(option);
+        if cfg!(debug_assertions){
+            let option_name = option.name().to_string();
+            assert!(self.options.add(option), "`CommandOption` `{}` already exists in command `{}`", option_name, self.name);
+        } else {
+            self.options.add(option);
+        }
         self
     }
 
@@ -169,7 +174,7 @@ impl Command {
 
     #[inline]
     pub(crate) fn add_command(&mut self, mut command: Command) {
-        // todo: panic if duplicated command
+        debug_assert!(!self.children.contains(&command), "`Command` {} already exists in `{}`", command.name, self.name);
         command.parent = Some(Symbol::Command(self.name.clone()));
         self.children.insert(command);
     }
@@ -226,28 +231,6 @@ impl<'a> IntoIterator for &'a Command {
     }
 }
 
-mod cmd_mut {
-    use super::*;
-
-    pub struct CommandMut<'a> {
-        command: &'a mut Command,
-    }
-
-    impl<'a> CommandMut<'a> {
-        fn new(command: &'a mut Command) -> Self {
-            CommandMut { command }
-        }
-
-        pub fn add_description(&mut self, description: &str) {
-            self.command.description = Some(description.to_string());
-        }
-
-        pub fn add_command(&mut self, command: Command) -> bool {
-            self.command.children.insert(command)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -282,6 +265,15 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn duplicated_command_test(){
+        Command::new("data")
+            .set_command(Command::new("set"))
+            .set_command(Command::new("get").set_command(Command::new("first")))
+            .set_command(Command::new("get"));
+    }
+
+    #[test]
     fn option_test() {
         let cmd = Command::new("time")
             .set_option(CommandOption::new("version").set_alias("v"))
@@ -292,6 +284,33 @@ mod tests {
             Some(&CommandOption::new("version"))
         );
         assert_eq!(cmd.options().get("v"), Some(&CommandOption::new("version")));
+    }
+
+    #[test]
+    #[should_panic]
+    fn duplicated_option_test1(){
+        Command::new("time")
+            .set_option(CommandOption::new("version").set_alias("v"))
+            .set_option(CommandOption::new("day_of_week").set_alias("dw"))
+            .set_option(CommandOption::new("version"));
+    }
+
+    #[test]
+    #[should_panic]
+    fn duplicated_option_test2(){
+        Command::new("time")
+            .set_option(CommandOption::new("version").set_alias("v"))
+            .set_option(CommandOption::new("day_of_week").set_alias("dw"))
+            .set_option(CommandOption::new("v"));
+    }
+
+    #[test]
+    #[should_panic]
+    fn duplicated_option_test3(){
+        Command::new("time")
+            .set_option(CommandOption::new("version").set_alias("v"))
+            .set_option(CommandOption::new("day_of_week").set_alias("dw"))
+            .set_option(CommandOption::new("verbose").set_alias("v"));
     }
 
     #[test]
