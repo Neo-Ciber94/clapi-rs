@@ -2,9 +2,10 @@
 #![allow(unused_must_use)]
 
 mod inner_cell;
-mod ext;
 mod lazy;
 mod once_cell;
+
+mod ext;
 pub use ext::*;
 
 pub trait Then: Sized {

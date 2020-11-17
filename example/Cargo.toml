@@ -5,6 +5,5 @@ authors = ["Freddy L P.B <freddy_luis_94@hotmail.com>"]
 edition = "2018"
 
 [dependencies]
-clapi= { path="../clapi" }
-clapi_macros= { path="../clapi_macros" }
+clapi = { path="../clapi", features=["macros"] }
 cargo-inspect = "0.10.3"

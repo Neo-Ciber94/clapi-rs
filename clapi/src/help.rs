@@ -63,8 +63,12 @@ impl HelpCommand for DefaultHelpCommand {
         if command.args().take_args() || command.options().len() > 0 || command.children().len() > 0
         {
             writer.section("USAGE:", |w| {
+                let args_name = command.args().name()
+                    .map(|s| s.to_uppercase())
+                    .unwrap_or_else(|| "ARGS".to_owned());
+
                 if command.args().take_args() {
-                    w.writeln(format!("{} [ARGS]", command.name()));
+                    w.writeln(format!("{} <{}>", command.name(), args_name));
                 }
 
                 if command.options().len() > 0 {
@@ -72,7 +76,7 @@ impl HelpCommand for DefaultHelpCommand {
                     write!(result, " [OPTIONS]").unwrap();
 
                     if command.options().iter().any(|o| o.take_args()) {
-                        write!(result, " [ARGS]").unwrap();
+                        write!(result, " <{}>", args_name).unwrap();
                     }
 
                     w.writeln(result);
@@ -82,7 +86,7 @@ impl HelpCommand for DefaultHelpCommand {
                     let mut children = command.children();
 
                     if children.any(|c| c.args().take_args()) {
-                        w.writeln(format!("{} [SUBCOMMAND] [ARGS]", command.name()));
+                        w.writeln(format!("{} [SUBCOMMAND] <ARGS>", command.name()));
                     }
 
                     if children.any(|c| c.options().len() > 0) {
@@ -90,7 +94,7 @@ impl HelpCommand for DefaultHelpCommand {
                         write!(result, " [SUBCOMMAND] [OPTIONS]").unwrap();
 
                         if children.any(|c| c.options().iter().any(|o| o.take_args())) {
-                            write!(result, " [ARGS]").unwrap();
+                            write!(result, " <ARGS>").unwrap();
                         }
 
                         w.writeln(result);

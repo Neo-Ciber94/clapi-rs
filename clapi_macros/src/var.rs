@@ -30,7 +30,6 @@ impl ArgLocalVar {
     pub fn expand(&self) -> TokenStream {
         let var_name = self.name.parse::<TokenStream>().unwrap();
         let is_mut = if self.is_mut { quote! { mut }} else { quote! {} };
-        // todo: Use `try?` operator when the `var` belongs to a function that returns `Result`
         let source = match self.source {
             VarSource::Args(_) => self.get_args_source(),
             VarSource::Opts => self.get_opts_source(),
@@ -65,20 +64,19 @@ impl ArgLocalVar {
 
     fn get_opts_source(&self) -> TokenStream {
         let arg_name = quote_expr!(self.name);
-        let msg = format!("argument `{}`", self.name);
 
         match &self.ty {
             ArgType::Raw(ty) => {
-                quote! { opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0).expect(#msg) }
+                quote! { opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0)?}
             }
             ArgType::Vec(ty) | ArgType::Slice(ty) | ArgType::MutSlice(ty) => {
-                quote! { opts.get_args(#arg_name).unwrap().convert_all::<#ty>().expect(#msg) }
+                quote! { opts.get_args(#arg_name).unwrap().convert_all::<#ty>()? }
             }
             ArgType::Option(ty) => {
                 quote! {
                     match opts.len(){
                         0 => None,
-                        _ => Some(opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0).expect(#msg))
+                        _ => Some(opts.get_args(#arg_name).unwrap().convert_at::<#ty>(0)?)
                     }
                 }
             }
@@ -86,24 +84,22 @@ impl ArgLocalVar {
     }
 
     fn get_args_source(&self) -> TokenStream {
-        let msg = format!("argument `{}`", self.name);
-
         match &self.ty {
             ArgType::Raw(ty) => {
                 if let VarSource::Args(index) = self.source {
-                    quote! { args.convert_at::<#ty>(#index).expect(#msg) }
+                    quote! { args.convert_at::<#ty>(#index)? }
                 } else {
                     unreachable!()
                 }
             }
             ArgType::Vec(ty) | ArgType::Slice(ty) | ArgType::MutSlice(ty) => {
-                quote! { args.convert_all::<#ty>().expect(#msg) }
+                quote! { args.convert_all::<#ty>()? }
             }
             ArgType::Option(ty) => {
                 quote! {
                     match args.values().len(){
                         0 => None,
-                        _ => Some(args.convert_at::<#ty>(0).expect(#msg))
+                        _ => Some(args.convert_at::<#ty>(0)?)
                     }
                 }
             }

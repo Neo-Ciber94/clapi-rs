@@ -4,5 +4,9 @@ version = "0.1.0"
 authors = ["Freddy L. <freddy_luis_94@hotmail.com>"]
 edition = "2018"
 
+[features]
+macros = ["clapi_macros"]
+
 [dependencies]
 linked_hash_set = "0.1.4"
+clapi_macros = { optional=true, path="../clapi_macros"}

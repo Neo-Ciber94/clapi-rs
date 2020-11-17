@@ -1,4 +1,4 @@
-use clapi_macros::*;
+use super::*;
 use std::time::Duration;
 
 #[subcommand]

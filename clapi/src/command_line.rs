@@ -7,7 +7,6 @@ use crate::root_command::RootCommand;
 use crate::suggestion::{SingleSuggestionProvider, SuggestionProvider};
 use crate::utils::OptionExt;
 use std::fmt::{Debug, Formatter};
-use std::ops::DerefMut;
 
 /// Represents a command-line app.
 pub struct CommandLine {
@@ -128,7 +127,7 @@ impl CommandLine {
 
         let parse_result = match result {
             Ok(r) => r,
-            Err(error) => return self.handle_parse_error(error),
+            Err(error) => return self.handle_error(error),
         };
 
         let command = parse_result.command();
@@ -144,7 +143,8 @@ impl CommandLine {
         if let Some(mut handler) = handler {
             let options = parse_result.options();
             let args = parse_result.args();
-            handler.deref_mut()(options, args)
+            // Calls the handler and pass the arguments
+            (*handler)(options, args)
         } else {
             if self.show_help_when_not_handler {
                 self.display_help(&[])
@@ -165,7 +165,7 @@ impl CommandLine {
         self.exec(std::env::args().skip(1))
     }
 
-    fn handle_parse_error(&self, error: Error) -> Result<()> {
+    fn handle_error(&self, error: Error) -> Result<()> {
         if *error.kind() == ErrorKind::EmptyExpression && self.help.is_some() {
             return self.display_help(&[]);
         }
@@ -178,6 +178,7 @@ impl CommandLine {
 
             return Err(self.display_suggestions(parse_error));
         }
+
 
         return Err(error);
     }
@@ -231,33 +232,37 @@ impl CommandLine {
         let kind = parse_error.kind();
 
         let (value, source) = match kind {
-            ErrorKind::UnrecognizedCommand(s) => {
-                (s, parse_error
+            ErrorKind::UnrecognizedCommand(s) => (
+                s,
+                parse_error
                     .command()
                     .children()
                     .map(|c| c.name().to_string())
-                    .collect::<Vec<String>>())
-            },
-            ErrorKind::UnrecognizedOption(_, s) => {
-                (s, parse_error
+                    .collect::<Vec<String>>(),
+            ),
+            ErrorKind::UnrecognizedOption(_, s) => (
+                s,
+                parse_error
                     .command()
                     .options()
                     .iter()
                     .map(|o| o.name().to_string())
-                    .collect::<Vec<String>>())
-            },
+                    .collect::<Vec<String>>(),
+            ),
             // Forwards the error
-            _ => return Error::from(parse_error)
+            _ => return Error::from(parse_error),
         };
 
-        let suggestions = provider.suggestions_for(value, &source)
+        let suggestions = provider
+            .suggestions_for(value, &source)
             .map(|result| {
                 provider.suggestion_message_for(result.map(|s| {
                     let context = self.context();
                     let options = parse_error.command().options();
                     prefix_option(context, options, s)
                 }))
-            }).flatten();
+            })
+            .flatten();
 
         if let Some(msg) = suggestions {
             Error::new(kind.clone(), msg)
@@ -268,13 +273,13 @@ impl CommandLine {
 }
 
 fn prefix_option(context: &Context, options: &crate::option::Options, name: String) -> String {
-    if options.get_by_alias(&name).is_some(){
-        let prefix : String = context.alias_prefixes().next().cloned().unwrap();
+    if options.get_by_alias(&name).is_some() {
+        let prefix: String = context.alias_prefixes().next().cloned().unwrap();
         return format!("{}{}", prefix, name);
     }
 
-    if options.get_by_name(&name).is_some(){
-        let prefix : String = context.name_prefixes().next().cloned().unwrap();
+    if options.get_by_name(&name).is_some() {
+        let prefix: String = context.name_prefixes().next().cloned().unwrap();
         return format!("{}{}", prefix, name);
     }
 

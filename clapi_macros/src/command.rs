@@ -364,7 +364,6 @@ mod cmd {
     use syn::export::ToTokens;
     use syn::{Attribute, AttributeArgs, File, FnArg, Item, ItemFn, ItemMod, PatType, Stmt, Type};
 
-    use clapi::utils::OptionExt;
     use macro_attribute::{literal_to_string, MacroAttribute, NameValueAttribute, Value};
 
     use crate::args::ArgData;
@@ -648,7 +647,9 @@ mod cmd {
                         att.get(keys::NAME)
                             .map(|v| v.as_string_literal())
                             .flatten()
-                            .contains_some(&fn_arg.name)
+                            .filter(|s| s == &fn_arg.name)
+                            .is_some()
+                            //.contains_some(&fn_arg.name)
                     })
                     .cloned();
 

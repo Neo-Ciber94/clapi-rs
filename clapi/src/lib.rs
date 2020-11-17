@@ -15,3 +15,12 @@ pub mod root_command;
 pub mod suggestion;
 pub mod symbol;
 pub mod tokenizer;
+
+#[cfg(feature="macros")]
+pub mod macros {
+    extern crate clapi_macros;
+    pub use clapi_macros::*;
+}
+
+#[cfg(feature="macros")]
+pub use macros::*;

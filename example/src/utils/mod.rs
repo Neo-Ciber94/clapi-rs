@@ -1,4 +1,4 @@
-use clapi_macros::*;
+use super::*;
 pub mod timer;
 
 #[subcommand]

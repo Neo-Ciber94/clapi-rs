@@ -1,8 +1,7 @@
 #![allow(dead_code)]
-extern crate clapi_macros;
-use clapi_macros::*;
+use clapi::macros::*;
 
-mod count;
+//mod count;
 mod utils;
 
 use clapi::args::Arguments;
@@ -11,6 +10,7 @@ use clapi::command_line::CommandLine;
 use clapi::error::Result;
 use clapi::option::CommandOption;
 use clapi::root_command::RootCommand;
+//use std::net::IpAddr;
 
 #[subcommand(description="Prints a value to the console")]
 #[option(name="times", alias="t", default=1)]
@@ -25,7 +25,7 @@ fn echo(times: usize, values: Vec<String>) {
     }
 }
 
-#[command(version=1.0)]
+#[command]
 #[option(name="repeat", alias="r", default=1)]
 #[arg(name="numbers")]
 fn main(repeat: usize, numbers: Vec<i32>)  -> Result<()> {
