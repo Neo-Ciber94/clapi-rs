@@ -84,7 +84,7 @@ where
                 result_options.add(option);
             } else {
                 return Err(Error::new_parse_error(
-                    Error::from(ErrorKind::UnrecognizedOption(s.clone())),
+                    Error::from(ErrorKind::UnrecognizedOption(prefix.clone(), s.clone())),
                     command.clone(),
                     None,
                     None,

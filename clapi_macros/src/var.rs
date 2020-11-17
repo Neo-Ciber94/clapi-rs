@@ -30,6 +30,7 @@ impl ArgLocalVar {
     pub fn expand(&self) -> TokenStream {
         let var_name = self.name.parse::<TokenStream>().unwrap();
         let is_mut = if self.is_mut { quote! { mut }} else { quote! {} };
+        // todo: Use `try?` operator when the `var` belongs to a function that returns `Result`
         let source = match self.source {
             VarSource::Args(_) => self.get_args_source(),
             VarSource::Opts => self.get_opts_source(),
@@ -64,7 +65,7 @@ impl ArgLocalVar {
 
     fn get_opts_source(&self) -> TokenStream {
         let arg_name = quote_expr!(self.name);
-        let msg = format!("`{}`", self.name);
+        let msg = format!("argument `{}`", self.name);
 
         match &self.ty {
             ArgType::Raw(ty) => {
@@ -85,7 +86,7 @@ impl ArgLocalVar {
     }
 
     fn get_args_source(&self) -> TokenStream {
-        let msg = format!("`{}`", self.name);
+        let msg = format!("argument `{}`", self.name);
 
         match &self.ty {
             ArgType::Raw(ty) => {

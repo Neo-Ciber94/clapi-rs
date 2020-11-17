@@ -150,7 +150,7 @@ impl CommandLine {
                 self.display_help(&[])
             } else {
                 Err(Error::new(
-                    ErrorKind::Unknown,
+                    ErrorKind::Other,
                     format!("No handler specified for `{}`", command.name()),
                 ))
             }
@@ -226,38 +226,38 @@ impl CommandLine {
     }
 
     fn display_suggestions(&self, parse_error: ParseError) -> Error {
+        // SAFETY: We check if the method is `Some` before enter
+        let provider = self.suggestions.as_ref().unwrap();
         let kind = parse_error.kind();
-        let suggestions = match kind {
+
+        let (value, source) = match kind {
             ErrorKind::UnrecognizedCommand(s) => {
-                let command_names = parse_error
+                (s, parse_error
                     .command()
                     .children()
                     .map(|c| c.name().to_string())
-                    .collect::<Vec<String>>();
-
-                self.suggestions
-                    .as_ref()
-                    .unwrap()
-                    .suggestion_message_for(&s, &command_names)
-            }
-            ErrorKind::UnrecognizedOption(s) => {
-                let option_names = parse_error
+                    .collect::<Vec<String>>())
+            },
+            ErrorKind::UnrecognizedOption(_, s) => {
+                (s, parse_error
                     .command()
                     .options()
                     .iter()
                     .map(|o| o.name().to_string())
-                    .collect::<Vec<String>>();
-
-                self.suggestions
-                    .as_ref()
-                    .unwrap()
-                    .suggestion_message_for(&s, &option_names)
-            }
-            _ => {
-                // Forwards the error
-                return Error::from(parse_error);
-            }
+                    .collect::<Vec<String>>())
+            },
+            // Forwards the error
+            _ => return Error::from(parse_error)
         };
+
+        let suggestions = provider.suggestions_for(value, &source)
+            .map(|result| {
+                provider.suggestion_message_for(result.map(|s| {
+                    let context = self.context();
+                    let options = parse_error.command().options();
+                    prefix_option(context, options, s)
+                }))
+            }).flatten();
 
         if let Some(msg) = suggestions {
             Error::new(kind.clone(), msg)
@@ -265,6 +265,20 @@ impl CommandLine {
             Error::from(parse_error)
         }
     }
+}
+
+fn prefix_option(context: &Context, options: &crate::option::Options, name: String) -> String {
+    if options.get_by_alias(&name).is_some(){
+        let prefix : String = context.alias_prefixes().next().cloned().unwrap();
+        return format!("{}{}", prefix, name);
+    }
+
+    if options.get_by_name(&name).is_some(){
+        let prefix : String = context.name_prefixes().next().cloned().unwrap();
+        return format!("{}{}", prefix, name);
+    }
+
+    name
 }
 
 impl Debug for CommandLine {

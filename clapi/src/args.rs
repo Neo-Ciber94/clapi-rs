@@ -349,7 +349,7 @@ impl Arguments {
         if self.arity.takes_args() {
             if index > self.values.len() {
                 return Err(Error::new(
-                    ErrorKind::Unknown,
+                    ErrorKind::Other,
                     format!(
                         "index out of bounds: length is {} but index is {}",
                         self.values.len(),
@@ -445,11 +445,11 @@ where
 {
     match T::from_str(value) {
         Ok(n) => Ok(n),
-        Err(error) => {
+        Err(_) => {
             let type_name = std::any::type_name::<T>();
             return Err(Error::new(
-                ErrorKind::Unknown,
-            format!("failed to parse `{:?}` to `{}`\n{}", value, type_name, error))
+                ErrorKind::Other,
+                format!("failed to parse `{:?}` to `{}`", value, type_name))
             );
         },
     }

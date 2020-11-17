@@ -115,9 +115,14 @@ impl Command {
 
     /// Adds an `CommandOption` to this command.
     pub fn set_option(mut self, option: CommandOption) -> Self {
-        if cfg!(debug_assertions){
+        if cfg!(debug_assertions) {
             let option_name = option.name().to_string();
-            assert!(self.options.add(option), "`CommandOption` `{}` already exists in command `{}`", option_name, self.name);
+            assert!(
+                self.options.add(option),
+                "`{}` already contains a `CommandOption` named: `{}`",
+                self.name,
+                option_name,
+            );
         } else {
             self.options.add(option);
         }
@@ -174,7 +179,12 @@ impl Command {
 
     #[inline]
     pub(crate) fn add_command(&mut self, mut command: Command) {
-        debug_assert!(!self.children.contains(&command), "`Command` {} already exists in `{}`", command.name, self.name);
+        debug_assert!(
+            !self.children.contains(&command),
+            "`{}` already contains a command named: `{}`",
+            command.name,
+            self.name
+        );
         command.parent = Some(Symbol::Command(self.name.clone()));
         self.children.insert(command);
     }
@@ -266,7 +276,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn duplicated_command_test(){
+    fn duplicated_command_test() {
         Command::new("data")
             .set_command(Command::new("set"))
             .set_command(Command::new("get").set_command(Command::new("first")))
@@ -288,7 +298,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn duplicated_option_test1(){
+    fn duplicated_option_test1() {
         Command::new("time")
             .set_option(CommandOption::new("version").set_alias("v"))
             .set_option(CommandOption::new("day_of_week").set_alias("dw"))
@@ -297,7 +307,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn duplicated_option_test2(){
+    fn duplicated_option_test2() {
         Command::new("time")
             .set_option(CommandOption::new("version").set_alias("v"))
             .set_option(CommandOption::new("day_of_week").set_alias("dw"))
@@ -306,7 +316,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn duplicated_option_test3(){
+    fn duplicated_option_test3() {
         Command::new("time")
             .set_option(CommandOption::new("version").set_alias("v"))
             .set_option(CommandOption::new("day_of_week").set_alias("dw"))

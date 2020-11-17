@@ -1,4 +1,5 @@
 use crate::utils::{Also, Then};
+use std::borrow::Borrow;
 
 /// Provides suggestions matches a value.
 ///
@@ -8,23 +9,21 @@ use crate::utils::{Also, Then};
 pub trait SuggestionProvider {
     /// Returns the suggestion values for the given `source` and `value`,
     /// or `None` if not suggestion if found.
-    fn suggestions_for(&self, value: &str, source: &[String]) -> Option<Vec<String>>;
+    fn suggestions_for(&self, value: &str, source: &[String]) -> Option<SuggestionResult>;
 
-    /// Returns a suggestion message with the suggestion values.
-    /// By default this method returns a message for when a single match is found and other
-    /// when multiple matches are found.
-    fn suggestion_message_for(&self, value: &str, source: &[String]) -> Option<String> {
-        if let Some(suggestions) = self.suggestions_for(value, source) {
-            match suggestions.len() {
-                0 => None,
-                1 => Some(format!("\n\n\tDid you mean `{}`?\n", suggestions[0])),
-                _ => {
-                    let formatted_values = suggestions.join("\n");
-                    Some(format!("Possible values: \n{}", formatted_values))
-                }
+    /// Provides a message for the given suggestions.
+    fn suggestion_message_for(&self, suggestions: SuggestionResult) -> Option<String>{
+        match suggestions {
+            SuggestionResult::Value(s) => Some(format!("\n\n\tDid you mean `{}`?\n", s)),
+            SuggestionResult::List(values) => {
+                let formatted_values = values
+                    .into_iter()
+                    .map(|s| format!("`{}`", s))
+                    .collect::<Vec<String>>()
+                    .join("\n");
+
+                Some(format!("Possible values: \n{}", formatted_values))
             }
-        } else {
-            None
         }
     }
 }
@@ -45,18 +44,16 @@ pub trait SuggestionProvider {
 ///
 /// assert!(provider.suggestions_for("berry", &source)
 ///     .unwrap()
-///     .contains(&String::from("strawberry")));
+///     .contains("strawberry"));
 ///
 /// assert!(provider.suggestions_for("maple", &source)
 ///     .unwrap()
-///     .contains(&String::from("apple")));
+///     .contains("apple"));
 /// ```
 ///
 /// # See
 /// https://en.wikipedia.org/wiki/Levenshtein_distance
-pub struct DefaultSuggestionProvider {
-    max_count: usize,
-}
+pub struct DefaultSuggestionProvider { max_count: usize }
 impl DefaultSuggestionProvider {
     /// Constructs a new `DefaultSuggestionProvider` that returns a max of 5 suggestions.
     pub const fn new() -> Self {
@@ -77,7 +74,7 @@ impl DefaultSuggestionProvider {
 }
 
 impl SuggestionProvider for DefaultSuggestionProvider {
-    fn suggestions_for(&self, value: &str, source: &[String]) -> Option<Vec<String>> {
+    fn suggestions_for(&self, value: &str, source: &[String]) -> Option<SuggestionResult> {
         source
             .iter()
             .map(|s| (s, compute_levenshtein_distance_ignore_case(&value, &s)))
@@ -88,7 +85,17 @@ impl SuggestionProvider for DefaultSuggestionProvider {
             .map(|s| s.0)
             .cloned()
             .collect::<Vec<String>>()
-            .then_apply(|v| Some(v))
+            .then_apply(|mut result| {
+               if result.is_empty() {
+                   None
+               } else {
+                   if result.len() == 1 {
+                       Some(SuggestionResult::Value(result.swap_remove(0)))
+                   } else {
+                       Some(SuggestionResult::List(result))
+                   }
+               }
+            })
     }
 }
 
@@ -108,14 +115,14 @@ impl SuggestionProvider for DefaultSuggestionProvider {
 ///
 /// assert!(provider.suggestions_for("maple", &source)
 ///     .unwrap()
-///     .contains(&String::from("apple")));
+///     .contains("apple"));
 /// ```
 ///
 /// # See
 /// https://en.wikipedia.org/wiki/Levenshtein_distance
 pub struct SingleSuggestionProvider;
 impl SuggestionProvider for SingleSuggestionProvider {
-    fn suggestions_for(&self, value: &str, source: &[String]) -> Option<Vec<String>> {
+    fn suggestions_for(&self, value: &str, source: &[String]) -> Option<SuggestionResult> {
         let mut current = None;
         let mut current_cost = usize::max_value();
 
@@ -128,9 +135,37 @@ impl SuggestionProvider for SingleSuggestionProvider {
         }
 
         if let Some(result) = current.cloned() {
-            Some(std::slice::from_ref(&result).to_vec())
+            Some(SuggestionResult::Value(result))
         } else {
             None
+        }
+    }
+}
+
+/// Represents the values of a suggestion.
+pub enum SuggestionResult {
+    /// A single suggestion value.
+    Value(String),
+    /// A list of suggested values.
+    List(Vec<String>)
+}
+
+impl SuggestionResult {
+    pub fn contains<S: Borrow<str>>(&self, value: S) -> bool {
+        match self {
+            SuggestionResult::Value(s) => s == value.borrow(),
+            SuggestionResult::List(values) => {
+                values.iter().any(|s| s == value.borrow())
+            }
+        }
+    }
+
+    pub fn map<F: Fn(String) -> String>(self, f: F) -> SuggestionResult {
+        match self {
+            SuggestionResult::Value(s) => SuggestionResult::Value(f(s)),
+            SuggestionResult::List(values) => {
+                SuggestionResult::List(values.into_iter().map(f).collect())
+            }
         }
     }
 }

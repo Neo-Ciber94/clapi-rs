@@ -96,7 +96,7 @@ impl Display for Error {
             Inner::Simple(kind) => Display::fmt(kind, f),
             Inner::Parsed(error) => Display::fmt(error.inner(), f),
             Inner::Custom(custom) => {
-                if matches!(custom.kind, ErrorKind::Unknown) {
+                if matches!(custom.kind, ErrorKind::Other) {
                     write!(f, "{}", custom.error)
                 } else {
                     write!(f, "{}: {}", custom.kind, custom.error)
@@ -138,13 +138,13 @@ pub enum ErrorKind {
     /// The expression is empty.
     EmptyExpression,
     /// The option is not found in the command.
-    UnrecognizedOption(String),
+    UnrecognizedOption(String, String),
     /// The command is not found in the parent.
     UnrecognizedCommand(String),
     /// The option is required.
     MissingOption(String),
-    /// Unknown error.
-    Unknown,
+    /// An error no listed.
+    Other,
 }
 
 impl Display for ErrorKind {
@@ -154,10 +154,10 @@ impl Display for ErrorKind {
             ErrorKind::InvalidArgumentCount => write!(f, "invalid argument count"),
             ErrorKind::InvalidExpression => write!(f, "invalid expression"),
             ErrorKind::EmptyExpression => write!(f, "empty expression"),
-            ErrorKind::UnrecognizedOption(s) => write!(f, "unrecognized option: '{}'", s),
+            ErrorKind::UnrecognizedOption(p, s) => write!(f, "unrecognized option: '{}{}'", p, s),
             ErrorKind::UnrecognizedCommand(s) => write!(f, "unrecognized command: '{}'", s),
             ErrorKind::MissingOption(s) => write!(f, "'{}' is required", s),
-            ErrorKind::Unknown => write!(f, "unknown error"),
+            ErrorKind::Other => write!(f, "unknown error"),
         }
     }
 }
