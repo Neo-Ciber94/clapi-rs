@@ -1,6 +1,6 @@
 use crate::utils::pat_type_to_string;
 use crate::var::ArgType;
-use crate::{LitExtensions, TypeExtensions, keys};
+use crate::{LitExtensions, TypeExtensions, attr};
 use macro_attribute::{literal_to_string, NameValueAttribute, Value};
 use proc_macro2::TokenStream;
 use quote::*;
@@ -191,8 +191,8 @@ fn new_arg_tokens_from_attr_data(attr: NameValueAttribute, pat_type: &PatType) -
 
     for (key, value) in &attr {
         match key.as_str() {
-            keys::NAME => { /* Ignore */ }
-            keys::MIN => {
+            attr::NAME => { /* Ignore */ }
+            attr::MIN => {
                 let min = value
                     .clone()
                     .parse_literal::<usize>()
@@ -200,7 +200,7 @@ fn new_arg_tokens_from_attr_data(attr: NameValueAttribute, pat_type: &PatType) -
 
                 args.set_min(min);
             }
-            keys::MAX => {
+            attr::MAX => {
                 let max = value
                     .clone()
                     .parse_literal::<usize>()
@@ -208,7 +208,7 @@ fn new_arg_tokens_from_attr_data(attr: NameValueAttribute, pat_type: &PatType) -
 
                 args.set_max(max);
             }
-            keys::DEFAULT => match value {
+            attr::DEFAULT => match value {
                 Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
                 Value::Array(array) => args.set_default_values(array.clone()),
             },

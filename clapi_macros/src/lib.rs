@@ -14,7 +14,7 @@ mod utils;
 mod args;
 mod command;
 mod ext;
-mod keys;
+mod attr;
 mod option;
 mod shared;
 mod var;
