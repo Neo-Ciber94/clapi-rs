@@ -332,7 +332,7 @@ impl From<Command> for CommandLine {
 ///
 /// # Example
 /// ```rust
-/// use clapi::command_line::into_arg_iterator;
+/// use clapi::into_arg_iterator;
 ///
 /// let result = into_arg_iterator("echo \"Hello World\" 123");
 /// assert_eq!(
@@ -343,6 +343,7 @@ impl From<Command> for CommandLine {
 /// result);
 /// ```
 #[inline]
+#[doc(hidden)]
 pub fn into_arg_iterator(value: &str) -> Vec<String> {
     into_arg_iterator_with_quote_escape(value, '\\')
 }
@@ -354,7 +355,7 @@ pub fn into_arg_iterator(value: &str) -> Vec<String> {
 ///
 /// # Example
 /// ```rust
-/// use clapi::command_line::into_platform_arg_iterator;
+/// use clapi::into_platform_arg_iterator;
 ///
 /// // on windows
 /// if cfg!(windows){
@@ -366,6 +367,7 @@ pub fn into_arg_iterator(value: &str) -> Vec<String> {
 /// }
 /// ```
 #[inline]
+#[doc(hidden)]
 pub fn into_platform_arg_iterator(value: &str) -> Vec<String> {
     #[cfg(target_os = "windows")]
     const QUOTE_ESCAPE: char = '^';
@@ -377,6 +379,7 @@ pub fn into_platform_arg_iterator(value: &str) -> Vec<String> {
 
 /// Split the given value `&str` into command-line args
 /// using the specified `quote_escape`.
+#[doc(hidden)]
 pub fn into_arg_iterator_with_quote_escape(value: &str, quote_escape: char) -> Vec<String> {
     const DOUBLE_QUOTE: char = '"';
 

@@ -25,7 +25,7 @@ impl Error {
     ///
     /// # Example
     /// ```rust
-    /// use clapi::error::{Error, ErrorKind};
+    /// use clapi::{Error, ErrorKind};
     ///
     /// let error = Error::new(ErrorKind::InvalidArgumentCount, "expect 1 or more arguments");
     /// assert!(matches!(error.kind(), ErrorKind::InvalidArgumentCount));

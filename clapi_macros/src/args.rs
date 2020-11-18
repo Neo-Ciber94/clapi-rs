@@ -108,7 +108,7 @@ impl ArgData {
             .unwrap_or_else(|| quote!{ });
 
         quote! {
-            clapi::args::Arguments::new(clapi::arg_count::ArgCount::new(#min, #max))
+            clapi::Arguments::new(clapi::ArgCount::new(#min, #max))
             #name
             #default_values
         }

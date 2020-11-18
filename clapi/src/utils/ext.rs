@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 
+/// Extension methods for `Option<T>`.
 pub trait OptionExt<T> {
     fn contains_some<U>(&self, value: U) -> bool
     where
@@ -8,6 +9,7 @@ pub trait OptionExt<T> {
 }
 
 impl<T> OptionExt<T> for Option<T> {
+    /// Stable version of `Option::contains`.
     #[inline]
     fn contains_some<U>(&self, value: U) -> bool
     where

@@ -2,23 +2,23 @@
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Symbol {
     /// A command symbol.
-    Command(String),
+    Cmd(String),
     /// A option symbol.
-    Option(String),
+    Opt(String),
 }
 
 impl Symbol {
     /// Gets the name of the symbol.
     pub fn name(&self) -> &str {
         match self {
-            Symbol::Command(s) | Symbol::Option(s) => s,
+            Symbol::Cmd(s) | Symbol::Opt(s) => s,
         }
     }
 
     /// Checks if this symbol is a command.
     pub fn is_command(&self) -> bool {
         match self {
-            Symbol::Command(_) => true,
+            Symbol::Cmd(_) => true,
             _ => false,
         }
     }
@@ -26,7 +26,7 @@ impl Symbol {
     /// Checks if this symbol is an option.
     pub fn is_option(&self) -> bool {
         match self {
-            Symbol::Option(_) => true,
+            Symbol::Opt(_) => true,
             _ => false,
         }
     }

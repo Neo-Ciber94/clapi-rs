@@ -78,7 +78,7 @@ impl OptionData {
         let name = quote_expr!(self.name);
 
         quote!{
-            clapi::option::CommandOption::new(#name)
+            clapi::CommandOption::new(#name)
             #alias
             #description
             #required

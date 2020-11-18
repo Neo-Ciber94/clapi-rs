@@ -28,13 +28,12 @@ pub trait SuggestionProvider {
     }
 }
 
-/// A default implementation of `SuggestionProvider` that returns a limited count of suggestions
-/// using the `Levenshtein distance` algorithm.
+/// A default implementation of `SuggestionProvider` that returns a max count of suggestions.
 ///
 /// # Example
 /// ```rust
 /// use std::string::ToString;
-/// use clapi::suggestion::{DefaultSuggestionProvider, SuggestionProvider};
+/// use clapi::{DefaultSuggestionProvider, SuggestionProvider};
 ///
 /// let source = vec!["apple", "banana", "mango", "strawberry"].iter()
 ///     .map(ToString::to_string)
@@ -105,7 +104,7 @@ impl SuggestionProvider for DefaultSuggestionProvider {
 /// # Example
 /// ```rust
 /// use std::string::ToString;
-/// use clapi::suggestion::{SingleSuggestionProvider, SuggestionProvider};
+/// use clapi::{SingleSuggestionProvider, SuggestionProvider};
 ///
 /// let source = vec!["apple", "banana", "mango", "strawberry"].iter()
 ///     .map(ToString::to_string)
@@ -175,6 +174,7 @@ impl SuggestionResult {
 /// # See
 /// https://en.wikipedia.org/wiki/Levenshtein_distance
 #[inline]
+#[doc(hidden)]
 pub fn compute_levenshtein_distance_ignore_case(x: &str, y: &str) -> usize {
     compute_levenshtein_distance(x, y, true)
 }
@@ -183,6 +183,7 @@ pub fn compute_levenshtein_distance_ignore_case(x: &str, y: &str) -> usize {
 ///
 /// # See
 /// https://en.wikipedia.org/wiki/Levenshtein_distance
+#[doc(hidden)]
 pub fn compute_levenshtein_distance(x: &str, y: &str, ignore_case: bool) -> usize {
     if x == y {
         return 0;

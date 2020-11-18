@@ -139,7 +139,7 @@ mod indented_writer {
     ///
     /// # Example
     /// ```rust
-    /// use clapi::help::IndentedWriter;
+    /// use clapi::IndentedWriter;
     ///
     /// let mut writer = IndentedWriter::new();
     /// writer.writeln("Hello");
@@ -236,7 +236,7 @@ mod indented_writer {
         /// to allow writing with indentation.
         ///
         /// ```rust
-        /// use clapi::help::IndentedWriter;
+        /// use clapi::IndentedWriter;
         ///
         /// let mut writer = IndentedWriter::new();
         /// writer.indented(|w| w.write("Hello World"));
@@ -306,6 +306,7 @@ mod help_writer {
     use crate::option::CommandOption;
     use std::borrow::Borrow;
 
+    /// Utilities for write command help.
     pub struct HelpWriter<'a> {
         context: &'a Context,
         writer: IndentedWriter,
@@ -379,6 +380,7 @@ mod help_writer {
         }
     }
 
+    /// A `HelpWriter` builder.
     #[derive(Default)]
     pub struct HelpWriterBuilder {
         writer: Option<IndentedWriter>,
@@ -427,7 +429,7 @@ mod help_writer {
         }
     }
 
-    pub fn write_option_internal(context: &Context, option: &CommandOption) -> String {
+    fn write_option_internal(context: &Context, option: &CommandOption) -> String {
         const WIDTH: usize = 25;
         let name_prefix: &str = context.name_prefixes().next().unwrap();
         let alias_prefix: &str = context.alias_prefixes().next().unwrap();
@@ -461,7 +463,7 @@ mod help_writer {
         buffer
     }
 
-    pub fn write_command_internal(_: &Context, command: &Command) -> String {
+    fn write_command_internal(_: &Context, command: &Command) -> String {
         const WIDTH: usize = 15;
         let mut buffer = String::new();
 

@@ -1,16 +1,15 @@
 #![allow(dead_code)]
 use clapi::macros::*;
 
-//mod count;
+mod count;
 mod utils;
 
-use clapi::args::Arguments;
-use clapi::command::Command;
-use clapi::command_line::CommandLine;
-use clapi::error::Result;
-use clapi::option::CommandOption;
-use clapi::root_command::RootCommand;
-//use std::net::IpAddr;
+use clapi::Arguments;
+use clapi::Command;
+use clapi::CommandLine;
+use clapi::Result;
+use clapi::CommandOption;
+use clapi::RootCommand;
 
 #[subcommand(description="Prints a value to the console")]
 #[option(name="times", alias="t", default=1)]

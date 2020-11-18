@@ -8,14 +8,7 @@ edition = "2018"
 proc-macro = true
 
 [dependencies]
-#clapi = { path="../clapi" }
 macro_attribute = { path = "macro_attribute" }
 proc-macro2 = { version="1.0.24", features=["span-locations"] }
 syn = { version="1.0.45", features=["full", "extra-traits", "parsing", "visit"] }
 quote = "1.0.7"
-
-[dev-dependencies]
-clapi = { path="../clapi" }
-
-#[dev-dependencies]
-#macro_tests = { path = "./macro_tests" }

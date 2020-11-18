@@ -161,9 +161,9 @@ impl CommandData {
         // Instantiate `Command` or `RootCommand`
         let mut command = if self.is_child {
             let command_name = quote_expr!(self.fn_name.name());
-            quote! { clapi::command::Command::new(#command_name) }
+            quote! { clapi::Command::new(#command_name) }
         } else {
-            quote! { clapi::root_command::RootCommand::new() }
+            quote! { clapi::RootCommand::new() }
         };
 
         // Show version
@@ -178,7 +178,7 @@ impl CommandData {
 
                 quote!{
                     if opts.contains("version"){
-                        println!("{} {}", clapi::root_command::current_filename(), #s);
+                        println!("{} {}", clapi::current_filename(), #s);
                         #ret
                     }
                 }
@@ -218,7 +218,7 @@ impl CommandData {
                     #(#outer)*
 
                     let command = #command ;
-                    clapi::command_line::CommandLine::new(command)
+                    clapi::CommandLine::new(command)
                         .use_default_help()
                         .use_default_suggestions()
                         .run()

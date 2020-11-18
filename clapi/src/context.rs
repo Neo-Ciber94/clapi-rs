@@ -3,7 +3,7 @@ use crate::option::CommandOption;
 use crate::root_command::RootCommand;
 use linked_hash_set::LinkedHashSet;
 
-/// Provides common values used for a command-line operation.
+/// Provides common values used for a command-line parsing.
 #[derive(Debug)]
 pub struct Context {
     root: RootCommand,

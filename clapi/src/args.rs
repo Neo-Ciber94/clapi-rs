@@ -137,7 +137,7 @@ impl Arguments {
     ///
     /// # Example
     /// ```rust
-    /// use clapi::args::Arguments;
+    /// use clapi::Arguments;
     ///
     /// let args = Arguments::new(1)
     ///     .set_valid_values(&["zero", "one", "two", "three"])
@@ -198,7 +198,7 @@ impl Arguments {
     ///
     /// # Example
     /// ```rust
-    /// use clapi::args::Arguments;
+    /// use clapi::Arguments;
     ///
     /// let mut args = Arguments::new(1)
     ///     .set_valid_values(&["zero", "one", "two", "three"])
@@ -218,7 +218,7 @@ impl Arguments {
             .map(ToString::to_string)
             .collect::<LinkedHashSet<String>>();
 
-        self.set_validator(ListValidator(values))
+        self.set_validator(ListValidator::new(values))
     }
 
     /// Sets the validator for the valid values of this `Arguments`.
@@ -240,8 +240,8 @@ impl Arguments {
     ///
     /// # Example
     /// ```rust
-    /// use clapi::args::Arguments;
-    /// use clapi::args::validator::validator_for;
+    /// use clapi::Arguments;
+    /// use clapi::validator::validator_for;
     ///
     /// let mut args = Arguments::new(2)
     ///     .set_validator(validator_for::<i32>());
@@ -293,9 +293,10 @@ impl Arguments {
         Ok(())
     }
 
-    /// Converts the first value into the specified type.
+    /// Converts the value into the specified type.
     ///
     /// # Error
+    /// - If there is more than 1 argument.
     /// - If there is no values to convert.
     /// - If this takes not args.
     /// - The value cannot be converted to type `T`.
@@ -458,8 +459,8 @@ where
 fn take_no_values_msg(args: &Arguments) -> String {
     if let Some(parent) = &args.parent {
         let kind = match parent {
-            Symbol::Command(_) => "command",
-            Symbol::Option(_) => "option"
+            Symbol::Cmd(_) => "command",
+            Symbol::Opt(_) => "option"
         };
         return format!("{} `{}` takes no args", kind, parent.name());
     } else if let Some(name) = &args.name {
@@ -472,8 +473,8 @@ fn take_no_values_msg(args: &Arguments) -> String {
 fn already_have_values_msg(args: &Arguments, is_default_values: bool) -> String {
     if let Some(parent) = &args.parent {
         let kind = match parent {
-            Symbol::Command(_) => "command",
-            Symbol::Option(_) => "option"
+            Symbol::Cmd(_) => "command",
+            Symbol::Opt(_) => "option"
         };
         format!("{} `{}` already have {}values", kind, parent.name(), if is_default_values { "default" } else {""})
     } else if let Some(name) = &args.name {
@@ -486,8 +487,8 @@ fn already_have_values_msg(args: &Arguments, is_default_values: bool) -> String 
 fn invalid_arg_count_msg(args: &Arguments, actual: usize) -> String {
     if let Some(parent) = &args.parent {
         let kind = match parent {
-            Symbol::Command(_) => "command",
-            Symbol::Option(_) => "option"
+            Symbol::Cmd(_) => "command",
+            Symbol::Opt(_) => "option"
         };
 
         format!("{} `{}` expected {} but was {}", kind, parent.name(), args.arity, actual)
@@ -498,6 +499,7 @@ fn invalid_arg_count_msg(args: &Arguments, actual: usize) -> String {
     }
 }
 
+/// Provides the `Validator` trait used for validate the values of an `Arguments`.
 #[allow(dead_code)]
 pub mod validator {
     use crate::error::{Error, ErrorKind, Result};
@@ -505,11 +507,14 @@ pub mod validator {
     use std::fmt::Display;
     use std::marker::PhantomData;
     use std::str::FromStr;
+    use std::iter::FromIterator;
 
+    /// Exposes a method for check if an `str` value is a valid argument value.
     pub trait Validator {
         fn is_valid(&self, value: &str) -> Result<()>;
     }
 
+    /// A `Validator` where a `str` is considered valid if can be parsed to a type `T`.
     #[derive(Default)]
     pub struct DefaultValidator<T>(PhantomData<T>);
     impl<T> DefaultValidator<T> {
@@ -526,7 +531,14 @@ pub mod validator {
         }
     }
 
-    pub struct ListValidator(pub LinkedHashSet<String>);
+    /// A `Validator` where a `str` is valid if is contained in the `list`.
+    pub struct ListValidator(LinkedHashSet<String>);
+    impl ListValidator {
+        pub fn new<S, I>(values: I) -> Self where S : ToString, I: IntoIterator<Item=S>{
+            let iter = values.into_iter().map(|s| s.to_string());
+            ListValidator(LinkedHashSet::from_iter(iter))
+        }
+    }
     impl Validator for ListValidator {
         fn is_valid(&self, value: &str) -> Result<()> {
             if self.0.iter().any(|s| s == value) {
@@ -540,6 +552,8 @@ pub mod validator {
         }
     }
 
+    /// A `Validator` where a `str` is valid if can be parsed to type `T`
+    /// and is within the specified range.
     pub struct RangeValidator<T>(T, T);
     impl<T: FromStr + PartialOrd + Display> RangeValidator<T> {
         pub fn new(min: T, max: T) -> Self {
@@ -565,6 +579,7 @@ pub mod validator {
         }
     }
 
+    /// Constructs a `Validator` for the specified type.
     #[inline]
     pub fn validator_for<T: FromStr>() -> DefaultValidator<T> {
         DefaultValidator::new()

@@ -135,7 +135,7 @@ impl RootCommand {
     ///
     /// # Example
     /// ```rust
-    /// use clapi::command::Command;
+    /// use clapi::Command;
     ///
     /// let cmd = Command::new("test")
     ///     .set_handler(|_options, _args| {

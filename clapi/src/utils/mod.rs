@@ -5,9 +5,13 @@ mod inner_cell;
 mod lazy;
 mod once_cell;
 
+/// Extension methods.
 mod ext;
 pub use ext::*;
 
+/// Performs an operation over a value of type `T` and returns the result.
+///
+/// This trait is implemented for all types.
 pub trait Then: Sized {
     #[inline]
     fn then<'a, R, F: Fn(&'a Self) -> R>(&'a self, f: F) -> R {
@@ -25,6 +29,9 @@ pub trait Then: Sized {
     }
 }
 
+/// Performs an operation over a value of type `T` and returns `Self`.
+///
+/// This trait is implemented for all types.
 pub trait Also: Sized {
     #[inline]
     fn also<R, F: Fn(&Self) -> R>(self, f: F) -> Self {

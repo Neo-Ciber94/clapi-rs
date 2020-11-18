@@ -116,6 +116,7 @@ pub fn arg(_: TokenStream, _: TokenStream) -> TokenStream {
 }
 
 pub(crate) fn get_call_site_path() -> PathBuf {
+    // todo: Find a stable way to get the source file path
     Span::call_site().source_file().path()
 }
 

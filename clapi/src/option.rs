@@ -23,7 +23,7 @@ impl CommandOption {
         assert!(!name.trim().is_empty(), "name cannot be empty");
 
         let args =
-            Arguments::none().also_mut(|a| a.parent = Some(Symbol::Option(name.to_string())));
+            Arguments::none().also_mut(|a| a.parent = Some(Symbol::Opt(name.to_string())));
 
         CommandOption {
             name: name.to_string(),
@@ -89,7 +89,7 @@ impl CommandOption {
 
     /// Sets the `Arguments` of this option.
     pub fn set_args(mut self, mut args: Arguments) -> Self {
-        args.parent = Some(Symbol::Option(self.name.clone()));
+        args.parent = Some(Symbol::Opt(self.name.clone()));
         self.args = args;
         self
     }
@@ -208,6 +208,37 @@ impl Options {
     /// or `None` if the option is not found.
     pub fn get_args(&self, name_or_alias: &str) -> Option<&Arguments> {
         self.get(name_or_alias).map(|o| o.args())
+    }
+
+    /// Converts the option argument value into the specified type, returns `None`
+    /// if the option is not found.
+    ///
+    /// # Error
+    /// - If there is more than 1 argument.
+    /// - If there is no values to convert.
+    /// - If this takes not args.
+    /// - The value cannot be converted to type `T`.
+    pub fn get_arg_as<T>(&self, name_or_alias: &str) -> Option<Result<T>>
+        where
+            T: FromStr + 'static,
+            <T as FromStr>::Err: Display,
+    {
+        self.get(name_or_alias).map(|o| o.arg_as())
+    }
+
+    /// Returns an iterator that converts the argument values into the specified type,
+    /// returns `None` if the option is not found.
+    ///
+    /// # Error
+    /// - If there is no values to convert.
+    /// - If this takes not args.
+    /// - One of the values cannot be converted to type `T`.
+    pub fn get_args_as<T>(&self, name_or_alias: &str) -> Option<Result<Vec<T>>>
+        where
+            T: FromStr + 'static,
+            <T as FromStr>::Err: Display,
+    {
+        self.get(name_or_alias).map(|o| o.args_as())
     }
 
     /// Returns `true` if there is an option with the given name or alias.

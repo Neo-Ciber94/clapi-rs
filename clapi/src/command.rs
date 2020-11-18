@@ -35,7 +35,7 @@ impl Command {
         assert!(!name.trim().is_empty(), "name cannot be empty");
 
         let args =
-            Arguments::none().also_mut(|a| a.parent = Some(Symbol::Command(name.to_string())));
+            Arguments::none().also_mut(|a| a.parent = Some(Symbol::Cmd(name.to_string())));
 
         Command {
             name: name.to_string(),
@@ -137,7 +137,7 @@ impl Command {
 
     /// Sets the `Arguments` of this command.
     pub fn set_args(mut self, mut args: Arguments) -> Self {
-        args.parent = Some(Symbol::Command(self.name.clone()));
+        args.parent = Some(Symbol::Cmd(self.name.clone()));
         self.args = args;
         self
     }
@@ -155,7 +155,7 @@ impl Command {
     ///
     /// # Example
     /// ```rust
-    /// use clapi::command::Command;
+    /// use clapi::Command;
     ///
     /// let cmd = Command::new("test")
     ///     .set_handler(|_options, _args| {
@@ -185,10 +185,12 @@ impl Command {
             command.name,
             self.name
         );
-        command.parent = Some(Symbol::Command(self.name.clone()));
+        command.parent = Some(Symbol::Cmd(self.name.clone()));
         self.children.insert(command);
     }
 
+    #[allow(dead_code)]
+    // todo: remove?
     pub(crate) fn full_name(&self) -> String {
         if let Some(parent) = &self.parent {
             format!("{} {}", parent.name(), self.name)

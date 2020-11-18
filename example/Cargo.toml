@@ -6,4 +6,3 @@ edition = "2018"
 
 [dependencies]
 clapi = { path="../clapi", features=["macros"] }
-cargo-inspect = "0.10.3"

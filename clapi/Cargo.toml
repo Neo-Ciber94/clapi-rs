@@ -1,5 +1,7 @@
 [package]
 name = "clapi"
+description="A framework for create command-line applications"
+keywords=["command-line", "command", "framework", "parse", "parser", "parsing", "macros", "api"]
 version = "0.1.0"
 authors = ["Freddy L. <freddy_luis_94@hotmail.com>"]
 edition = "2018"
@@ -9,4 +11,4 @@ macros = ["clapi_macros"]
 
 [dependencies]
 linked_hash_set = "0.1.4"
-clapi_macros = { optional=true, path="../clapi_macros"}
+clapi_macros = { optional=true, path="../clapi_macros" }

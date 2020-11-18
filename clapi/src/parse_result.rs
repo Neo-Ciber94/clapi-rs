@@ -55,10 +55,11 @@ impl ParseResult {
             .filter(|a| a.len() > 0)
     }
 
-    /// Converts the first option argument value into the specified type, returns `None`
+    /// Converts the option argument value into the specified type, returns `None`
     /// if the option is not found.
     ///
     /// # Error
+    /// - If there is more than 1 argument.
     /// - If there is no values to convert.
     /// - If this takes not args.
     /// - The value cannot be converted to type `T`.
