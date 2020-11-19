@@ -813,12 +813,6 @@ mod cmd {
         root_path: &Path,
         root_file: &File,
     ) -> Vec<(PathBuf, NameValueAttribute, ItemFn, File)> {
-        fn get_attr_and_item_fn(f: &ItemFn) -> (NameValueAttribute, ItemFn) {
-            let attr = get_subcommand_attribute(f).unwrap();
-            let item_fn = f.clone();
-            (attr, item_fn)
-        }
-
         let mut subcommands = Vec::new();
 
         for (item_fn, path, file) in find_subcommands_item_fn_from_path_recursive(root_path, root_file) {
@@ -839,19 +833,6 @@ mod cmd {
         } else {
             None
         }
-    }
-
-    fn get_registered_and_attr_subcommands() -> Vec<(PathBuf, NameValueAttribute, ItemFn)> {
-        let mut ret = Vec::new();
-        for data in crate::shared::get_registered_subcommands().iter() {
-            let args = data.parse_args().expect("invalid attribute");
-            let item_fn = data
-                .parse_item_fn()
-                .expect("invalid item for attribute, expected function");
-            let attr = NameValueAttribute::from_attribute_args(attr::SUBCOMMAND, args).unwrap();
-            ret.push((data.path().to_path_buf(), attr, item_fn));
-        }
-        ret
     }
 
     fn find_subcommands_item_fn_from_path(path: &Path) -> Vec<(ItemFn, File)> {

@@ -18,7 +18,6 @@ mod attr;
 mod command;
 mod ext;
 mod option;
-mod shared;
 mod var;
 
 /// Marks and converts a function as a command.
