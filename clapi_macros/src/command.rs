@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::fmt::Display;
 use syn::export::{Formatter, ToTokens};
-use syn::{Attribute, AttributeArgs, FnArg, ItemFn, PatType, ReturnType, Stmt};
+use syn::{Attribute, AttributeArgs, FnArg, ItemFn, PatType, ReturnType, Stmt, Item};
 
 use macro_attribute::NameValueAttribute;
 
@@ -279,14 +279,25 @@ impl CommandData {
     }
 
     fn outer_body(&self) -> Vec<TokenStream> {
+        /// If the `Stmt` is a function, drop all the command attributes
+        fn drop_attributes_if_subcommand(stmt: Stmt) -> Stmt {
+            if let Stmt::Item(Item::Fn(item_fn)) = stmt {
+                return Stmt::Item(Item::Fn(drop_command_attributes(item_fn)));
+            }
+
+            stmt
+        }
+
         // functions, struct, impl, const, statics, ...
         self.item_fn
             .as_ref()
             .unwrap()
             .block
             .stmts
-            .iter()
+            .clone()
+            .into_iter()
             .filter(|s| matches!(s, Stmt::Item(_)))
+            .map(drop_attributes_if_subcommand)
             .map(|s| s.to_token_stream())
             .collect()
     }
@@ -747,16 +758,19 @@ mod cmd {
 
         let src = std::fs::read_to_string(&root_path)
             .unwrap_or_else(|_| panic!("failed to read: {}", root_path.display()));
-        let file = syn::parse_file(&src)
+        let root_file = syn::parse_file(&src)
             .unwrap_or_else(|_| panic!("failed to parse: {:?}", root_path.file_name().unwrap()));
 
-        // Any command must be a top function
-        crate::assertions::is_top_function(&item_fn, &file);
+        // root `command` must be a top function
+        crate::assertions::is_top_function(&item_fn, &root_file);
 
         let attr = NameValueAttribute::from_attribute_args(attr::COMMAND, args).unwrap();
         let mut command = new_command(attr, item_fn.clone(), false, true);
 
-        for (path, attr, item_fn) in find_subcommands(&root_path, &file) {
+        for (path, attr, item_fn, file) in find_subcommands(&root_path, &root_file) {
+            // Subcommands must be top functions or inner functions
+            crate::assertions::is_top_function(&item_fn, &file);
+
             if path == root_path {
                 command.set_child(new_command(attr, item_fn, true, true));
             } else {
@@ -797,27 +811,21 @@ mod cmd {
 
     fn find_subcommands(
         root_path: &Path,
-        file: &File,
-    ) -> Vec<(PathBuf, NameValueAttribute, ItemFn)> {
+        root_file: &File,
+    ) -> Vec<(PathBuf, NameValueAttribute, ItemFn, File)> {
         fn get_attr_and_item_fn(f: &ItemFn) -> (NameValueAttribute, ItemFn) {
             let attr = get_subcommand_attribute(f).unwrap();
             let item_fn = f.clone();
             (attr, item_fn)
         }
 
-        let registered = get_registered_and_attr_subcommands();
+        let mut subcommands = Vec::new();
 
-        let mut subcommands = find_subcommand_item_fn_from_path_recursive(root_path, file)
-            .iter()
-            .filter(|(f, _)| {
-                !registered
-                    .iter()
-                    .any(|(_, _, item_fn)| item_fn.sig.ident == f.sig.ident)
-            })
-            .map(|(f, p)| (p.clone(), get_subcommand_attribute(f).unwrap(), f.clone()))
-            .collect::<Vec<(PathBuf, NameValueAttribute, ItemFn)>>();
+        for (item_fn, path, file) in find_subcommands_item_fn_from_path_recursive(root_path, root_file) {
+            let attr = get_subcommand_attribute(&item_fn).unwrap();
+            subcommands.push((path, attr, item_fn, file))
+        }
 
-        subcommands.extend(registered);
         subcommands
     }
 
@@ -846,7 +854,7 @@ mod cmd {
         ret
     }
 
-    fn find_subcommands_item_fn_from_path(path: &Path) -> Vec<ItemFn> {
+    fn find_subcommands_item_fn_from_path(path: &Path) -> Vec<(ItemFn, File)> {
         let mut ret = Vec::new();
         let src = std::fs::read_to_string(path).unwrap();
         let file = syn::parse_file(&src).unwrap();
@@ -854,7 +862,7 @@ mod cmd {
         for item in &file.items {
             match item {
                 Item::Fn(item_fn) if item_fn.contains_attribute(attr::SUBCOMMAND) => {
-                    ret.push(item_fn.clone());
+                    ret.push((item_fn.clone(), file.clone()));
                 }
                 _ => {}
             }
@@ -863,10 +871,10 @@ mod cmd {
         ret
     }
 
-    fn find_subcommand_item_fn_from_path_recursive(
+    fn find_subcommands_item_fn_from_path_recursive(
         root_path: &Path,
         file: &File,
-    ) -> Vec<(ItemFn, PathBuf)> {
+    ) -> Vec<(ItemFn, PathBuf, File)> {
         let mut ret = Vec::new();
 
         for item in &file.items {
@@ -877,39 +885,19 @@ mod cmd {
                     if let Some(path) = find_item_mod_path(root_path, item_mod) {
                         // If is a file find the `subcommands` and add all
                         if path.is_file() {
-                            ret.extend(
-                                find_subcommands_item_fn_from_path(&path)
-                                    .iter()
-                                    .map(|f| (f.clone(), path.clone())),
-                            );
+                            for (item_fn, file) in find_subcommands_item_fn_from_path(&path) {
+                                ret.push((item_fn, path.clone(), file));
+                            }
                         } else {
                             // If is a directory find the `mod.rs` to locate all the files
-                            if let Ok(read_dir) = path.read_dir() {
-                                for e in read_dir {
-                                    if let Ok(entry) = e {
-                                        // File path
-                                        let path = entry.path();
-                                        if path.is_file() && entry.file_name() == "mod.rs" {
-                                            let src =
-                                                std::fs::read_to_string(entry.path()).unwrap();
-                                            let file = syn::parse_file(&src).unwrap();
-                                            let subcommands =
-                                                find_subcommand_item_fn_from_path_recursive(
-                                                    &path, &file,
-                                                );
-                                            ret.extend(subcommands);
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
+                            ret.extend(find_subcommands_item_fn_from_module_path(&path));
                         }
                     }
                 }
                 // If the item is a function, add it if is a `subcommand`
                 Item::Fn(item_fn) => {
                     if item_fn.contains_attribute(attr::SUBCOMMAND) {
-                        ret.push((item_fn.clone(), root_path.to_path_buf()));
+                        ret.push((item_fn.clone(), root_path.to_path_buf(), file.clone()));
                     }
                 }
                 _ => {}
@@ -917,6 +905,26 @@ mod cmd {
         }
 
         ret
+    }
+
+    fn find_subcommands_item_fn_from_module_path(path: &Path) -> Vec<(ItemFn, PathBuf, File)>{
+        if let Ok(read_dir) = path.read_dir() {
+            for e in read_dir {
+                if let Ok(entry) = e {
+                    // File path
+                    let path = entry.path();
+                    if path.is_file() && entry.file_name() == "mod.rs" {
+                        let src = std::fs::read_to_string(entry.path()).unwrap();
+                        let file = syn::parse_file(&src).unwrap();
+                        return find_subcommands_item_fn_from_path_recursive(
+                            &path, &file,
+                        );
+                    }
+                }
+            }
+        }
+
+        Vec::new()
     }
 
     fn find_item_mod_path(root_path: &Path, mod_item: &ItemMod) -> Option<PathBuf> {

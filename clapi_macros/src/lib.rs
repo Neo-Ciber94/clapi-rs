@@ -1,24 +1,25 @@
-#![feature(proc_macro_span)]
+// We check for nightly using `build.rs`
+#![cfg_attr(nightly, feature(proc_macro_span))]
+
 #![allow(dead_code)]
 extern crate proc_macro;
 
 use crate::command::CommandData;
 pub(crate) use ext::*;
-use proc_macro::{Span, TokenStream};
-use std::path::PathBuf;
+use proc_macro::TokenStream;
 use syn::export::ToTokens;
-use syn::{AttributeArgs, File, ItemFn};
+use syn::{AttributeArgs, ItemFn};
 
 #[macro_use]
 mod utils;
 mod args;
+mod assertions;
+mod attr;
 mod command;
 mod ext;
-mod attr;
 mod option;
 mod shared;
 mod var;
-mod assertions;
 
 /// Marks and converts a function as a command.
 ///
@@ -33,13 +34,27 @@ mod assertions;
 /// #[command(description="", help=""]
 /// fn main(){ }
 /// ```
+#[cfg(not(nightly))]
 #[proc_macro_attribute]
 pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = syn::parse_macro_input!(attr as AttributeArgs);
     let func = syn::parse_macro_input!(item as ItemFn);
-    let path = get_call_site_path();
 
-    CommandData::from_path(args, func, path).expand().into()
+    CommandData::from_fn(args, func)
+        .expand()
+        .into()
+}
+
+#[cfg(nightly)]
+#[proc_macro_attribute]
+pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = syn::parse_macro_input!(attr as AttributeArgs);
+    let func = syn::parse_macro_input!(item as ItemFn);
+
+    let path = call_site::path();
+    CommandData::from_path(args, func, path)
+        .expand()
+        .into()
 }
 
 /// Marks a inner function as a subcommand.
@@ -57,17 +72,15 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// fn test(){ }
 /// ```
 #[proc_macro_attribute]
-pub fn subcommand(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let (path, file) = get_call_site_source_file();
-
-    shared::load_subcommand(shared::CommandRawData::new(
-        attr.to_string(),
-        item.to_string(),
-        path
-    ));
-
+#[allow(unreachable_code)]
+pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
     let func = syn::parse_macro_input!(item as ItemFn);
-    assertions::is_top_function(&func, &file);
+
+    #[cfg(not(nightly))]
+    {
+        // SAFETY: The `subcommand` attribute is removed by the root `command` when is a inner function.
+        panic!("invalid function: `{}`\nfree function `subcommand`s are only supported in nightly builds", func.sig.ident);
+    }
 
     command::drop_command_attributes(func)
         .into_token_stream()
@@ -115,13 +128,19 @@ pub fn arg(_: TokenStream, _: TokenStream) -> TokenStream {
     panic!("arg should be placed after a `command` or `subcommand` attribute")
 }
 
-pub(crate) fn get_call_site_path() -> PathBuf {
-    // todo: Find a stable way to get the source file path
-    Span::call_site().source_file().path()
-}
+#[cfg(nightly)]
+mod call_site {
+    use proc_macro::Span;
+    use std::path::PathBuf;
+    use syn::File;
 
-pub(crate) fn get_call_site_source_file() -> (PathBuf, File) {
-    let path = get_call_site_path();
-    let src = std::fs::read_to_string(&path).unwrap();
-    (path, syn::parse_file(&src).unwrap())
+    pub fn path() -> PathBuf {
+        Span::call_site().source_file().path()
+    }
+
+    pub fn source_file() -> (PathBuf, File) {
+        let path = path();
+        let src = std::fs::read_to_string(&path).unwrap();
+        (path, syn::parse_file(&src).unwrap())
+    }
 }

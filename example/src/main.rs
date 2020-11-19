@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 use clapi::macros::*;
 
-mod count;
-mod utils;
+// mod count;
+// mod utils;
 
 use clapi::Arguments;
 use clapi::Command;
@@ -11,9 +11,9 @@ use clapi::Result;
 use clapi::CommandOption;
 use clapi::RootCommand;
 
-#[subcommand(description="Prints a value to the console")]
-#[option(name="times", alias="t", default=1)]
-#[arg(name="values")]
+// #[subcommand(description="Prints a value to the console")]
+// #[option(name="times", alias="t", default=1)]
+// #[arg(name="values")]
 fn echo(times: usize, values: Vec<String>) {
     for _ in 0..times {
         for value in &values {
@@ -28,6 +28,13 @@ fn echo(times: usize, values: Vec<String>) {
 #[option(name="repeat", alias="r", default=1)]
 #[arg(name="numbers")]
 fn main(repeat: usize, numbers: Vec<i32>)  -> Result<()> {
+    #[subcommand]
+    #[arg(name="min")]
+    #[arg(name="max")]
+    fn count2(min: i32, max: u32){
+        println!("min: {}, max: {}", min, max);
+    }
+
     for _ in 0..repeat {
         println!("numbers: {:?}", numbers);
     }
