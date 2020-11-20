@@ -52,48 +52,48 @@ impl HelpCommand for DefaultHelpCommand {
         let mut writer = HelpWriter::new(context);
 
         // Command name
-        writer.writeln(command.name());
+        writer.writeln(command.get_name());
 
         // Command description
-        if let Some(description) = command.description() {
+        if let Some(description) = command.get_description() {
             writer.indented(|w| w.writeln(description));
         }
 
         // Command usage
-        if command.args().take_args() || command.options().len() > 0 || command.children().len() > 0
+        if command.get_args().take_args() || command.get_options().len() > 0 || command.get_children().len() > 0
         {
             writer.section("USAGE:", |w| {
-                let args_name = command.args().name()
+                let args_name = command.get_args().get_name()
                     .map(|s| s.to_uppercase())
                     .unwrap_or_else(|| "ARGS".to_owned());
 
-                if command.args().take_args() {
-                    w.writeln(format!("{} <{}>", command.name(), args_name));
+                if command.get_args().take_args() {
+                    w.writeln(format!("{} <{}>", command.get_name(), args_name));
                 }
 
-                if command.options().len() > 0 {
-                    let mut result = String::from(command.name());
+                if command.get_options().len() > 0 {
+                    let mut result = String::from(command.get_name());
                     write!(result, " [OPTIONS]").unwrap();
 
-                    if command.options().iter().any(|o| o.take_args()) {
+                    if command.get_options().iter().any(|o| o.take_args()) {
                         write!(result, " <{}>", args_name).unwrap();
                     }
 
                     w.writeln(result);
                 }
 
-                if command.children().len() > 0 {
-                    let mut children = command.children();
+                if command.get_children().len() > 0 {
+                    let mut children = command.get_children();
 
-                    if children.any(|c| c.args().take_args()) {
-                        w.writeln(format!("{} [SUBCOMMAND] <ARGS>", command.name()));
+                    if children.any(|c| c.get_args().take_args()) {
+                        w.writeln(format!("{} [SUBCOMMAND] <ARGS>", command.get_name()));
                     }
 
-                    if children.any(|c| c.options().len() > 0) {
-                        let mut result = String::from(command.name());
+                    if children.any(|c| c.get_options().len() > 0) {
+                        let mut result = String::from(command.get_name());
                         write!(result, " [SUBCOMMAND] [OPTIONS]").unwrap();
 
-                        if children.any(|c| c.options().iter().any(|o| o.take_args())) {
+                        if children.any(|c| c.get_options().iter().any(|o| o.take_args())) {
                             write!(result, " <ARGS>").unwrap();
                         }
 
@@ -104,25 +104,25 @@ impl HelpCommand for DefaultHelpCommand {
         }
 
         // Command options
-        if command.options().len() > 0 {
+        if command.get_options().len() > 0 {
             writer.section("OPTIONS:", |w| {
-                for option in command.options() {
+                for option in command.get_options() {
                     w.write_option(option);
                 }
             });
         }
 
         // Command children
-        if command.children().len() > 0 {
+        if command.get_children().len() > 0 {
             writer.section("SUBCOMMAND:", |w| {
-                for child in command.children() {
+                for child in command.get_children() {
                     w.write_command(child);
                 }
             });
         }
 
         // Command help
-        if let Some(help) = command.help() {
+        if let Some(help) = command.get_help() {
             writer.writeln("");
             writer.writeln(help);
         }
@@ -436,25 +436,25 @@ mod help_writer {
 
         let mut buffer = String::new();
 
-        let mut names = if let Some(alias) = option.aliases().next() {
+        let mut names = if let Some(alias) = option.get_aliases().next() {
             format!(
                 "{}{}, {}{}",
                 alias_prefix,
                 alias.as_str(),
                 name_prefix,
-                option.name(),
+                option.get_name(),
             )
         } else {
             // A width of 6 should be enough to align with the alias prefix
             // which is expected to be 2 characters as: '-a', '-v', '/b'
-            format!("{:>6}{}", name_prefix, option.name())
+            format!("{:>6}{}", name_prefix, option.get_name())
         };
 
-        if let Some(args_name) = option.args().name() {
+        if let Some(args_name) = option.get_args().get_name() {
             names.push_str(&format!(" <{}>", args_name.to_uppercase()));
         }
 
-        if let Some(description) = option.description() {
+        if let Some(description) = option.get_description() {
             buffer.push_str(&format!("{:width$}{}", names, description, width = WIDTH));
         } else {
             buffer.push_str(&format!("{:width$}", names, width = WIDTH));
@@ -467,15 +467,15 @@ mod help_writer {
         const WIDTH: usize = 15;
         let mut buffer = String::new();
 
-        if let Some(description) = command.description() {
+        if let Some(description) = command.get_description() {
             buffer.push_str(&format!(
                 "{:width$}{}",
-                command.name(),
+                command.get_name(),
                 description,
                 width = WIDTH
             ))
         } else {
-            buffer.push_str(&format!("{:width$}", command.name(), width = WIDTH))
+            buffer.push_str(&format!("{:width$}", command.get_name(), width = WIDTH))
         }
 
         buffer

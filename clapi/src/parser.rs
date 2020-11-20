@@ -28,11 +28,11 @@ where
 
         let mut iterator = tokens.iter().peekable();
         let mut result_options = Options::new();
-        let mut command = context.root().as_ref();
+        let mut command = context.root();
 
         // Finds the executing command
         while let Some(Token::Cmd(name)) = iterator.peek() {
-            command = command.get_child(name.as_str()).ok_or_else(|| {
+            command = command.find_subcommand(name.as_str()).ok_or_else(|| {
                 Error::new_parse_error(
                     Error::from(ErrorKind::UnrecognizedCommand(name.clone())),
                     command.clone(),
@@ -51,9 +51,9 @@ where
                 iterator.next();
 
                 // If the option take args, add them
-                if option.args().take_args() {
+                if option.get_args().take_args() {
                     let mut option_args = Vec::new();
-                    let max_arg_count = option.args().arity().max_arg_count();
+                    let max_arg_count = option.get_args().get_arity().max_arg_count();
 
                     while let Some(t) = iterator.peek() {
                         // If the option don't takes more arguments exit
@@ -99,22 +99,22 @@ where
 
         // Check required options
         let required_options = command
-            .then(|c| c.options().iter())
+            .then(|c| c.get_options().iter())
             .filter(|o| o.is_required());
 
         for opt in required_options {
-            if !result_options.contains(opt.name()) {
-                return Err(Error::from(ErrorKind::MissingOption(opt.name().to_owned())));
+            if !result_options.contains(opt.get_name()) {
+                return Err(Error::from(ErrorKind::MissingOption(opt.get_name().to_owned())));
             }
         }
 
         // Adds options with default values
         let default_options = command
-            .then(|c| c.options().iter())
-            .filter(|o| o.args().has_default_values());
+            .then(|c| c.get_options().iter())
+            .filter(|o| o.get_args().has_default_values());
 
         for opt in default_options {
-            if !result_options.contains(opt.name()) {
+            if !result_options.contains(opt.get_name()) {
                 result_options.add(opt.clone());
             }
         }
@@ -125,14 +125,14 @@ where
             .collect::<Vec<String>>();
 
         // Sets default values if there is not args
-        if rest_args.is_empty() && command.args().has_default_values() {
-            for arg in command.args().default_values() {
+        if rest_args.is_empty() && command.get_args().has_default_values() {
+            for arg in command.get_args().get_default_values() {
                 rest_args.push(arg.clone());
             }
         }
 
         // Clones the command and set the options and args
-        let mut result_command = command.clone().set_new_options(result_options);
+        let mut result_command = command.clone().options(result_options);
 
         result_command
             .set_args_values(rest_args.as_slice())
@@ -151,11 +151,11 @@ where
 
 fn get_option_prefixed<'a>(context: &'a Context, command: &'a Command, prefix: &'a str, option: &'a str) -> Option<&'a CommandOption>{
     if context.is_name_prefix(prefix) {
-        return command.options().get_by_name(option);
+        return command.get_options().get_by_name(option);
     }
 
     if context.is_alias_prefix(prefix) {
-        return command.options().get_by_alias(option);
+        return command.get_options().get_by_alias(option);
     }
 
     None
@@ -169,26 +169,25 @@ mod tests {
     use crate::command::Command;
     use crate::command_line::into_arg_iterator;
     use crate::option::CommandOption;
-    use crate::root_command::RootCommand;
 
     fn parse(value: &str) -> Result<ParseResult> {
         let root =
-            RootCommand::new()
-                .set_option(CommandOption::new("version").set_alias("v"))
-                .set_option(CommandOption::new("author").set_alias("a"))
-                .set_command(Command::new("echo").set_args(Arguments::new(1..)))
-                .set_command(
+            Command::root()
+                .option(CommandOption::new("version").alias("v"))
+                .option(CommandOption::new("author").alias("a"))
+                .subcommand(Command::new("echo").args(Arguments::new(1..)))
+                .subcommand(
                     Command::new("pick")
-                        .set_args(Arguments::new(ArgCount::new(1, 2)))
-                        .set_option(CommandOption::new("color").set_args(
-                            Arguments::new(1).set_valid_values(&["red", "blue", "green"]),
+                        .args(Arguments::new(ArgCount::new(1, 2)))
+                        .option(CommandOption::new("color").args(
+                            Arguments::new(1).valid_values(&["red", "blue", "green"]),
                         )),
                 )
-                .set_command(
-                    Command::new("any").set_option(
+                .subcommand(
+                    Command::new("any").option(
                         CommandOption::new("numbers")
-                            .set_required(true)
-                            .set_args(Arguments::new(1..)),
+                            .required(true)
+                            .args(Arguments::new(1..)),
                     ),
                 );
 
@@ -233,7 +232,7 @@ mod tests {
     #[test]
     fn parse_test4() {
         let result = parse("any --numbers=1,2,3,4").unwrap();
-        assert_eq!(result.command().name(), "any");
+        assert_eq!(result.command().get_name(), "any");
         assert_eq!(
             result.options().get("numbers"),
             Some(&CommandOption::new("numbers"))
@@ -249,7 +248,7 @@ mod tests {
     #[test]
     fn parse_test5() {
         let result = parse("any --numbers:1,2,3,4").unwrap();
-        assert_eq!(result.command().name(), "any");
+        assert_eq!(result.command().get_name(), "any");
         assert_eq!(
             result.options().get("numbers"),
             Some(&CommandOption::new("numbers"))

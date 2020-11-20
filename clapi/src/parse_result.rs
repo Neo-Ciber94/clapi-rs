@@ -25,33 +25,33 @@ impl ParseResult {
 
     /// Returns the `Options` of the command.
     pub fn options(&self) -> &Options {
-        &self.command.options()
+        &self.command.get_options()
     }
 
     /// Returns the arguments of the command.
     pub fn args(&self) -> &Arguments {
-        self.command.args()
+        self.command.get_args()
     }
 
     /// Returns `true` if the resulting command contains the option with the given name or alias.
     pub fn contains_option(&self, name_or_alias: &str) -> bool {
-        self.command.options().contains(name_or_alias)
+        self.command.get_options().contains(name_or_alias)
     }
 
     /// Returns `true` if the resulting command contains the given argument.
     pub fn contains_arg(&self, value: &str) -> bool {
-        self.command.args().contains(value)
+        self.command.get_args().contains(value)
     }
 
     /// Returns the `CommandOption` with the given name or alias, or `None`.
     pub fn get_option(&self, name_or_alias: &str) -> Option<&CommandOption> {
-        self.command.options().get(name_or_alias)
+        self.command.get_options().get(name_or_alias)
     }
 
     /// Returns the arguments of the option with the given name or alias, or `None` if not found.
     pub fn get_option_args(&self, name_or_alias: &str) -> Option<&[String]> {
         self.get_option(name_or_alias)
-            .map(|o| o.args().values())
+            .map(|o| o.get_args().get_values())
             .filter(|a| a.len() > 0)
     }
 
@@ -68,7 +68,7 @@ impl ParseResult {
         T: FromStr + 'static,
         <T as FromStr>::Err: Display,
     {
-        self.get_option(name_or_alias).map(|o| o.arg_as())
+        self.get_option(name_or_alias).map(|o| o.get_arg_as())
     }
 
     /// Returns an iterator that converts the argument values into the specified type,
@@ -83,7 +83,7 @@ impl ParseResult {
         T: FromStr + 'static,
         <T as FromStr>::Err: Display,
     {
-        self.get_option(name_or_alias).map(|o| o.args_as())
+        self.get_option(name_or_alias).map(|o| o.get_args_as())
     }
 }
 
@@ -96,32 +96,31 @@ mod tests {
     use crate::context::Context;
     use crate::error::Result;
     use crate::parser::{DefaultParser, Parser};
-    use crate::root_command::RootCommand;
 
     fn parse(value: &str) -> Result<ParseResult> {
-        let root = RootCommand::new()
-            .set_args(Arguments::new(0..=2))
-            .set_option(
+        let root = Command::root()
+            .args(Arguments::new(0..=2))
+            .option(
                 CommandOption::new("number")
-                    .set_alias("n")
-                    .set_args(Arguments::new(1..).set_validator(validator_for::<i32>())),
+                    .alias("n")
+                    .args(Arguments::new(1..).validator(validator_for::<i32>())),
             )
-            .set_option(
+            .option(
                 CommandOption::new("letter")
-                    .set_alias("l")
-                    .set_args(Arguments::new(1).set_validator(validator_for::<char>())),
+                    .alias("l")
+                    .args(Arguments::new(1).validator(validator_for::<char>())),
             )
-            .set_command(
+            .subcommand(
                 Command::new("select")
-                    .set_args(Arguments::new(1..))
-                    .set_option(CommandOption::new("sort")),
+                    .args(Arguments::new(1..))
+                    .option(CommandOption::new("sort")),
             )
-            .set_command(
+            .subcommand(
                 Command::new("any")
-                    .set_args(Arguments::new(1))
-                    .set_option(CommandOption::new("A").set_alias("a"))
-                    .set_option(CommandOption::new("B").set_alias("b"))
-                    .set_option(CommandOption::new("C").set_alias("c")),
+                    .args(Arguments::new(1))
+                    .option(CommandOption::new("A").alias("a"))
+                    .option(CommandOption::new("B").alias("b"))
+                    .option(CommandOption::new("C").alias("c")),
             );
 
         let context = Context::new(root);
@@ -162,7 +161,7 @@ mod tests {
     fn parse_result_test2() {
         let result = parse("select a z 1 9").unwrap();
 
-        assert_eq!(result.command().name(), "select");
+        assert_eq!(result.command().get_name(), "select");
         assert!(result.contains_arg("a"));
         assert!(result.contains_arg("z"));
         assert!(result.contains_arg("1"));
@@ -173,7 +172,7 @@ mod tests {
     fn parse_result_test3() {
         let result = parse("select --sort 3 2 1").unwrap();
 
-        assert_eq!(result.command().name(), "select");
+        assert_eq!(result.command().get_name(), "select");
         assert!(result.contains_option("sort"));
         assert!(result.contains_arg("3"));
         assert!(result.contains_arg("2"));
@@ -184,7 +183,7 @@ mod tests {
     fn parse_result_test4() {
         let result = parse("any --A --B --C hello").unwrap();
 
-        assert_eq!(result.command().name(), "any");
+        assert_eq!(result.command().get_name(), "any");
         assert!(result.contains_arg("hello"));
         assert!(result.contains_option("A"));
         assert!(result.contains_option("B"));
@@ -195,7 +194,7 @@ mod tests {
     fn parse_result_test5() {
         let result = parse("any --A --B --C -a -b -c hello").unwrap();
 
-        assert_eq!(result.command().name(), "any");
+        assert_eq!(result.command().get_name(), "any");
         assert!(result.contains_arg("hello"));
         assert_eq!(result.options().len(), 3);
         assert!(result.contains_option("A"));
@@ -207,11 +206,11 @@ mod tests {
     fn parse_result_test6() {
         let result = parse("any --A --B -- --C").unwrap();
 
-        assert_eq!(result.command().name(), "any");
+        assert_eq!(result.command().get_name(), "any");
         assert_eq!(result.options().len(), 2);
         assert!(result.contains_option("A"));
         assert!(result.contains_option("B"));
-        assert_eq!(result.args().values().len(), 1);
+        assert_eq!(result.args().get_values().len(), 1);
         assert!(result.contains_arg("--C"));
     }
 

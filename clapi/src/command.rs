@@ -26,19 +26,26 @@ pub struct Command {
 impl Command {
     /// Constructs a new `Command`.
     #[inline]
-    pub fn new(name: &str) -> Self {
+    pub fn new<S: Into<String>>(name: S) -> Self {
         Command::with_options(name, Options::new())
     }
 
+    /// Constructs a new `Command` named after the running executable.
+    #[inline]
+    pub fn root() -> Self {
+        Command::new(current_filename())
+    }
+
     /// Constructs a new `Command` with the specified `Options`.
-    pub fn with_options(name: &str, options: Options) -> Self {
+    pub fn with_options<S: Into<String>>(name: S, options: Options) -> Self {
+        let name = name.into();
         assert!(!name.trim().is_empty(), "name cannot be empty");
 
         let args =
-            Arguments::none().also_mut(|a| a.parent = Some(Symbol::Cmd(name.to_string())));
+            Arguments::none().also_mut(|a| a.parent = Some(Symbol::Cmd(name.clone())));
 
         Command {
-            name: name.to_string(),
+            name,
             parent: None,
             description: None,
             help: None,
@@ -50,32 +57,32 @@ impl Command {
     }
 
     /// Returns the name of the command.
-    pub fn name(&self) -> &str {
+    pub fn get_name(&self) -> &str {
         self.name.as_str()
     }
 
     /// Returns a short description of the command, or `None` if is not set.
-    pub fn description(&self) -> Option<&str> {
+    pub fn get_description(&self) -> Option<&str> {
         self.description.as_ref().map(|s| s.as_str())
     }
 
     /// Returns a description of the usage of this command.
-    pub fn help(&self) -> Option<&str> {
+    pub fn get_help(&self) -> Option<&str> {
         self.help.as_ref().map(|s| s.as_str())
     }
 
     /// Returns an `ExactSizeIterator` over the children of this command.
-    pub fn children(&self) -> impl ExactSizeIterator<Item = &'_ Command> + Debug {
+    pub fn get_children(&self) -> impl ExactSizeIterator<Item = &'_ Command> + Debug {
         self.children.iter()
     }
 
     /// Returns the `Options` of this command.
-    pub fn options(&self) -> &Options {
+    pub fn get_options(&self) -> &Options {
         &self.options
     }
 
     /// Returns the `Arguments` of this command.
-    pub fn args(&self) -> &Arguments {
+    pub fn get_args(&self) -> &Arguments {
         &self.args
     }
 
@@ -85,38 +92,38 @@ impl Command {
     }
 
     /// Returns the parent `Symbol` of this command, or `None` if not have a parent.
-    pub fn parent(&self) -> Option<&Symbol> {
+    pub fn get_parent(&self) -> Option<&Symbol> {
         self.parent.as_ref()
     }
 
     /// Returns the handler of this command, or `None` if not set.
-    pub fn handler(
+    pub fn get_handler(
         &self,
     ) -> Option<RefMut<'_, dyn FnMut(&Options, &Arguments) -> Result<()> + 'static>> {
         self.handler.as_ref().map(|x| x.borrow_mut())
     }
 
     /// Returns the child with the given name, or `None` if not child if found.
-    pub fn get_child(&self, name: &str) -> Option<&Command> {
-        self.children.iter().find(|c| c.name() == name)
+    pub fn find_subcommand<S: AsRef<str>>(&self, name: S) -> Option<&Command> {
+        self.children.iter().find(|c| c.get_name() == name.as_ref())
     }
 
     /// Sets a short description of this command.
-    pub fn set_description(mut self, description: &str) -> Self {
-        self.description = Some(description.to_string());
+    pub fn description<S: Into<String>>(mut self, description: S) -> Self {
+        self.description = Some(description.into());
         self
     }
 
     /// Sets a usage description of this command.
-    pub fn set_help(mut self, help: &str) -> Self {
-        self.help = Some(help.to_string());
+    pub fn help<S: Into<String>>(mut self, help: S) -> Self {
+        self.help = Some(help.into());
         self
     }
 
     /// Adds an `CommandOption` to this command.
-    pub fn set_option(mut self, option: CommandOption) -> Self {
+    pub fn option(mut self, option: CommandOption) -> Self {
         if cfg!(debug_assertions) {
-            let option_name = option.name().to_string();
+            let option_name = option.get_name().to_string();
             assert!(
                 self.options.add(option),
                 "`{}` already contains a `CommandOption` named: `{}`",
@@ -130,25 +137,16 @@ impl Command {
     }
 
     /// Replaces the options of this command with the specified.
-    pub fn set_new_options(mut self, options: Options) -> Self {
+    pub fn options(mut self, options: Options) -> Self {
         self.options = options;
         self
     }
 
     /// Sets the `Arguments` of this command.
-    pub fn set_args(mut self, mut args: Arguments) -> Self {
+    pub fn args(mut self, mut args: Arguments) -> Self {
         args.parent = Some(Symbol::Cmd(self.name.clone()));
         self.args = args;
         self
-    }
-
-    /// Sets the argument values of this command.
-    pub fn set_args_values<'a, S, I>(&mut self, args: I) -> Result<()>
-    where
-        I: IntoIterator<Item = &'a S>,
-        S: ToString + 'a,
-    {
-        self.args.set_values(args)
     }
 
     /// Sets the handler of this command.
@@ -158,12 +156,12 @@ impl Command {
     /// use clapi::Command;
     ///
     /// let cmd = Command::new("test")
-    ///     .set_handler(|_options, _args| {
+    ///     .handler(|_options, _args| {
     ///         println!("This is a test");
     ///         Ok(())
     /// });
     /// ```
-    pub fn set_handler<F>(mut self, f: F) -> Self
+    pub fn handler<F>(mut self, f: F) -> Self
     where
         F: FnMut(&Options, &Arguments) -> Result<()> + 'static,
     {
@@ -172,9 +170,18 @@ impl Command {
     }
 
     /// Adds a new child `Command`.
-    pub fn set_command(mut self, command: Command) -> Self {
+    pub fn subcommand(mut self, command: Command) -> Self {
         self.add_command(command);
         self
+    }
+
+    /// Sets the argument values of this command.
+    pub fn set_args_values<'a, S, I>(&mut self, args: I) -> Result<()>
+        where
+            I: IntoIterator<Item = &'a S>,
+            S: ToString + 'a,
+    {
+        self.args.set_values(args)
     }
 
     #[inline]
@@ -217,10 +224,10 @@ impl Hash for Command {
 impl Debug for Command {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Command")
-            .field("name", &self.name())
-            .field("description", &self.description())
+            .field("name", &self.get_name())
+            .field("description", &self.get_description())
             .field("parent", &self.parent)
-            .field("arguments", &self.args())
+            .field("arguments", &self.get_args())
             .field(
                 "handler",
                 if self.handler.is_some() {
@@ -229,7 +236,7 @@ impl Debug for Command {
                     &"None"
                 },
             )
-            .field("children", &self.children())
+            .field("children", &self.get_children())
             .finish()
     }
 }
@@ -243,6 +250,36 @@ impl<'a> IntoIterator for &'a Command {
     }
 }
 
+#[doc(hidden)]
+pub fn current_filename() -> &'static str {
+    static mut FILE_NAME: Option<String> = None;
+
+    unsafe {
+        FILE_NAME
+            .get_or_insert_with(|| current_filename_internal(false))
+            .as_str()
+    }
+}
+
+#[doc(hidden)]
+pub fn current_filename_internal(include_exe: bool) -> String {
+    let path = std::env::current_exe().unwrap();
+    let filename = path.file_name().unwrap();
+
+    if include_exe {
+        filename.to_str().unwrap().to_string()
+    } else {
+        let ext = path.extension().unwrap();
+
+        filename
+            .to_str()
+            .unwrap()
+            .trim_end_matches(ext.to_str().unwrap())
+            .trim_end_matches('.')
+            .to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,27 +288,27 @@ mod tests {
     #[test]
     fn name_test() {
         let cmd = Command::new("time");
-        assert_eq!(cmd.name(), "time");
+        assert_eq!(cmd.get_name(), "time");
     }
 
     #[test]
     fn description() {
-        let cmd = Command::new("time").set_description("Shows the time");
+        let cmd = Command::new("time").description("Shows the time");
 
-        assert_eq!(cmd.description(), Some("Shows the time"));
+        assert_eq!(cmd.get_description(), Some("Shows the time"));
     }
 
     #[test]
     fn children_test() {
         let cmd = Command::new("data")
-            .set_command(Command::new("set"))
-            .set_command(Command::new("get").set_command(Command::new("first")));
+            .subcommand(Command::new("set"))
+            .subcommand(Command::new("get").subcommand(Command::new("first")));
 
-        assert_eq!(cmd.children().count(), 2);
-        assert_eq!(cmd.get_child("set"), Some(&Command::new("set")));
-        assert_eq!(cmd.get_child("get"), Some(&Command::new("get")));
+        assert_eq!(cmd.get_children().count(), 2);
+        assert_eq!(cmd.find_subcommand("set"), Some(&Command::new("set")));
+        assert_eq!(cmd.find_subcommand("get"), Some(&Command::new("get")));
         assert_eq!(
-            cmd.get_child("get").unwrap().get_child("first"),
+            cmd.find_subcommand("get").unwrap().find_subcommand("first"),
             Some(&Command::new("first"))
         );
     }
@@ -280,66 +317,66 @@ mod tests {
     #[should_panic]
     fn duplicated_command_test() {
         Command::new("data")
-            .set_command(Command::new("set"))
-            .set_command(Command::new("get").set_command(Command::new("first")))
-            .set_command(Command::new("get"));
+            .subcommand(Command::new("set"))
+            .subcommand(Command::new("get").subcommand(Command::new("first")))
+            .subcommand(Command::new("get"));
     }
 
     #[test]
     fn option_test() {
         let cmd = Command::new("time")
-            .set_option(CommandOption::new("version").set_alias("v"))
-            .set_option(CommandOption::new("day_of_week").set_alias("dw"));
+            .option(CommandOption::new("version").alias("v"))
+            .option(CommandOption::new("day_of_week").alias("dw"));
 
         assert_eq!(
-            cmd.options().get("version"),
+            cmd.get_options().get("version"),
             Some(&CommandOption::new("version"))
         );
-        assert_eq!(cmd.options().get("v"), Some(&CommandOption::new("version")));
+        assert_eq!(cmd.get_options().get("v"), Some(&CommandOption::new("version")));
     }
 
     #[test]
     #[should_panic]
     fn duplicated_option_test1() {
         Command::new("time")
-            .set_option(CommandOption::new("version").set_alias("v"))
-            .set_option(CommandOption::new("day_of_week").set_alias("dw"))
-            .set_option(CommandOption::new("version"));
+            .option(CommandOption::new("version").alias("v"))
+            .option(CommandOption::new("day_of_week").alias("dw"))
+            .option(CommandOption::new("version"));
     }
 
     #[test]
     #[should_panic]
     fn duplicated_option_test2() {
         Command::new("time")
-            .set_option(CommandOption::new("version").set_alias("v"))
-            .set_option(CommandOption::new("day_of_week").set_alias("dw"))
-            .set_option(CommandOption::new("v"));
+            .option(CommandOption::new("version").alias("v"))
+            .option(CommandOption::new("day_of_week").alias("dw"))
+            .option(CommandOption::new("v"));
     }
 
     #[test]
     #[should_panic]
     fn duplicated_option_test3() {
         Command::new("time")
-            .set_option(CommandOption::new("version").set_alias("v"))
-            .set_option(CommandOption::new("day_of_week").set_alias("dw"))
-            .set_option(CommandOption::new("verbose").set_alias("v"));
+            .option(CommandOption::new("version").alias("v"))
+            .option(CommandOption::new("day_of_week").alias("dw"))
+            .option(CommandOption::new("verbose").alias("v"));
     }
 
     #[test]
     fn args_test() {
-        let mut cmd = Command::new("time").set_args(Arguments::new(1));
+        let mut cmd = Command::new("time").args(Arguments::new(1));
 
-        assert_eq!(cmd.args(), &Arguments::new(1));
+        assert_eq!(cmd.get_args(), &Arguments::new(1));
 
         assert!(cmd.set_args_values(&["1"]).is_ok());
-        assert!(cmd.args().values().contains(&String::from("1")));
+        assert!(cmd.get_args().get_values().contains(&String::from("1")));
     }
 
     #[test]
     fn handle_test() {
         static mut VALUE: usize = 0;
 
-        let cmd = Command::new("counter").set_handler(inc);
+        let cmd = Command::new("counter").handler(inc);
 
         fn inc(_: &Options, _: &Arguments) -> Result<()> {
             unsafe { VALUE += 1 };
@@ -349,8 +386,8 @@ mod tests {
         let opts = Options::new();
         let args = Arguments::none();
 
-        cmd.handler().unwrap().deref_mut()(&opts, &args).unwrap();
-        cmd.handler().unwrap().deref_mut()(&opts, &args).unwrap();
+        cmd.get_handler().unwrap().deref_mut()(&opts, &args).unwrap();
+        cmd.get_handler().unwrap().deref_mut()(&opts, &args).unwrap();
 
         assert_eq!(unsafe { VALUE }, 2);
     }

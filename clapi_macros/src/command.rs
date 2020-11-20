@@ -108,14 +108,14 @@ impl CommandData {
         let options = self
             .options
             .iter()
-            .map(|x| quote! { .set_option(#x)})
+            .map(|x| quote! { .option(#x)})
             .collect::<Vec<TokenStream>>();
 
         // Command children
         let children = self
             .children
             .iter()
-            .map(|x| quote! { .set_command(#x)})
+            .map(|x| quote! { .subcommand(#x)})
             .collect::<Vec<TokenStream>>();
 
         // Command function variables
@@ -129,7 +129,7 @@ impl CommandData {
         let args = self
             .args
             .as_ref()
-            .map(|tokens| quote! { .set_args(#tokens)})
+            .map(|tokens| quote! { .args(#tokens)})
             .unwrap_or_else(|| quote! {});
 
         // Command version
@@ -144,7 +144,7 @@ impl CommandData {
             .description
             .as_ref()
             .map(|s| quote! { #s })
-            .map(|tokens| quote! { .set_description(#tokens)})
+            .map(|tokens| quote! { .description(#tokens)})
             .unwrap_or_else(|| quote! {});
 
         // Command help
@@ -152,7 +152,7 @@ impl CommandData {
             .help
             .as_ref()
             .map(|s| quote! { #s })
-            .map(|tokens| quote! { .set_help(#tokens)})
+            .map(|tokens| quote! { .help(#tokens)})
             .unwrap_or_else(|| quote! {});
 
         // Get the function body
@@ -193,7 +193,7 @@ impl CommandData {
                 #version
                 #(#options)*
                 #(#children)*
-                .set_handler(|opts, args|{
+                .handler(|opts, args|{
                     #show_version
                     #body
                 })

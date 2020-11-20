@@ -1,6 +1,5 @@
 // We check for nightly using `build.rs`
 #![cfg_attr(nightly, feature(proc_macro_span))]
-
 #![allow(dead_code)]
 extern crate proc_macro;
 
@@ -20,18 +19,25 @@ mod ext;
 mod option;
 mod var;
 
-/// Marks and converts a function as a command.
+/// Marks a function as a `command`.
 ///
 /// This is the entry point of a command line app, typically the marked function is `main`.
 ///
 /// # Options:
-/// - `description`: description of the command.
-/// - `help`: help information about the command.
+/// - `description`: Description of the command.
+/// - `help`: Help information about the command.
+/// - `version`: Version of the command-line app.
 ///
 /// # Example:
-/// ```text
-/// #[command(description="", help=""]
-/// fn main(){ }
+/// ```no_run
+/// use clapi::macros::*;
+///
+/// #[command(description="A sample app", version=1.0)]
+/// fn main(){
+///     println!("Hello World!");
+/// }
+///
+/// // > cargo run
 /// ```
 #[cfg(not(nightly))]
 #[proc_macro_attribute]
@@ -39,11 +45,29 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = syn::parse_macro_input!(attr as AttributeArgs);
     let func = syn::parse_macro_input!(item as ItemFn);
 
-    CommandData::from_fn(args, func)
-        .expand()
-        .into()
+    CommandData::from_fn(args, func).expand().into()
 }
 
+/// Marks a function as a `command`.
+///
+/// This is the entry point of a command line app, typically the marked function is `main`.
+///
+/// # Options:
+/// - `description`: Description of the command.
+/// - `help`: Help information about the command.
+/// - `version`: Version of the command-line app.
+///
+/// # Example:
+/// ```no_run
+/// use clapi::macros::*;
+///
+/// #[command(description="A sample app", version=1.0)]
+/// fn main(x: u32){
+///     println!("Hello World!");
+/// }
+///
+/// // > cargo run
+/// ```
 #[cfg(nightly)]
 #[proc_macro_attribute]
 pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -51,24 +75,34 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
     let func = syn::parse_macro_input!(item as ItemFn);
 
     let path = call_site::path();
-    CommandData::from_path(args, func, path)
-        .expand()
-        .into()
+    CommandData::from_path(args, func, path).expand().into()
 }
 
-/// Marks a inner function as a subcommand.
+/// Marks a function as a `subcommand`.
+///
+/// ## Stable
+/// Only inner functions of a `command` or `subcommand` can be declared as a subcommand.
+///
+/// ## Nightly
+/// When compiling for `nightly` rust any free function or inner can be marked as a `subcommand`.
 ///
 /// # Options:
-/// - `description`: description of the command.
-/// - `help`: help information about the command.
+/// - `description`: Description of the command.
+/// - `help`: Help information about the command.
 ///
 /// # Example:
-/// ```text
-/// #[command]
-/// fn main(){}
+/// ```no_run
+/// use clapi::macros::*;
 ///
-/// #[subcommand(description="", help=""]
-/// fn test(){ }
+/// #[command]
+/// fn main(){
+///     #[subcommand(description="A test function")]
+///     fn test(){
+///         println!("This is a test");
+///     }
+/// }
+///
+/// // > cargo run -- test
 /// ```
 #[proc_macro_attribute]
 #[allow(unreachable_code)]
@@ -77,7 +111,7 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
 
     #[cfg(not(nightly))]
     {
-        // SAFETY: The `subcommand` attribute is removed by the root `command` when is a inner function.
+        // SAFETY: The `subcommand` attribute is removed by the root `command` when is an inner function.
         panic!("invalid function: `{}`\nfree function `subcommand`s are only supported in nightly builds", func.sig.ident);
     }
 
@@ -86,20 +120,44 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Adds command-line option information to a function argument.
+/// Declares a command option.
+///
+/// By default any function argument is considered a command `option`,
+/// Use this attribute to provide additional information like `alias`,
+/// `description` or `min`, `max` and `default` arguments.
 ///
 /// # Options
-/// - `name` (required): name of the function argument.
-/// - `description`: description of the option.
-/// - `min`: min number of values the option takes.
-/// - `max`: max number of values the option takes.
-/// - `default`: default value(s) of the option.
+/// - `name` (required): Name of the function argument.
+/// - `alias`: Alias of the function argument.
+/// - `description`: Description of the option.
+/// - `min`: Min number of values the option takes.
+/// - `max`: Max number of values the option takes.
+/// - `default`: Default value(s) of the option.
+///
+/// Function arguments can be declared as the following types:
+/// - Any type that implement `FromStr`.
+/// - `Vec<T>` where `T` implements `FromStr`.
+/// - `&[T]` slices where `T` implements `FromStr`.
+/// - `Option<T>` where `T` implements `FromStr`.
 ///
 /// # Example:
-/// ```text
+/// ```no_run
+/// use clapi::macros::*;
+///
 /// #[command]
-/// #[option(name="x", description="", min=0, max=3, default=1,2,3)]
-/// fn main(x: Vec<u32>){ }
+/// #[option(name="repeat", alias="r", default=1)]
+/// #[option(name="upper_case", alias="u", description="Display the message in uppercase")]
+/// fn main(repeat: u32, upper_case: bool){
+///     for _ in 0..repeat {
+///         if upper_case {
+///             println!("HELLO WORLD");
+///         } else {
+///             println!("hello world");
+///         }
+///     }
+/// }
+///
+/// // > cargo run -- --repeat -u
 /// ```
 #[proc_macro_attribute]
 pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
@@ -107,19 +165,31 @@ pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
     panic!("option should be placed after a `command` or `subcommand` attribute")
 }
 
-/// Marks a function argument as command-line arguments.
+/// Declares a command argument.
 ///
 /// # Options
-/// - `name` (required): name of the function argument.
-/// - `min`: min number of values the option takes.
-/// - `max`: max number of values the option takes.
-/// - `default`: default value(s) of the option.
+/// - `name` (required): Name of the function argument.
+/// - `min`: Min number of values the option takes.
+/// - `max`: Max number of values the option takes.
+/// - `default`: Default value(s) of the option.
 ///
-/// # Example:
-/// ```text
+/// Function arguments can be declared as the following types:
+/// - Any type that implement `FromStr`.
+/// - `Vec<T>` where `T` implements `FromStr`.
+/// - `&[T]` slices where `T` implements `FromStr`.
+/// - `Option<T>` where `T` implements `FromStr`.
+///
+/// # Examples:
+/// ```no_run
+/// use clapi::macros::*;
+///
 /// #[command]
-/// #[arg(name="args", min=0, max=3, default="one", "two", "three")]
-/// fn main(args: Vec<String>){ }
+/// #[arg(name="args", min=1, max=10, default="Hello World")]
+/// fn main(args: Vec<String>){
+///     println!("{}", args.join(" "));
+/// }
+///
+/// // > cargo run -- one two three
 /// ```
 #[proc_macro_attribute]
 pub fn arg(_: TokenStream, _: TokenStream) -> TokenStream {

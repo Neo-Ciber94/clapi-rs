@@ -47,14 +47,14 @@ impl OptionData {
     pub fn expand(&self) -> TokenStream {
         // CommandOption::set_alias
         let alias = if let Some(s) = &self.alias{
-            quote!{ .set_alias(#s) }
+            quote!{ .alias(#s) }
         } else {
             quote!{}
         };
 
         // CommandOption::set_description
         let description = if let Some(s) = &self.description{
-            quote!{ .set_description(#s) }
+            quote!{ .description(#s) }
         } else {
             quote!{}
         };
@@ -62,7 +62,7 @@ impl OptionData {
         // `CommandOption::set_required` is args have default values
         let required = match &self.args {
             Some(args) if !args.has_default_values() => {
-                quote! { .set_required(true) }
+                quote! { .required(true) }
             }
             _ => quote! {}
         };
@@ -70,7 +70,7 @@ impl OptionData {
         // CommandOption::set_args
         let args = if let Some(args) = &self.args{
             let tokens = args.expand();
-            quote!{ .set_args(#tokens) }
+            quote!{ .args(#tokens) }
         } else {
             quote!{}
         };

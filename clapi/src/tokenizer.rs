@@ -87,19 +87,19 @@ where
         }
 
         let mut tokens = Vec::new();
-        let mut current_command = context.root().as_ref();
+        let mut current_command = context.root();
 
         // Select the current command
         while let Some(arg) = iterator.peek() {
-            if let Some(child) = current_command.get_child(arg.borrow()) {
+            if let Some(child) = current_command.find_subcommand(arg.borrow()) {
                 current_command = child;
-                tokens.push(Token::Cmd(child.name().to_string()));
+                tokens.push(Token::Cmd(child.get_name().to_string()));
                 iterator.next();
             } else {
                 // If the current don't take args, have subcommands and is not an option
                 // the next should be an unknown subcommand
-                if !current_command.args().take_args()
-                    && current_command.children().len() > 0
+                if !current_command.get_args().take_args()
+                    && current_command.get_children().len() > 0
                     && !context.is_option_prefixed(arg.borrow())
                 {
                     tokens.push(Token::Cmd(arg.borrow().to_string()));
@@ -136,8 +136,8 @@ where
                 if let Some(args) = args {
                     tokens.extend(args.into_iter().map(|s| Token::Arg(s)));
                 } else {
-                    if let Some(opt) = current_command.options().get(option.as_str()) {
-                        let arity = opt.args().arity();
+                    if let Some(opt) = current_command.get_options().get(option.as_str()) {
+                        let arity = opt.get_args().get_arity();
                         if arity.takes_args() {
                             let mut args = Vec::new();
                             while args.len() < arity.max_arg_count() {
@@ -245,26 +245,25 @@ mod tests {
     use crate::command::Command;
     use crate::command_line::into_arg_iterator;
     use crate::option::CommandOption;
-    use crate::root_command::RootCommand;
 
     fn tokenize(value: &str) -> Result<Vec<Token>> {
         let root =
-            RootCommand::new()
-                .set_option(CommandOption::new("version").set_alias("v"))
-                .set_option(CommandOption::new("author").set_alias("a"))
-                .set_command(Command::new("echo").set_args(Arguments::new(1..)))
-                .set_command(
+            Command::root()
+                .option(CommandOption::new("version").alias("v"))
+                .option(CommandOption::new("author").alias("a"))
+                .subcommand(Command::new("echo").args(Arguments::new(1..)))
+                .subcommand(
                     Command::new("pick")
-                        .set_args(Arguments::new(ArgCount::new(1, 2)))
-                        .set_option(CommandOption::new("color").set_args(
-                            Arguments::new(1).set_valid_values(&["red", "blue", "green"]),
+                        .args(Arguments::new(ArgCount::new(1, 2)))
+                        .option(CommandOption::new("color").args(
+                            Arguments::new(1).valid_values(&["red", "blue", "green"]),
                         )),
                 )
-                .set_command(
-                    Command::new("any").set_option(
+                .subcommand(
+                    Command::new("any").option(
                         CommandOption::new("numbers")
-                            .set_required(true)
-                            .set_args(Arguments::new(1..)),
+                            .required(true)
+                            .args(Arguments::new(1..)),
                     ),
                 );
 

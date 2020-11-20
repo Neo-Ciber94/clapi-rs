@@ -19,14 +19,15 @@ pub struct CommandOption {
 
 impl CommandOption {
     /// Constructs a new `CommandOption`.
-    pub fn new(name: &str) -> Self {
+    pub fn new<S: Into<String>>(name: S) -> Self {
+        let name = name.into();
         assert!(!name.trim().is_empty(), "name cannot be empty");
 
         let args =
-            Arguments::none().also_mut(|a| a.parent = Some(Symbol::Opt(name.to_string())));
+            Arguments::none().also_mut(|a| a.parent = Some(Symbol::Opt(name.clone())));
 
         CommandOption {
-            name: name.to_string(),
+            name,
             aliases: LinkedHashSet::new(),
             description: None,
             args,
@@ -35,17 +36,17 @@ impl CommandOption {
     }
 
     /// Returns the name of this option.
-    pub fn name(&self) -> &str {
+    pub fn get_name(&self) -> &str {
         self.name.as_str()
     }
 
     /// Returns an `Iterator` over the aliases of this option.
-    pub fn aliases(&self) -> impl ExactSizeIterator<Item = &'_ String> + Debug {
+    pub fn get_aliases(&self) -> impl ExactSizeIterator<Item = &'_ String> + Debug {
         self.aliases.iter()
     }
 
     /// Returns a short description of this option or `None` if not set.
-    pub fn description(&self) -> Option<&str> {
+    pub fn get_description(&self) -> Option<&str> {
         self.description.as_ref().map(|s| s.as_str())
     }
 
@@ -55,7 +56,7 @@ impl CommandOption {
     }
 
     /// Returns the `Arguments` of this option.
-    pub fn args(&self) -> &Arguments {
+    pub fn get_args(&self) -> &Arguments {
         &self.args
     }
 
@@ -65,30 +66,30 @@ impl CommandOption {
     }
 
     /// Returns `true` if option contains the specified alias.
-    pub fn has_alias(&self, alias: &str) -> bool {
-        self.aliases.contains(alias)
+    pub fn has_alias<S: AsRef<str>>(&self, alias: S) -> bool {
+        self.aliases.contains(alias.as_ref())
     }
 
     /// Adds a new alias to this option.
-    pub fn set_alias(mut self, alias: &str) -> Self {
+    pub fn alias(mut self, alias: &str) -> Self {
         self.aliases.insert(alias.to_string());
         self
     }
 
     /// Sets a short description of this option.
-    pub fn set_description(mut self, description: &str) -> Self {
+    pub fn description(mut self, description: &str) -> Self {
         self.description = Some(description.to_string());
         self
     }
 
     /// Specify if this option is required, by default is `false`.
-    pub fn set_required(mut self, is_required: bool) -> Self {
+    pub fn required(mut self, is_required: bool) -> Self {
         self.is_required = is_required;
         self
     }
 
     /// Sets the `Arguments` of this option.
-    pub fn set_args(mut self, mut args: Arguments) -> Self {
+    pub fn args(mut self, mut args: Arguments) -> Self {
         args.parent = Some(Symbol::Opt(self.name.clone()));
         self.args = args;
         self
@@ -110,7 +111,7 @@ impl CommandOption {
     /// - If this takes not args.
     /// - The value cannot be converted to type `T`.
     #[inline]
-    pub fn arg_as<T>(&self) -> Result<T>
+    pub fn get_arg_as<T>(&self) -> Result<T>
     where
         T: FromStr + 'static,
         <T as FromStr>::Err: Display,
@@ -125,7 +126,7 @@ impl CommandOption {
     /// - If this takes not args.
     /// - One of the values cannot be converted to type `T`.
     #[inline]
-    pub fn args_as<T>(&self) -> Result<Vec<T>>
+    pub fn get_args_as<T>(&self) -> Result<Vec<T>>
     where
         T: FromStr + 'static,
         <T as FromStr>::Err: Display,
@@ -176,7 +177,7 @@ impl Options {
 
         // Check if any of the aliases is equals to the option name
         for opt in &self.inner {
-            if option.aliases.contains(opt.name()) || opt.aliases.contains(option.name()){
+            if option.aliases.contains(opt.get_name()) || opt.aliases.contains(option.get_name()){
                 return false;
             }
         }
@@ -195,7 +196,7 @@ impl Options {
     /// Returns the `CommandOption` with the given name or `None` if not found.
     pub fn get_by_name(&self, name: &str) -> Option<&CommandOption> {
         self.inner.iter()
-            .find(|opt| opt.name() == name)
+            .find(|opt| opt.get_name() == name)
     }
 
     /// Returns the `CommandOption` with the given alias or `None` if not found.
@@ -207,7 +208,7 @@ impl Options {
     /// Returns the `Arguments` for the option with the given name or alias
     /// or `None` if the option is not found.
     pub fn get_args(&self, name_or_alias: &str) -> Option<&Arguments> {
-        self.get(name_or_alias).map(|o| o.args())
+        self.get(name_or_alias).map(|o| o.get_args())
     }
 
     /// Converts the option argument value into the specified type, returns `None`
@@ -223,7 +224,7 @@ impl Options {
             T: FromStr + 'static,
             <T as FromStr>::Err: Display,
     {
-        self.get(name_or_alias).map(|o| o.arg_as())
+        self.get(name_or_alias).map(|o| o.get_arg_as())
     }
 
     /// Returns an iterator that converts the argument values into the specified type,
@@ -238,7 +239,7 @@ impl Options {
             T: FromStr + 'static,
             <T as FromStr>::Err: Display,
     {
-        self.get(name_or_alias).map(|o| o.args_as())
+        self.get(name_or_alias).map(|o| o.get_args_as())
     }
 
     /// Returns `true` if there is an option with the given name or alias.
@@ -286,23 +287,23 @@ mod tests {
 
     #[test]
     fn alias_test() {
-        let opt = CommandOption::new("name").set_alias("n").set_alias("nm");
+        let opt = CommandOption::new("name").alias("n").alias("nm");
 
-        assert_eq!(opt.name(), "name");
+        assert_eq!(opt.get_name(), "name");
 
         assert!(opt.has_alias("n"));
         assert!(opt.has_alias("nm"));
 
-        assert!(opt.aliases().any(|s| s == "n"));
-        assert!(opt.aliases().any(|s| s == "nm"));
-        assert!(!opt.aliases().any(|s| s == "name"));
+        assert!(opt.get_aliases().any(|s| s == "n"));
+        assert!(opt.get_aliases().any(|s| s == "nm"));
+        assert!(!opt.get_aliases().any(|s| s == "name"));
     }
 
     #[test]
     fn description_test() {
-        let opt = CommandOption::new("date").set_description("Sets the date");
+        let opt = CommandOption::new("date").description("Sets the date");
 
-        assert_eq!(opt.description(), Some("Sets the date"));
+        assert_eq!(opt.get_description(), Some("Sets the date"));
     }
 
     #[test]
@@ -310,30 +311,30 @@ mod tests {
         let opt1 = CommandOption::new("date");
         assert!(!opt1.is_required());
 
-        let opt2 = opt1.clone().set_required(true);
+        let opt2 = opt1.clone().required(true);
         assert!(opt2.is_required());
     }
 
     #[test]
     fn args_test() {
         let opt1 = CommandOption::new("date");
-        assert!(!opt1.args().take_args());
+        assert!(!opt1.get_args().take_args());
 
         let mut opt2 = opt1
             .clone()
-            .set_args(Arguments::new(1..).set_valid_values(&["day", "hour", "minute"]));
+            .args(Arguments::new(1..).valid_values(&["day", "hour", "minute"]));
 
-        assert!(opt2.args().take_args());
-        assert!(opt2.args().is_valid("day"));
-        assert!(opt2.args().is_valid("hour"));
-        assert!(opt2.args().is_valid("minute"));
+        assert!(opt2.get_args().take_args());
+        assert!(opt2.get_args().is_valid("day"));
+        assert!(opt2.get_args().is_valid("hour"));
+        assert!(opt2.get_args().is_valid("minute"));
 
         assert!(opt2.set_args_values(&["seconds"]).is_err());
         assert!(opt2.set_args_values(&["day"]).is_ok());
         assert!(opt2.set_args_values(&["hour"]).is_ok());
         assert!(opt2.set_args_values(&["minute"]).is_ok());
 
-        assert!(opt2.args().values().iter().any(|s| s == "minute"));
+        assert!(opt2.get_args().get_values().iter().any(|s| s == "minute"));
     }
 
     #[test]
@@ -341,8 +342,8 @@ mod tests {
         let mut options = Options::new();
         assert!(options.is_empty());
 
-        assert!(options.add(CommandOption::new("version").set_alias("v")));
-        assert!(options.add(CommandOption::new("author").set_alias("a")));
+        assert!(options.add(CommandOption::new("version").alias("v")));
+        assert!(options.add(CommandOption::new("author").alias("a")));
         assert!(options.add(CommandOption::new("verbose")));
         assert_eq!(options.len(), 3);
     }
@@ -350,8 +351,8 @@ mod tests {
     #[test]
     fn options_get_test() {
         let mut options = Options::new();
-        options.add(CommandOption::new("version").set_alias("v"));
-        options.add(CommandOption::new("author").set_alias("a"));
+        options.add(CommandOption::new("version").alias("v"));
+        options.add(CommandOption::new("author").alias("a"));
         options.add(CommandOption::new("verbose"));
 
         assert_eq!(options.get("version"), Some(&CommandOption::new("version")));
@@ -363,8 +364,8 @@ mod tests {
     #[test]
     fn options_contains_test() {
         let mut options = Options::new();
-        options.add(CommandOption::new("version").set_alias("v"));
-        options.add(CommandOption::new("author").set_alias("a"));
+        options.add(CommandOption::new("version").alias("v"));
+        options.add(CommandOption::new("author").alias("a"));
         options.add(CommandOption::new("verbose"));
 
         assert!(options.contains("version"));
@@ -379,14 +380,14 @@ mod tests {
         let mut options = Options::new();
 
         let opt1 = CommandOption::new("version")
-            .set_alias("v")
-            .set_args(Arguments::new(1));
+            .alias("v")
+            .args(Arguments::new(1));
 
         let opt2 = CommandOption::new("author")
-            .set_alias("a")
-            .set_args(Arguments::new(0..));
+            .alias("a")
+            .args(Arguments::new(0..));
 
-        let opt3 = CommandOption::new("verbose").set_args(Arguments::new(1..3));
+        let opt3 = CommandOption::new("verbose").args(Arguments::new(1..3));
 
         options.add(opt1);
         options.add(opt2);

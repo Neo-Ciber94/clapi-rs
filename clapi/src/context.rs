@@ -1,19 +1,18 @@
 use crate::command::Command;
 use crate::option::CommandOption;
-use crate::root_command::RootCommand;
 use linked_hash_set::LinkedHashSet;
 
 /// Provides common values used for a command-line parsing.
 #[derive(Debug)]
 pub struct Context {
-    root: RootCommand,
+    root: Command,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
     arg_delimiters: LinkedHashSet<char>,
 }
 
 impl Context {
-    fn empty(root: RootCommand) -> Self {
+    fn empty(root: Command) -> Self {
         Context {
             root,
             name_prefixes: LinkedHashSet::new(),
@@ -23,7 +22,7 @@ impl Context {
     }
 
     /// Constructs a new `Context` with the `RootCommand`.
-    pub fn new(root: RootCommand) -> Self {
+    pub fn new(root: Command) -> Self {
         let mut context = Context::empty(root);
         context.add_name_prefix("--");
         context.add_alias_prefix("-");
@@ -40,7 +39,7 @@ impl Context {
     /// - `alias_prefixes`: the alias prefixed used for the options, by default `"-"` is used.
     /// - `arg_delimiter`: the delimiter to declare option arguments.
     pub fn with<'a, I, U>(
-        root: RootCommand,
+        root: Command,
         name_prefixes: I,
         alias_prefixes: I,
         arg_delimiters: U,
@@ -105,12 +104,12 @@ impl Context {
 
     /// Returns the `CommandOption` by the specified name or alias or `None` if not found.
     pub fn get_option(&self, name_or_alias: &str) -> Option<&CommandOption> {
-        if let Some(opt) = self.root().options().get(name_or_alias) {
+        if let Some(opt) = self.root().get_options().get(name_or_alias) {
             return Some(opt);
         }
 
-        for child in self.root().children() {
-            if let Some(opt) = child.options().get(name_or_alias) {
+        for child in self.root().get_children() {
+            if let Some(opt) = child.get_options().get(name_or_alias) {
                 return Some(opt);
             }
         }
@@ -120,7 +119,7 @@ impl Context {
 
     /// Returns the `Command` by the specified name or `None` if not found.
     pub fn get_command(&self, name: &str) -> Option<&Command> {
-        self.root().children().find(|c| c.name() == name)
+        self.root().get_children().find(|c| c.get_name() == name)
     }
 
     /// Returns `true` if the specified value starts with an option prefix.
@@ -184,15 +183,15 @@ impl Context {
 
     /// Returns `true` if there is a `Command` with the specified name in this context.
     pub fn has_command(&self, name: &str) -> bool {
-        self.root().children().any(|c| c.name() == name)
+        self.root().get_children().any(|c| c.get_name() == name)
     }
 
     /// Returns the `RootCommand` used by this context.
-    pub fn root(&self) -> &RootCommand {
+    pub fn root(&self) -> &Command {
         &self.root
     }
 
-    pub(crate) fn root_mut(&mut self) -> &mut RootCommand {
+    pub(crate) fn root_mut(&mut self) -> &mut Command {
         &mut self.root
     }
 

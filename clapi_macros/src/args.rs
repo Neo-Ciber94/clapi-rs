@@ -100,11 +100,11 @@ impl ArgData {
             quote! {}
         } else {
             let tokens = self.default_values.iter().map(|s| quote! { #s });
-            quote! { .set_default_values(&[#(#tokens),*]) }
+            quote! { .default_values(&[#(#tokens),*]) }
         };
 
         let name = self.name.as_ref()
-            .map(|s| quote!{ .set_name(#s)} )
+            .map(|s| quote!{ .name(#s)} )
             .unwrap_or_else(|| quote!{ });
 
         quote! {

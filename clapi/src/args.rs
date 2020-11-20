@@ -57,7 +57,7 @@ impl Arguments {
 
     /// Returns the number of values this takes.
     #[inline]
-    pub fn arity(&self) -> ArgCount {
+    pub fn get_arity(&self) -> ArgCount {
         self.arity
     }
 
@@ -66,31 +66,31 @@ impl Arguments {
     /// # Panics
     /// If this `Arguments` is not part of a `Command` or `CommandOption`.
     #[inline]
-    pub fn parent(&self) -> Option<&Symbol> {
+    pub fn get_parent(&self) -> Option<&Symbol> {
         self.parent.as_ref()
     }
 
     /// Returns the name of this `Arguments` or `None` if not set.
     #[inline]
-    pub fn name(&self) -> Option<&str> {
+    pub fn get_name(&self) -> Option<&str> {
         self.name.as_ref().map(|s| s.as_str())
     }
 
     /// Returns the allowed values.
     #[inline]
-    pub fn validator(&self) -> Option<&dyn Validator> {
+    pub fn get_validator(&self) -> Option<&dyn Validator> {
         self.valid_values.as_ref().map(|s| s.as_ref())
     }
 
     /// Returns the default values.
     #[inline]
-    pub fn default_values(&self) -> &[String] {
+    pub fn get_default_values(&self) -> &[String] {
         self.default_values.as_slice()
     }
 
     /// Returns the current values.
     #[inline]
-    pub fn values(&self) -> &[String] {
+    pub fn get_values(&self) -> &[String] {
         self.values.as_slice()
     }
 
@@ -122,7 +122,7 @@ impl Arguments {
     }
 
     /// Sets the name of this arguments.
-    pub fn set_name(mut self, name: &str) -> Self {
+    pub fn name(mut self, name: &str) -> Self {
         self.name = Some(name.to_string());
         self
     }
@@ -140,12 +140,12 @@ impl Arguments {
     /// use clapi::Arguments;
     ///
     /// let args = Arguments::new(1)
-    ///     .set_valid_values(&["zero", "one", "two", "three"])
-    ///     .set_default_values(&["zero"]);
+    ///     .valid_values(&["zero", "one", "two", "three"])
+    ///     .default_values(&["zero"]);
     ///
-    /// assert!(args.default_values().contains(&String::from("zero")));
+    /// assert!(args.get_default_values().contains(&String::from("zero")));
     /// ```
-    pub fn set_default_values<'a, I, S>(mut self, values: I) -> Self
+    pub fn default_values<'a, I, S>(mut self, values: I) -> Self
     where
         I: IntoIterator<Item = &'a S>,
         S: ToString + 'a,
@@ -201,14 +201,14 @@ impl Arguments {
     /// use clapi::Arguments;
     ///
     /// let mut args = Arguments::new(1)
-    ///     .set_valid_values(&["zero", "one", "two", "three"])
-    ///     .set_default_values(&["zero"]);
+    ///     .valid_values(&["zero", "one", "two", "three"])
+    ///     .default_values(&["zero"]);
     ///
     /// assert!(args.set_values(&["four"]).is_err());
     /// assert!(args.set_values(&["one"]).is_ok());
     /// assert!(args.set_values(&["two"]).is_ok());
     /// ````
-    pub fn set_valid_values<'a, I, S>(self, values: I) -> Self
+    pub fn valid_values<'a, I, S>(self, values: I) -> Self
     where
         I: IntoIterator<Item = &'a S>,
         S: ToString + 'a,
@@ -218,11 +218,11 @@ impl Arguments {
             .map(ToString::to_string)
             .collect::<LinkedHashSet<String>>();
 
-        self.set_validator(ListValidator::new(values))
+        self.validator(ListValidator::new(values))
     }
 
     /// Sets the validator for the valid values of this `Arguments`.
-    pub fn set_validator<V: Validator + 'static>(mut self, validator: V) -> Self {
+    pub fn validator<V: Validator + 'static>(mut self, validator: V) -> Self {
         assert!(self.valid_values.is_none(), "this `Arguments` validator is already set");
         assert!(self.take_args(), "this `Arguments` takes not values");
         assert!(self.values.is_empty(), "this `Arguments` already have values");
@@ -244,7 +244,7 @@ impl Arguments {
     /// use clapi::validator::validator_for;
     ///
     /// let mut args = Arguments::new(2)
-    ///     .set_validator(validator_for::<i32>());
+    ///     .validator(validator_for::<i32>());
     ///
     /// assert!(args.set_values(&[1, 2]).is_ok());
     /// assert!(args.set_values(&["3", "4"]).is_ok());
@@ -593,23 +593,23 @@ mod tests {
 
     #[test]
     fn arity_test() {
-        assert_eq!(Arguments::new(1).arity(), 1.into());
-        assert_eq!(Arguments::new(0..2).arity(), (0..2).into());
-        assert_eq!(Arguments::none().arity(), 0.into());
-        assert_eq!(Arguments::zero_or_one().arity(), (0..=1).into());
-        assert_eq!(Arguments::zero_or_more().arity(), (0..).into());
-        assert_eq!(Arguments::one_or_more().arity(), (1..).into());
+        assert_eq!(Arguments::new(1).get_arity(), 1.into());
+        assert_eq!(Arguments::new(0..2).get_arity(), (0..2).into());
+        assert_eq!(Arguments::none().get_arity(), 0.into());
+        assert_eq!(Arguments::zero_or_one().get_arity(), (0..=1).into());
+        assert_eq!(Arguments::zero_or_more().get_arity(), (0..).into());
+        assert_eq!(Arguments::one_or_more().get_arity(), (1..).into());
     }
 
     #[test]
     #[should_panic]
     fn valid_values_panic_test() {
-        let _args = Arguments::new(0).set_valid_values(&[1, 2, 3]);
+        let _args = Arguments::new(0).valid_values(&[1, 2, 3]);
     }
 
     #[test]
     fn is_valid_test() {
-        let args = Arguments::new(1).set_valid_values(&["id", "name", "age"]);
+        let args = Arguments::new(1).valid_values(&["id", "name", "age"]);
 
         assert!(args.is_valid("id"));
         assert!(args.is_valid("name"));
@@ -619,36 +619,36 @@ mod tests {
     #[test]
     #[should_panic]
     fn default_values_panic_test() {
-        let _args = Arguments::new(1).set_default_values(&[1, 2, 3]);
+        let _args = Arguments::new(1).default_values(&[1, 2, 3]);
     }
 
     #[test]
     fn default_values_test() {
-        let args = Arguments::new(3).set_default_values(&[1, 2, 3]);
+        let args = Arguments::new(3).default_values(&[1, 2, 3]);
 
-        assert!(args.default_values().iter().any(|n| n == "1"));
-        assert!(args.default_values().iter().any(|n| n == "2"));
-        assert!(args.default_values().iter().any(|n| n == "3"));
+        assert!(args.get_default_values().iter().any(|n| n == "1"));
+        assert!(args.get_default_values().iter().any(|n| n == "2"));
+        assert!(args.get_default_values().iter().any(|n| n == "3"));
     }
 
     #[test]
     fn set_values_test() {
         let mut args1 = Arguments::new(1);
         assert!(args1.set_values(&[1]).is_ok());
-        assert!(args1.values().iter().any(|s| s == "1"));
+        assert!(args1.get_values().iter().any(|s| s == "1"));
 
         let mut args2 = Arguments::new(1..);
         assert!(args2.set_values(&[1, 2, 3, 4]).is_ok());
-        assert!(args2.values().iter().any(|s| s == "1"));
-        assert!(args2.values().iter().any(|s| s == "2"));
-        assert!(args2.values().iter().any(|s| s == "3"));
-        assert!(args2.values().iter().any(|s| s == "4"));
+        assert!(args2.get_values().iter().any(|s| s == "1"));
+        assert!(args2.get_values().iter().any(|s| s == "2"));
+        assert!(args2.get_values().iter().any(|s| s == "3"));
+        assert!(args2.get_values().iter().any(|s| s == "4"));
 
         let mut args3 = Arguments::new(1..3);
         assert!(args3.set_values(&[1, 2, 3]).is_ok());
-        assert!(args3.values().iter().any(|s| s == "1"));
-        assert!(args3.values().iter().any(|s| s == "2"));
-        assert!(args3.values().iter().any(|s| s == "3"));
+        assert!(args3.get_values().iter().any(|s| s == "1"));
+        assert!(args3.get_values().iter().any(|s| s == "2"));
+        assert!(args3.get_values().iter().any(|s| s == "3"));
 
         let mut args4 = Arguments::none();
         assert!(args4.set_values(&[1]).is_err());
@@ -663,7 +663,7 @@ mod tests {
 
     #[test]
     fn validator_test1() {
-        let mut args = Arguments::new(1).set_validator(validator_for::<u32>());
+        let mut args = Arguments::new(1).validator(validator_for::<u32>());
 
         assert!(args.set_values(&[1]).is_ok());
         assert!(args.set_values(&["2"]).is_ok());
@@ -673,7 +673,7 @@ mod tests {
 
     #[test]
     fn validator_test2() {
-        let mut args = Arguments::new(1).set_validator(validator_for::<f64>());
+        let mut args = Arguments::new(1).validator(validator_for::<f64>());
 
         assert!(args.set_values(&[1]).is_ok());
         assert!(args.set_values(&["2.5"]).is_ok());
@@ -683,7 +683,7 @@ mod tests {
 
     #[test]
     fn validator_test3() {
-        let mut args = Arguments::new(1).set_validator(validator_for::<bool>());
+        let mut args = Arguments::new(1).validator(validator_for::<bool>());
 
         assert!(args.set_values(&[true]).is_ok());
         assert!(args.set_values(&[false]).is_ok());
@@ -693,21 +693,21 @@ mod tests {
 
     #[test]
     fn convert_ok_test() {
-        let mut args = Arguments::new(1..).set_name("numbers");
+        let mut args = Arguments::new(1..).name("numbers");
         args.set_values(&["1"]).unwrap();
         assert_eq!(args.convert::<u32>().ok(), Some(1));
     }
 
     #[test]
     fn convert_err_test() {
-        let mut args = Arguments::new(1..).set_name("numbers");
+        let mut args = Arguments::new(1..).name("numbers");
         args.set_values(&["1", "2", "3"]).unwrap();
         assert!(args.convert::<u32>().is_err());
     }
 
     #[test]
     fn convert_at_test() {
-        let mut args = Arguments::new(1..).set_name("numbers");
+        let mut args = Arguments::new(1..).name("numbers");
 
         args.set_values(&["1", "2", "3"]).unwrap();
 
@@ -718,7 +718,7 @@ mod tests {
 
     #[test]
     fn convert_all_test() {
-        let mut args = Arguments::new(1..).set_name("numbers");
+        let mut args = Arguments::new(1..).name("numbers");
         args.set_values(&["1", "2", "3"]).unwrap();
 
         let values = args.convert_all::<u32>().unwrap();

@@ -44,46 +44,49 @@ fn main(repeat: usize, numbers: Vec<i32>)  -> Result<()> {
 
 fn run_cmd() -> Result<()> {
     let root = RootCommand::new()
-        .set_description("A file manager system")
-        .set_help("A file manager system for create, find and list files in a directory.")
-        .set_option(
+        .description("A file manager system")
+        .help("A file manager system for create, find and list files in a directory.")
+        .option(
             CommandOption::new("version")
-                .set_alias("v")
-                .set_args(Arguments::new(1).set_name("format"))
-                .set_description("Version of the app"),
+                .alias("v")
+                .args(Arguments::new(1).name("format"))
+                .description("Version of the app"),
         )
-        .set_option(
+        .option(
             CommandOption::new("author")
-                .set_alias("a")
-                .set_description("Author of the app"),
+                .alias("a")
+                .description("Author of the app"),
         )
-        .set_command(
+        .subcommand(
             Command::new("create")
-                .set_description("Create a file")
-                .set_args(Arguments::new(1))
-                .set_handler(|_, args| {
-                    println!("Create a file named: {}", args.values()[0]);
+                .description("Create a file")
+                .args(Arguments::new(1))
+                .handler(|_, args| {
+                    println!("Create a file named: {}", args.get_values()[0]);
                     Ok(())
                 }),
         )
-        .set_command(
+        .subcommand(
             Command::new("list")
-                .set_description("List the files in a directory")
-                .set_option(
-                    CommandOption::new("sort").set_alias("s").set_args(
+                .description("List the files in a directory")
+                .option(
+                    CommandOption::new("sort").alias("s").args(
                         Arguments::new(1)
-                            .set_valid_values(&["date", "size", "name"])
-                            .set_default_values(&["name"]),
+                            .valid_values(&["date", "size", "name"])
+                            .default_values(&["name"]),
                     ),
                 )
-                .set_handler(|opts, _| {
+                .handler(|opts, _| {
                     println!(
                         "Lists the files by: {:?}",
-                        opts.get("s").map(|s| s.args().values())
+                        opts.get("s").map(|s| s.get_args().get_values())
                     );
                     Ok(())
                 }),
         );
 
-    CommandLine::default_with_root(root).run()
+    CommandLine::new(root)
+        .use_default_help()
+        .use_default_suggestions()
+        .run()
 }

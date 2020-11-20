@@ -3,7 +3,6 @@ use crate::context::Context;
 use crate::error::{Error, ErrorKind, ParseError, Result};
 use crate::help::{DefaultHelpCommand, HelpCommand};
 use crate::parser::{DefaultParser, Parser};
-use crate::root_command::RootCommand;
 use crate::suggestion::{SingleSuggestionProvider, SuggestionProvider};
 use crate::utils::OptionExt;
 use std::fmt::{Debug, Formatter};
@@ -19,22 +18,8 @@ pub struct CommandLine {
 impl CommandLine {
     /// Constructs a new `CommandLine` with the provided `RootCommand`.
     #[inline]
-    pub fn new(root: RootCommand) -> Self {
+    pub fn new(root: Command) -> Self {
         CommandLine::with_context(Context::new(root))
-    }
-
-    /// Constructs a new `CommandLine` with default values with the provided `RootCommand`.
-    #[inline]
-    pub fn default_with_root(root: RootCommand) -> Self {
-        Self::new(root).use_default_suggestions().use_default_help()
-    }
-
-    /// Constructs a new `CommandLine` with default values with the provided `Context`.
-    #[inline]
-    pub fn default_with_context(context: Context) -> Self {
-        Self::with_context(context)
-            .use_default_suggestions()
-            .use_default_help()
     }
 
     /// Constructs a new `CommandLine` with the provided `Context`.
@@ -53,7 +38,7 @@ impl CommandLine {
     }
 
     /// Returns the `RootCommand` used by this command-line.
-    pub fn root(&self) -> &RootCommand {
+    pub fn root(&self) -> &Command {
         &self.context.root()
     }
 
@@ -81,15 +66,15 @@ impl CommandLine {
     /// Sets the specified `HelpCommand`.
     pub fn set_help(mut self, help_command: impl HelpCommand + 'static) -> Self {
         assert_eq!(
-            self.context.root().get_child(help_command.name()),
+            self.context.root().find_subcommand(help_command.name()),
             None,
             "Command `{}` already exists",
             help_command.name()
         );
 
-        let command = Command::new(help_command.name()).set_description(help_command.description());
+        let command = Command::new(help_command.name()).description(help_command.description());
 
-        self.context.root_mut().as_mut().add_command(command);
+        self.context.root_mut().add_command(command);
         self.help = Some(Box::new(help_command));
         self
     }
@@ -134,10 +119,10 @@ impl CommandLine {
 
         // Check if the command is a 'help' command
         if self.is_help_command(command) {
-            return self.display_help(parse_result.args().values());
+            return self.display_help(parse_result.args().get_values());
         }
 
-        let handler = command.handler();
+        let handler = command.get_handler();
 
         // We borrow the value from the Option to avoid create temporary
         if let Some(mut handler) = handler {
@@ -151,7 +136,7 @@ impl CommandLine {
             } else {
                 Err(Error::new(
                     ErrorKind::Other,
-                    format!("No handler specified for `{}`", command.name()),
+                    format!("No handler specified for `{}`", command.get_name()),
                 ))
             }
         }
@@ -185,7 +170,7 @@ impl CommandLine {
 
     fn is_help_command(&self, command: &Command) -> bool {
         if let Some(help_provider) = &self.help {
-            help_provider.name() == command.name()
+            help_provider.name() == command.get_name()
         } else {
             false
         }
@@ -194,14 +179,14 @@ impl CommandLine {
     fn display_help(&self, args: &[String]) -> Result<()> {
         let help_command = self.help.as_ref().expect("help command is not set");
 
-        fn find_command<'a>(root: &'a RootCommand, children: &[String]) -> Result<&'a Command> {
+        fn find_command<'a>(root: &'a Command, children: &[String]) -> Result<&'a Command> {
             debug_assert!(children.len() > 0);
 
-            let mut current = root.as_ref();
+            let mut current = root;
 
             for i in 0..children.len() {
                 let child_name = children[i].as_str();
-                if let Some(cmd) = current.get_child(child_name) {
+                if let Some(cmd) = current.find_subcommand(child_name) {
                     current = cmd;
                 } else {
                     return Err(Error::from(ErrorKind::UnrecognizedCommand(
@@ -214,7 +199,7 @@ impl CommandLine {
         }
 
         let output = match args.len() {
-            0 => help_command.help(&self.context, self.context.root().as_ref()),
+            0 => help_command.help(&self.context, self.context.root()),
             _ => {
                 let root = self.context.root();
                 let subcommand = find_command(root, args)?;
@@ -236,17 +221,17 @@ impl CommandLine {
                 s,
                 parse_error
                     .command()
-                    .children()
-                    .map(|c| c.name().to_string())
+                    .get_children()
+                    .map(|c| c.get_name().to_string())
                     .collect::<Vec<String>>(),
             ),
             ErrorKind::UnrecognizedOption(_, s) => (
                 s,
                 parse_error
                     .command()
-                    .options()
+                    .get_options()
                     .iter()
-                    .map(|o| o.name().to_string())
+                    .map(|o| o.get_name().to_string())
                     .collect::<Vec<String>>(),
             ),
             // Forwards the error
@@ -258,7 +243,7 @@ impl CommandLine {
             .map(|result| {
                 provider.suggestion_message_for(result.map(|s| {
                     let context = self.context();
-                    let options = parse_error.command().options();
+                    let options = parse_error.command().get_options();
                     prefix_option(context, options, s)
                 }))
             })
@@ -310,23 +295,23 @@ impl Debug for CommandLine {
     }
 }
 
-impl From<Context> for CommandLine {
-    fn from(context: Context) -> Self {
-        CommandLine::with_context(context)
-    }
-}
-
-impl From<RootCommand> for CommandLine {
-    fn from(root: RootCommand) -> Self {
-        CommandLine::new(root)
-    }
-}
-
-impl From<Command> for CommandLine {
-    fn from(command: Command) -> Self {
-        CommandLine::new(RootCommand::from(command))
-    }
-}
+// impl From<Context> for CommandLine {
+//     fn from(context: Context) -> Self {
+//         CommandLine::with_context(context)
+//     }
+// }
+//
+// impl From<RootCommand> for CommandLine {
+//     fn from(root: RootCommand) -> Self {
+//         CommandLine::new(root)
+//     }
+// }
+//
+// impl From<Command> for CommandLine {
+//     fn from(command: Command) -> Self {
+//         CommandLine::new(RootCommand::from(command))
+//     }
+// }
 
 /// Split the given value `&str` into command-line args.
 ///

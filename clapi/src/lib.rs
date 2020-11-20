@@ -9,22 +9,21 @@
 //!
 //! ## Parsing the arguments
 //! ```no_run
-//! use clapi::RootCommand;
-//! use clapi::CommandOption;
 //! use clapi::Command;
+//! use clapi::CommandOption;
 //! use clapi::Arguments;
 //! use clapi::{DefaultParser, Parser};
 //! use clapi::Context;
 //! use std::env::args;
 //!
 //! // First we define a root command with all its options, subcommands and args.
-//! let command = RootCommand::new()
-//!     .set_option(CommandOption::new("version").set_alias("v"))
-//!     .set_command(Command::new("repeat")
-//!         .set_args(Arguments::one_or_more())
-//!         .set_option(CommandOption::new("times").set_alias("t")
-//!             .set_args(Arguments::zero_or_one()
-//!                 .set_default_values(&[1]))));
+//! let command = Command::root()
+//!     .option(CommandOption::new("version").alias("v"))
+//!     .subcommand(Command::new("repeat")
+//!         .args(Arguments::one_or_more())
+//!         .option(CommandOption::new("times").alias("t")
+//!             .args(Arguments::zero_or_one()
+//!                 .default_values(&[1]))));
 //!
 //! // The context contains the the `root`, prefixes and delimiters.
 //! let context = Context::new(command);
@@ -36,11 +35,11 @@
 //!     Ok(parse_result) => {
 //!         if parse_result.contains_option("version"){
 //!             println!("version 1.0");
-//!         } else if parse_result.command().name() == "repeat" {
+//!         } else if parse_result.command().get_name() == "repeat" {
 //!             // This will panic if the arg is no a `u32`
 //!             let times = parse_result.get_option_arg_as::<u32>("times").unwrap().unwrap();
 //!             // Get all the arguments
-//!             let values = parse_result.args().values().join(" ");
+//!             let values = parse_result.args().get_values().join(" ");
 //!             for _ in 0..times {
 //!                 println!("{}", values)
 //!             }
@@ -57,30 +56,29 @@
 //!
 //! ## Function handlers
 //! ```no_run
-//! use clapi::RootCommand;
-//! use clapi::CommandOption;
 //! use clapi::Command;
+//! use clapi::CommandOption;
 //! use clapi::Arguments;
 //!
 //! // First we define a root command with all its options, subcommands and args.
-//! let command = RootCommand::new()
-//!     .set_option(CommandOption::new("version").set_alias("v"))
+//! let command = Command::root()
+//!     .option(CommandOption::new("version").alias("v"))
 //!     // We define a handler for the `root` command
-//!     .set_handler(|opts, args| {
+//!     .handler(|opts, args| {
 //!         if opts.contains("version"){
 //!             println!("version 1.0");
 //!         }
 //!         Ok(())
 //!     })
-//!     .set_command(Command::new("repeat")
-//!         .set_args(Arguments::one_or_more())
-//!         .set_option(CommandOption::new("times").set_alias("t")
-//!             .set_args(Arguments::zero_or_one()
-//!                 .set_default_values(&[1])))
+//!     .subcommand(Command::new("repeat")
+//!         .args(Arguments::one_or_more())
+//!         .option(CommandOption::new("times").alias("t")
+//!             .args(Arguments::zero_or_one()
+//!                 .default_values(&[1])))
 //!     // We define a handler for the `repeat` command
-//!     .set_handler(|opts,args|{
+//!     .handler(|opts,args|{
 //!         let times = opts.get_arg_as::<u32>("times").unwrap()?;
-//!         let values = args.values().join(" ");
+//!         let values = args.get_values().join(" ");
 //!         for _ in 0..times {
 //!             println!("{}", values);
 //!         }
@@ -117,9 +115,6 @@ pub mod utils;
 
 mod command;
 pub use command::*;
-
-mod root_command;
-pub use root_command::*;
 
 mod option;
 pub use option::*;
@@ -165,3 +160,6 @@ pub mod macros {
 
 #[cfg(feature="macros")]
 pub use macros::*;
+
+// todo: replace args
+mod args0;
