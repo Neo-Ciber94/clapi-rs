@@ -163,7 +163,7 @@ impl CommandData {
             let command_name = quote_expr!(self.fn_name.name());
             quote! { clapi::Command::new(#command_name) }
         } else {
-            quote! { clapi::RootCommand::new() }
+            quote! { clapi::Command::root() }
         };
 
         // Show version
