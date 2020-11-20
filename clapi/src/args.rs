@@ -115,7 +115,7 @@ impl Arguments {
     /// Returns `true` if the specified value is a valid for this `Arguments`.
     pub fn is_valid(&self, value: &str) -> bool {
         if let Some(validator) = &self.valid_values {
-            validator.is_valid(value).is_ok()
+            validator.validate(value).is_ok()
         } else {
             false
         }
@@ -178,7 +178,7 @@ impl Arguments {
             let s = value.to_string();
 
             if let Some(validator) = &self.valid_values {
-                validator.is_valid(s.as_str()).unwrap();
+                validator.validate(s.as_str()).unwrap();
             }
 
             self.default_values.push(s);
@@ -284,7 +284,7 @@ impl Arguments {
 
         for value in values {
             if let Some(validator) = &self.valid_values {
-                validator.is_valid(value.as_str())?;
+                validator.validate(value.as_str())?;
             }
 
             self.values.push(value);
@@ -511,7 +511,8 @@ pub mod validator {
 
     /// Exposes a method for check if an `str` value is a valid argument value.
     pub trait Validator {
-        fn is_valid(&self, value: &str) -> Result<()>;
+        // todo: change name to `validate`?
+        fn validate(&self, value: &str) -> Result<()>;
     }
 
     /// A `Validator` where a `str` is considered valid if can be parsed to a type `T`.
@@ -523,7 +524,7 @@ pub mod validator {
         }
     }
     impl<T: FromStr> Validator for DefaultValidator<T> {
-        fn is_valid(&self, value: &str) -> Result<()> {
+        fn validate(&self, value: &str) -> Result<()> {
             match T::from_str(value) {
                 Ok(_) => Ok(()),
                 Err(_) => Err(Error::from(ErrorKind::InvalidArgument(value.to_string()))),
@@ -540,7 +541,7 @@ pub mod validator {
         }
     }
     impl Validator for ListValidator {
-        fn is_valid(&self, value: &str) -> Result<()> {
+        fn validate(&self, value: &str) -> Result<()> {
             if self.0.iter().any(|s| s == value) {
                 Ok(())
             } else {
@@ -562,7 +563,7 @@ pub mod validator {
         }
     }
     impl<T: FromStr + PartialOrd + Display> Validator for RangeValidator<T> {
-        fn is_valid(&self, value: &str) -> Result<()> {
+        fn validate(&self, value: &str) -> Result<()> {
             match T::from_str(value) {
                 Err(_) => Err(Error::from(ErrorKind::InvalidArgument(value.to_string()))),
                 Ok(n) => {
