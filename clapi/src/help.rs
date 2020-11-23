@@ -60,15 +60,24 @@ impl HelpCommand for DefaultHelpCommand {
         }
 
         // Command usage
-        if command.get_args().take_args() || command.get_options().len() > 0 || command.get_children().len() > 0
+        if command.take_args() || command.get_options().len() > 0 || command.get_children().len() > 0
         {
             writer.section("USAGE:", |w| {
-                let args_name = command.get_args().get_name()
-                    .map(|s| s.to_uppercase())
-                    .unwrap_or_else(|| "ARGS".to_owned());
+                let mut args_names = Vec::new();
 
-                if command.get_args().take_args() {
-                    w.writeln(format!("{} <{}>", command.get_name(), args_name));
+                for arg in command.get_args() {
+                    if arg.get_arg_count().takes_exactly(1){
+                        args_names.push(format!("<{}>", arg.get_name().to_uppercase()));
+                    } else {
+                        args_names.push(format!("<{}...>", arg.get_name().to_uppercase()));
+                    }
+                }
+
+                // Names of the arguments as: <ARG0> <ARG1> <ARG2...>
+                let args_names: String = args_names.join(" ");
+
+                if command.take_args() {
+                    w.writeln(format!("{} {}", command.get_name(), args_names));
                 }
 
                 if command.get_options().len() > 0 {
@@ -76,7 +85,7 @@ impl HelpCommand for DefaultHelpCommand {
                     write!(result, " [OPTIONS]").unwrap();
 
                     if command.get_options().iter().any(|o| o.take_args()) {
-                        write!(result, " <{}>", args_name).unwrap();
+                        write!(result, " {}", args_names).unwrap();
                     }
 
                     w.writeln(result);
@@ -85,7 +94,7 @@ impl HelpCommand for DefaultHelpCommand {
                 if command.get_children().len() > 0 {
                     let mut children = command.get_children();
 
-                    if children.any(|c| c.get_args().take_args()) {
+                    if children.any(|c| c.take_args()) {
                         w.writeln(format!("{} [SUBCOMMAND] <ARGS>", command.get_name()));
                     }
 
@@ -450,8 +459,18 @@ mod help_writer {
             format!("{:>6}{}", name_prefix, option.get_name())
         };
 
-        if let Some(args_name) = option.get_args().get_name() {
-            names.push_str(&format!(" <{}>", args_name.to_uppercase()));
+        if option.get_args().len() > 0 {
+            let mut args_names = Vec::new();
+
+            for arg in option.get_args() {
+                if arg.get_arg_count().takes_exactly(1){
+                    args_names.push(format!(" <{}>", arg.get_name().to_uppercase()));
+                } else {
+                    args_names.push(format!(" <{}...>", arg.get_name().to_uppercase()));
+                }
+            }
+
+            names.push_str(&args_names.join(" "));
         }
 
         if let Some(description) = option.get_description() {

@@ -1,11 +1,7 @@
-use crate::args::Arguments;
-use crate::error::Result;
-use crate::symbol::Symbol;
-use crate::utils::Also;
 use linked_hash_set::LinkedHashSet;
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
-use std::str::FromStr;
+use crate::args::{ArgumentList, Argument};
 
 /// Represents a command-line option.
 #[derive(Debug, Clone)]
@@ -14,7 +10,7 @@ pub struct CommandOption {
     aliases: LinkedHashSet<String>,
     description: Option<String>,
     is_required: bool,
-    args: Arguments,
+    args: ArgumentList,
 }
 
 impl CommandOption {
@@ -23,14 +19,11 @@ impl CommandOption {
         let name = name.into();
         assert!(!name.trim().is_empty(), "name cannot be empty");
 
-        let args =
-            Arguments::none().also_mut(|a| a.parent = Some(Symbol::Opt(name.clone())));
-
         CommandOption {
             name,
             aliases: LinkedHashSet::new(),
             description: None,
-            args,
+            args: ArgumentList::new(),
             is_required: false,
         }
     }
@@ -47,7 +40,7 @@ impl CommandOption {
 
     /// Returns a short description of this option or `None` if not set.
     pub fn get_description(&self) -> Option<&str> {
-        self.description.as_ref().map(|s| s.as_str())
+        self.description.as_ref().map(|s| s.as_ref())
     }
 
     /// Returns `true` if this option is required.
@@ -55,14 +48,23 @@ impl CommandOption {
         self.is_required
     }
 
+    /// Returns the `Argument` this option takes or `None` if takes more than 1 argument.
+    pub fn get_arg(&self) -> Option<&Argument>{
+        if self.args.len() > 1 {
+            None
+        } else {
+            Some(&self.args[0])
+        }
+    }
+
     /// Returns the `Arguments` of this option.
-    pub fn get_args(&self) -> &Arguments {
+    pub fn get_args(&self) -> &ArgumentList {
         &self.args
     }
 
     /// Returns `true` if this option take arguments.
     pub fn take_args(&self) -> bool {
-        self.args.take_args()
+        self.args.len() > 0
     }
 
     /// Returns `true` if option contains the specified alias.
@@ -71,14 +73,14 @@ impl CommandOption {
     }
 
     /// Adds a new alias to this option.
-    pub fn alias(mut self, alias: &str) -> Self {
-        self.aliases.insert(alias.to_string());
+    pub fn alias<S: AsRef<str>>(mut self, alias: S) -> Self {
+        self.aliases.insert(alias.as_ref().to_string());
         self
     }
 
     /// Sets a short description of this option.
-    pub fn description(mut self, description: &str) -> Self {
-        self.description = Some(description.to_string());
+    pub fn description<S: AsRef<str>>(mut self, description: S) -> Self {
+        self.description = Some(description.as_ref().to_string());
         self
     }
 
@@ -88,50 +90,29 @@ impl CommandOption {
         self
     }
 
-    /// Sets the `Arguments` of this option.
-    pub fn args(mut self, mut args: Arguments) -> Self {
-        args.parent = Some(Symbol::Opt(self.name.clone()));
-        self.args = args;
+    /// Adds a new `Argument` to this option.
+    #[cfg(debug_assertions)]
+    pub fn arg(mut self, arg: Argument) -> Self {
+        let arg_name = arg.get_name().to_string();
+        assert!(
+            self.args.add(arg),
+            "`{}` already contains an `Argument` named: `{}`",
+            self.name, arg_name,
+        );
         self
     }
 
-    /// Sets the argument values of this option.
-    pub fn set_args_values<'a, S, I>(&mut self, args: I) -> Result<()>
-    where
-        I: IntoIterator<Item = &'a S>,
-        S: ToString + 'a,
-    {
-        self.args.set_values(args)
+    /// Adds a new `Argument` to this option.
+    #[cfg(not(debug_assertions))]
+    pub fn arg(mut self, arg: Argument) -> Self {
+        self.args.add(arg);
+        self
     }
 
-    /// Converts the first argument value into the specified type.
-    ///
-    /// # Error
-    /// - If there is no values to convert.
-    /// - If this takes not args.
-    /// - The value cannot be converted to type `T`.
-    #[inline]
-    pub fn get_arg_as<T>(&self) -> Result<T>
-    where
-        T: FromStr + 'static,
-        <T as FromStr>::Err: Display,
-    {
-        self.args.convert()
-    }
-
-    /// Returns an iterator that converts the argument values into the specified type.
-    ///
-    /// # Error
-    /// - If there is no values to convert.
-    /// - If this takes not args.
-    /// - One of the values cannot be converted to type `T`.
-    #[inline]
-    pub fn get_args_as<T>(&self) -> Result<Vec<T>>
-    where
-        T: FromStr + 'static,
-        <T as FromStr>::Err: Display,
-    {
-        self.args.convert_all()
+    /// Sets the arguments of this option.
+    pub fn args(mut self, args: ArgumentList) -> Self {
+        self.args = args;
+        self
     }
 }
 
@@ -150,7 +131,7 @@ impl Hash for CommandOption {
 }
 
 /// Represents a collection of `CommandOption`s.
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct Options {
     inner: LinkedHashSet<CommandOption>,
 }
@@ -182,68 +163,42 @@ impl Options {
             }
         }
 
-        self.inner.insert(option)
+        self.inner.insert_if_absent(option)
     }
 
     /// Returns the `CommandOption` with the given name or alias or `None`
     /// if not found.
-    pub fn get(&self, name_or_alias: &str) -> Option<&CommandOption> {
+    pub fn get<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&CommandOption> {
         self.inner
             .iter()
-            .find(|o| o.name == name_or_alias || o.aliases.contains(name_or_alias))
+            .find(|o| o.name == name_or_alias.as_ref() || o.aliases.contains(name_or_alias.as_ref()))
     }
 
     /// Returns the `CommandOption` with the given name or `None` if not found.
-    pub fn get_by_name(&self, name: &str) -> Option<&CommandOption> {
+    pub fn get_by_name<S: AsRef<str>>(&self, name: S) -> Option<&CommandOption> {
         self.inner.iter()
-            .find(|opt| opt.get_name() == name)
+            .find(|opt| opt.get_name() == name.as_ref())
     }
 
     /// Returns the `CommandOption` with the given alias or `None` if not found.
-    pub fn get_by_alias(&self, alias: &str) -> Option<&CommandOption> {
+    pub fn get_by_alias<S: AsRef<str>>(&self, alias: S) -> Option<&CommandOption> {
         self.inner.iter()
-            .find(|opt| opt.has_alias(alias))
+            .find(|opt| opt.has_alias(alias.as_ref()))
     }
 
-    /// Returns the `Arguments` for the option with the given name or alias
-    /// or `None` if the option is not found.
-    pub fn get_args(&self, name_or_alias: &str) -> Option<&Arguments> {
-        self.get(name_or_alias).map(|o| o.get_args())
+    pub fn get_arg<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&Argument> {
+        self.get(name_or_alias.as_ref())
+            .map(|o| o.get_arg())
+            .flatten()
     }
 
-    /// Converts the option argument value into the specified type, returns `None`
-    /// if the option is not found.
-    ///
-    /// # Error
-    /// - If there is more than 1 argument.
-    /// - If there is no values to convert.
-    /// - If this takes not args.
-    /// - The value cannot be converted to type `T`.
-    pub fn get_arg_as<T>(&self, name_or_alias: &str) -> Option<Result<T>>
-        where
-            T: FromStr + 'static,
-            <T as FromStr>::Err: Display,
-    {
-        self.get(name_or_alias).map(|o| o.get_arg_as())
-    }
-
-    /// Returns an iterator that converts the argument values into the specified type,
-    /// returns `None` if the option is not found.
-    ///
-    /// # Error
-    /// - If there is no values to convert.
-    /// - If this takes not args.
-    /// - One of the values cannot be converted to type `T`.
-    pub fn get_args_as<T>(&self, name_or_alias: &str) -> Option<Result<Vec<T>>>
-        where
-            T: FromStr + 'static,
-            <T as FromStr>::Err: Display,
-    {
-        self.get(name_or_alias).map(|o| o.get_args_as())
+    pub fn get_args<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&ArgumentList>{
+        self.get(name_or_alias.as_ref())
+            .map(|o| o.get_args())
     }
 
     /// Returns `true` if there is an option with the given name or alias.
-    pub fn contains(&self, name_or_alias: &str) -> bool {
+    pub fn contains<S: AsRef<str>>(&self, name_or_alias: S) -> bool {
         self.get(name_or_alias).is_some()
     }
 
@@ -318,23 +273,15 @@ mod tests {
     #[test]
     fn args_test() {
         let opt1 = CommandOption::new("date");
-        assert!(!opt1.get_args().take_args());
 
-        let mut opt2 = opt1
+        let opt2 = opt1
             .clone()
-            .args(Arguments::new(1..).valid_values(&["day", "hour", "minute"]));
+            .arg(Argument::new("value").valid_values(&["day", "hour", "minute"]));
 
-        assert!(opt2.get_args().take_args());
-        assert!(opt2.get_args().is_valid("day"));
-        assert!(opt2.get_args().is_valid("hour"));
-        assert!(opt2.get_args().is_valid("minute"));
-
-        assert!(opt2.set_args_values(&["seconds"]).is_err());
-        assert!(opt2.set_args_values(&["day"]).is_ok());
-        assert!(opt2.set_args_values(&["hour"]).is_ok());
-        assert!(opt2.set_args_values(&["minute"]).is_ok());
-
-        assert!(opt2.get_args().get_values().iter().any(|s| s == "minute"));
+        assert!(opt2.get_arg().unwrap().is_valid("day"));
+        assert!(opt2.get_arg().unwrap().is_valid("hour"));
+        assert!(opt2.get_arg().unwrap().is_valid("minute"));
+        assert!(!opt2.get_arg().unwrap().is_valid("second"));
     }
 
     #[test]
@@ -376,26 +323,27 @@ mod tests {
     }
 
     #[test]
-    fn args_for_test() {
+    fn options_get_args_test() {
         let mut options = Options::new();
 
         let opt1 = CommandOption::new("version")
             .alias("v")
-            .args(Arguments::new(1));
+            .arg(Argument::new("version").arg_count(1));
 
         let opt2 = CommandOption::new("author")
             .alias("a")
-            .args(Arguments::new(0..));
+            .arg(Argument::new("x").arg_count(0..));
 
-        let opt3 = CommandOption::new("verbose").args(Arguments::new(1..3));
+        let opt3 = CommandOption::new("verbose")
+            .arg(Argument::new("x").arg_count(1..3));
 
         options.add(opt1);
         options.add(opt2);
         options.add(opt3);
 
-        assert_eq!(options.get_args("v"), Some(&Arguments::new(1)));
-        assert_eq!(options.get_args("author"), Some(&Arguments::new(0..)));
-        assert_eq!(options.get_args("verbose"), Some(&Arguments::new(1..3)));
-        assert_eq!(options.get_args("w"), None);
+        assert_eq!(options.len(), 3);
+        assert!(options.get_arg("version").is_some());
+        assert!(options.get_arg("author").is_some());
+        assert!(options.get_arg("verbose").is_some());
     }
 }

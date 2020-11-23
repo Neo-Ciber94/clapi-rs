@@ -87,7 +87,7 @@ impl IntoIterator for MacroAttribute {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum MetaItem {
     /// A path like: `#[attribute]`
-    Path(String), //Raw(String)
+    Path(String),
     /// A literal like: `#[attribute("hello world")]`
     Literal(Lit),
     /// A key-value like: `#[attribute(key="value")]` or `#[attribute(array=1,2,3,4)]`

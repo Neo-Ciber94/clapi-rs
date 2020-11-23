@@ -49,7 +49,7 @@ fn run_cmd() -> Result<()> {
         .option(
             CommandOption::new("version")
                 .alias("v")
-                .args(Arguments::new(1).name("format"))
+                .arg(Arguments::new(1).name("format"))
                 .description("Version of the app"),
         )
         .option(
@@ -70,7 +70,7 @@ fn run_cmd() -> Result<()> {
             Command::new("list")
                 .description("List the files in a directory")
                 .option(
-                    CommandOption::new("sort").alias("s").args(
+                    CommandOption::new("sort").alias("s").arg(
                         Arguments::new(1)
                             .valid_values(&["date", "size", "name"])
                             .default_values(&["name"]),

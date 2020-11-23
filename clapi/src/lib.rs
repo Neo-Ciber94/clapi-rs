@@ -9,81 +9,12 @@
 //!
 //! ## Parsing the arguments
 //! ```no_run
-//! use clapi::Command;
-//! use clapi::CommandOption;
-//! use clapi::Arguments;
-//! use clapi::{DefaultParser, Parser};
-//! use clapi::Context;
-//! use std::env::args;
-//!
-//! // First we define a root command with all its options, subcommands and args.
-//! let command = Command::root()
-//!     .option(CommandOption::new("version").alias("v"))
-//!     .subcommand(Command::new("repeat")
-//!         .args(Arguments::one_or_more())
-//!         .option(CommandOption::new("times").alias("t")
-//!             .args(Arguments::zero_or_one()
-//!                 .default_values(&[1]))));
-//!
-//! // The context contains the the `root`, prefixes and delimiters.
-//! let context = Context::new(command);
-//!
-//! // Parse the `args` we skip the first value which can be the executable path
-//! let result = DefaultParser.parse(&context, args().skip(1));
-//!
-//! match result {
-//!     Ok(parse_result) => {
-//!         if parse_result.contains_option("version"){
-//!             println!("version 1.0");
-//!         } else if parse_result.command().get_name() == "repeat" {
-//!             // This will panic if the arg is no a `u32`
-//!             let times = parse_result.get_option_arg_as::<u32>("times").unwrap().unwrap();
-//!             // Get all the arguments
-//!             let values = parse_result.args().get_values().join(" ");
-//!             for _ in 0..times {
-//!                 println!("{}", values)
-//!             }
-//!
-//!         } else {
-//!             unreachable!()
-//!         }
-//!     }
-//!     Err(error) => {
-//!         panic!("{}", error);
-//!     }
-//! }
+//! // TODO
 //! ```
 //!
 //! ## Function handlers
 //! ```no_run
-//! use clapi::Command;
-//! use clapi::CommandOption;
-//! use clapi::Arguments;
-//!
-//! // First we define a root command with all its options, subcommands and args.
-//! let command = Command::root()
-//!     .option(CommandOption::new("version").alias("v"))
-//!     // We define a handler for the `root` command
-//!     .handler(|opts, args| {
-//!         if opts.contains("version"){
-//!             println!("version 1.0");
-//!         }
-//!         Ok(())
-//!     })
-//!     .subcommand(Command::new("repeat")
-//!         .args(Arguments::one_or_more())
-//!         .option(CommandOption::new("times").alias("t")
-//!             .args(Arguments::zero_or_one()
-//!                 .default_values(&[1])))
-//!     // We define a handler for the `repeat` command
-//!     .handler(|opts,args|{
-//!         let times = opts.get_arg_as::<u32>("times").unwrap()?;
-//!         let values = args.get_values().join(" ");
-//!         for _ in 0..times {
-//!             println!("{}", values);
-//!         }
-//!         Ok(())
-//!     }));
+//! // TODO
 //! ```
 //!
 //! ## Macro attributes
@@ -111,6 +42,7 @@
 
 
 /// Utility methods and extensions intended for internal use.
+#[macro_use]
 pub mod utils;
 
 mod command;
@@ -160,6 +92,3 @@ pub mod macros {
 
 #[cfg(feature="macros")]
 pub use macros::*;
-
-// todo: replace args
-mod args0;

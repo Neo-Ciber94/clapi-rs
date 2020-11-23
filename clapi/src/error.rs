@@ -3,6 +3,7 @@ use crate::error::Inner::{Custom, Parsed, Simple};
 use crate::option::CommandOption;
 use std::fmt::{Debug, Display, Formatter};
 use std::result;
+use crate::ArgumentList;
 
 /// A convenient `Result` type.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -51,7 +52,7 @@ impl Error {
         inner: Error,
         command: Command,
         option: Option<CommandOption>,
-        args: Option<Vec<String>>,
+        args: Option<ArgumentList>,
     ) -> Self {
         Error {
             inner: Parsed(Box::new(ParseError::new(inner, command, option, args))),
@@ -178,7 +179,7 @@ pub struct ParseError {
     inner: Error,
     command: Command,
     option: Option<CommandOption>,
-    args: Option<Vec<String>>,
+    args: Option<ArgumentList>,
 }
 
 impl ParseError {
@@ -186,7 +187,7 @@ impl ParseError {
         inner: Error,
         command: Command,
         option: Option<CommandOption>,
-        args: Option<Vec<String>>,
+        args: Option<ArgumentList>,
     ) -> Self {
         ParseError {
             inner,
@@ -217,18 +218,18 @@ impl ParseError {
     }
 
     /// Returns the argument values of the option if any.
-    pub fn option_args(&self) -> Option<&[String]> {
+    pub fn option_args(&self) -> Option<&ArgumentList> {
         if self.option.is_some() {
-            self.args.as_ref().map(|s| s.as_slice())
+            self.args.as_ref()
         } else {
             None
         }
     }
 
     /// Returns the argument values of the command if any.
-    pub fn command_args(&self) -> Option<&[String]> {
+    pub fn command_args(&self) -> Option<&ArgumentList> {
         if self.option.is_none() {
-            self.args.as_ref().map(|s| s.as_slice())
+            self.args.as_ref()
         } else {
             None
         }

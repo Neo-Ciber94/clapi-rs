@@ -1,441 +1,248 @@
-use crate::arg_count::ArgCount;
-use crate::args::validator::{ListValidator, Validator};
-use crate::error::{Error, ErrorKind, Result};
-use crate::symbol::Symbol;
-use linked_hash_set::LinkedHashSet;
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
+use std::ops::Index;
 use std::rc::Rc;
 use std::str::FromStr;
+use linked_hash_set::LinkedHashSet;
+use validator::{ListValidator, Validator};
 
-/// Represents the arguments of an option or command.
+use crate::{ArgCount, Error, ErrorKind};
+use crate::error::Result;
+
 #[derive(Clone)]
-pub struct Arguments {
-    pub(crate) parent: Option<Symbol>,
-    name: Option<String>,
-    arity: ArgCount,
-    valid_values: Option<Rc<dyn Validator>>,
+pub struct Argument {
+    name: String,
+    description: Option<String>,
+    arg_count: ArgCount,
+    validator: Option<Rc<dyn Validator>>,
     default_values: Vec<String>,
     values: Vec<String>,
 }
 
-impl Arguments {
-    /// Constructs a new `Arguments` that takes the specified number of values.
-    pub fn new<A: Into<ArgCount>>(arg_count: A) -> Self {
-        Self {
-            parent: None,
-            name: None,
-            arity: arg_count.into(),
-            valid_values: None,
-            default_values: Vec::new(),
-            values: Vec::new(),
+impl Argument {
+    pub fn new<S: Into<String>>(name: S) -> Self {
+        Argument {
+            name: name.into(),
+            description: None,
+            arg_count: ArgCount::exactly(1),
+            validator: None,
+            default_values: vec![],
+            values: vec![],
         }
     }
 
-    /// Constructs a new `Arguments` that takes no values.
     #[inline]
-    pub fn none() -> Self {
-        Self::new(0)
+    pub fn zero_or_one<S: Into<String>>(name: S) -> Self {
+        Self::new(name).arg_count(0..=1)
     }
 
-    /// Constructs a new `Arguments` that takes 0 or more values.
     #[inline]
-    pub fn zero_or_more() -> Self {
-        Self::new(0..)
+    pub fn zero_or_more<S: Into<String>>(name: S) -> Self {
+        Self::new(name).arg_count(0..)
     }
 
-    /// Constructs a new `Arguments` that takes 0 or 1 value.
     #[inline]
-    pub fn zero_or_one() -> Self {
-        Self::new(0..=1)
+    pub fn one_or_more<S: Into<String>>(name: S) -> Self {
+        Self::new(name).arg_count(1..)
     }
 
-    /// Constructs a new `Arguments` that takes 1 or more values.
-    #[inline]
-    pub fn one_or_more() -> Self {
-        Self::new(1..)
+    pub fn get_name(&self) -> &str {
+        self.name.as_str()
     }
 
-    /// Returns the number of values this takes.
-    #[inline]
-    pub fn get_arity(&self) -> ArgCount {
-        self.arity
+    pub fn get_description(&self) -> Option<&str> {
+        self.description.as_ref().map(|s| s.as_str())
     }
 
-    /// Returns the parent of arguments.
-    ///
-    /// # Panics
-    /// If this `Arguments` is not part of a `Command` or `CommandOption`.
-    #[inline]
-    pub fn get_parent(&self) -> Option<&Symbol> {
-        self.parent.as_ref()
+    pub fn get_arg_count(&self) -> ArgCount {
+        self.arg_count
     }
 
-    /// Returns the name of this `Arguments` or `None` if not set.
-    #[inline]
-    pub fn get_name(&self) -> Option<&str> {
-        self.name.as_ref().map(|s| s.as_str())
-    }
-
-    /// Returns the allowed values.
-    #[inline]
     pub fn get_validator(&self) -> Option<&dyn Validator> {
-        self.valid_values.as_ref().map(|s| s.as_ref())
+        self.validator.as_ref().map(|s| s.as_ref())
     }
 
-    /// Returns the default values.
-    #[inline]
     pub fn get_default_values(&self) -> &[String] {
         self.default_values.as_slice()
     }
 
-    /// Returns the current values.
-    #[inline]
     pub fn get_values(&self) -> &[String] {
         self.values.as_slice()
     }
 
-    /// Returns `true` if `Arguments` contains the specified value.
-    #[inline]
-    pub fn contains(&self, value: &str) -> bool {
-        self.values.iter().any(|s| s == value)
+    pub fn contains<S: AsRef<str>>(&self, value: S) -> bool {
+        self.values.iter().any(|s| s == value.as_ref())
     }
 
-    /// Returns `true` if this `Arguments` takes values.
-    #[inline]
-    pub fn take_args(&self) -> bool {
-        self.arity.takes_args()
-    }
-
-    /// Returns `true` if the `Arguments` have default values.
-    #[inline]
     pub fn has_default_values(&self) -> bool {
-        !self.default_values.is_empty()
+        self.default_values.len() > 0
     }
 
-    /// Returns `true` if the specified value is a valid for this `Arguments`.
-    pub fn is_valid(&self, value: &str) -> bool {
-        if let Some(validator) = &self.valid_values {
-            validator.validate(value).is_ok()
+    pub fn is_valid<S: AsRef<str>>(&self, value: S) -> bool {
+        if let Some(validator) = &self.validator {
+            validator.validate(value.as_ref()).is_ok()
         } else {
-            false
+            true
         }
     }
 
-    /// Sets the name of this arguments.
-    pub fn name(mut self, name: &str) -> Self {
-        self.name = Some(name.to_string());
+    pub fn arg_count<A: Into<ArgCount>>(mut self, arg_count: A) -> Self {
+        let arg_count = arg_count.into();
+        assert!(!arg_count.takes_exactly(0), "`{}` cannot takes 0 values", self.name);
+        self.arg_count = arg_count;
         self
     }
 
-    /// Sets the default values of this `Arguments`.
-    ///
-    /// # Panics
-    /// - If the default values are already set.
-    /// - If the provided default values are not valid values.
-    /// - If this takes not args.
-    /// - If the number of default values is more than or less than the expected.
-    ///
-    /// # Example
-    /// ```rust
-    /// use clapi::Arguments;
-    ///
-    /// let args = Arguments::new(1)
-    ///     .valid_values(&["zero", "one", "two", "three"])
-    ///     .default_values(&["zero"]);
-    ///
-    /// assert!(args.get_default_values().contains(&String::from("zero")));
-    /// ```
-    pub fn default_values<'a, I, S>(mut self, values: I) -> Self
-    where
-        I: IntoIterator<Item = &'a S>,
-        S: ToString + 'a,
-    {
-        let values = values
-            .into_iter()
-            .map(ToString::to_string)
-            .collect::<Vec<String>>();
-
-        assert!(
-            self.default_values.is_empty(),
-            already_have_values_msg(&self, true)
-        );
-        assert!(
-            self.take_args(),
-            take_no_values_msg(&self)
-        );
-        assert!(
-            self.values.is_empty(),
-            already_have_values_msg(&self, false)
-        );
-        assert!(
-            self.arity.contains(values.len()),
-            "invalid number of default values, {} was get but {} was expected",
-            values.len(),
-            self.arity
-        );
-
-        for value in values {
-            let s = value.to_string();
-
-            if let Some(validator) = &self.valid_values {
-                validator.validate(s.as_str()).unwrap();
-            }
-
-            self.default_values.push(s);
-        }
-
-        // Sets the default values
-        self.values = self.default_values.clone();
+    pub fn description<S: Into<String>>(mut self, name: S) -> Self {
+        self.description = Some(name.into());
         self
     }
 
-    /// Sets the valid values of this `Arguments`.
-    ///
-    /// # Panics
-    /// - If the valid values are already set.
-    /// - If this take no args.
-    /// - If this already contains default values or values.
-    ///
-    /// # Example
-    /// ```rust
-    /// use clapi::Arguments;
-    ///
-    /// let mut args = Arguments::new(1)
-    ///     .valid_values(&["zero", "one", "two", "three"])
-    ///     .default_values(&["zero"]);
-    ///
-    /// assert!(args.set_values(&["four"]).is_err());
-    /// assert!(args.set_values(&["one"]).is_ok());
-    /// assert!(args.set_values(&["two"]).is_ok());
-    /// ````
-    pub fn valid_values<'a, I, S>(self, values: I) -> Self
-    where
-        I: IntoIterator<Item = &'a S>,
-        S: ToString + 'a,
-    {
-        let values = values
-            .into_iter()
-            .map(ToString::to_string)
-            .collect::<LinkedHashSet<String>>();
+    pub fn validator<V: Validator + 'static>(mut self, validator: V) -> Self {
+        assert!(self.validator.is_none(), "validator is already set");
+        assert!(self.default_values.is_empty(), "validator cannot be set if there is default values");
+        assert!(self.values.is_empty(), "validator cannot be set if there is values");
+        self.validator = Some(Rc::new(validator));
+        self
+    }
 
+    pub fn valid_values<S, I>(self, values: I) -> Self
+    where
+        S: ToString,
+        I: IntoIterator<Item = S>,
+    {
         self.validator(ListValidator::new(values))
     }
 
-    /// Sets the validator for the valid values of this `Arguments`.
-    pub fn validator<V: Validator + 'static>(mut self, validator: V) -> Self {
-        assert!(self.valid_values.is_none(), "this `Arguments` validator is already set");
-        assert!(self.take_args(), "this `Arguments` takes not values");
-        assert!(self.values.is_empty(), "this `Arguments` already have values");
-
-        self.valid_values = Some(Rc::new(validator));
-        self
+    pub fn default<S: ToString>(self, value: S) -> Self {
+        self.defaults(vec![value])
     }
 
-    /// Sets the values of this `Arguments`.
-    ///
-    /// # Error
-    /// - If takes not args.
-    /// - If the values are not valid.
-    /// - If is an invalid number of values.
-    ///
-    /// # Example
-    /// ```rust
-    /// use clapi::Arguments;
-    /// use clapi::validator::validator_for;
-    ///
-    /// let mut args = Arguments::new(2)
-    ///     .validator(validator_for::<i32>());
-    ///
-    /// assert!(args.set_values(&[1, 2]).is_ok());
-    /// assert!(args.set_values(&["3", "4"]).is_ok());
-    /// assert!(args.set_values(&[5]).is_err());
-    /// assert!(args.set_values(&["six", "seven"]).is_err());
-    /// ````
-    pub fn set_values<'a, I, S>(&mut self, values: I) -> Result<()>
+    pub fn defaults<S, I>(mut self, values: I) -> Self
     where
-        I: IntoIterator<Item = &'a S>,
-        S: ToString + 'a,
+        S: ToString,
+        I: IntoIterator<Item = S>,
     {
         let values = values
             .into_iter()
-            .map(ToString::to_string)
+            .map(|s| s.to_string())
             .collect::<Vec<String>>();
 
-        if values.len() == 0 && !self.arity.takes_args() {
-            return Ok(());
-        }
+        assert!(!values.is_empty(), "no values");
+        assert!(self.default_values.is_empty(), "default values are already set");
+        assert!(self.values.is_empty(), "already contains values");
+        assert!(
+            self.arg_count.contains(values.len()),
+            "invalid argument count expected {} but was {}",
+            self.arg_count,
+            values.len()
+        );
 
-        if !self.arity.takes_args() {
-            return Err(Error::new(
-                ErrorKind::InvalidArgumentCount,
-                take_no_values_msg(&self),
-            ));
-        }
-
-        if !self.arity.contains(values.len()) {
-            return Err(Error::new(
-                ErrorKind::InvalidArgumentCount,
-                invalid_arg_count_msg(&self, values.len()),
-            ));
-        }
-
-        // Removes the contents in case have values
-        self.values.clear();
-
-        for value in values {
-            if let Some(validator) = &self.valid_values {
-                validator.validate(value.as_str())?;
+        // Validate all the values
+        if let Some(validator) = &self.validator {
+            for value in &values {
+                validator.validate(value).unwrap();
             }
-
-            self.values.push(value);
         }
 
+        self.default_values = values.clone();
+        self.values = values;
+        self
+    }
+
+    pub fn set_values<S, I>(&mut self, values: I) -> Result<()>
+    where
+        S: ToString,
+        I: IntoIterator<Item = S>,
+    {
+        let values = values
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>();
+
+        if !self.arg_count.contains(values.len()) {
+            return Err(Error::new(
+                ErrorKind::InvalidArgumentCount,
+                format!("`{}` expect {} but was {}", self.name, self.arg_count, values.len()),
+            ));
+        }
+
+        if let Some(validator) = &self.validator {
+            for value in &values {
+                validator.validate(value)?;
+            }
+        }
+
+        self.values = values;
         Ok(())
     }
 
-    /// Converts the value into the specified type.
-    ///
-    /// # Error
-    /// - If there is more than 1 argument.
-    /// - If there is no values to convert.
-    /// - If this takes not args.
-    /// - The value cannot be converted to type `T`.
     pub fn convert<T>(&self) -> Result<T>
-    where
-        T: FromStr + 'static,
-        <T as FromStr>::Err: Display,
+        where
+            T: FromStr + 'static,
+            <T as FromStr>::Err: Display,
     {
         if self.values.is_empty() {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
-                format!("expected {} but {} was found", 1, self.arity)
+                format!("expected at least 1 argument value")
             ));
-            //return Err(Error::from(ErrorKind::InvalidArgumentCount));
         }
 
         if self.values.len() != 1 {
-            return Err(Error::new(ErrorKind::InvalidArgumentCount, "multiple values found but 1 was expected"));
-        }
-
-        if self.arity.takes_args() {
-            try_parse_str(self.values[0].as_str())
-        } else {
-            Err(Error::new(
-                ErrorKind::InvalidArgumentCount,
-                "takes not args",
-            ))
-        }
-    }
-
-    /// Converts the value at the given index into the specified type.
-    ///
-    /// # Error
-    /// - If the index is out of bounds.
-    /// - If there is no values to convert.
-    /// - If this takes not args.
-    /// - The value cannot be converted to type `T`.
-    pub fn convert_at<T>(&self, index: usize) -> Result<T>
-    where
-        T: FromStr + 'static,
-        <T as FromStr>::Err: Display,
-    {
-        if self.values.is_empty() {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
-                format!("expected {} but {} was found", index, self.arity)
-            ));
-            //return Err(Error::from(ErrorKind::InvalidArgumentCount));
+                "multiple argument values found but 1 was expected")
+            );
         }
 
-        if self.arity.takes_args() {
-            if index > self.values.len() {
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    format!(
-                        "index out of bounds: length is {} but index is {}",
-                        self.values.len(),
-                        index
-                    ),
-                ));
-            }
-
-            try_parse_str(self.values[index].as_str())
-        } else {
-            Err(Error::new(
-                ErrorKind::InvalidArgumentCount,
-                "takes not args",
-            ))
-        }
+        try_parse_str(&self.values[0])
     }
 
-    /// Returns an iterator that converts the values into the specified type.
-    ///
-    /// # Error
-    /// - If there is no values to convert.
-    /// - If this takes not args.
-    /// - One of the values cannot be converted to type `T`.
     pub fn convert_all<T>(&self) -> Result<Vec<T>>
-    where
-        T: FromStr + 'static,
-        <T as FromStr>::Err: Display,
+        where
+            T: FromStr + 'static,
+            <T as FromStr>::Err: Display,
     {
         if self.values.is_empty() {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
-                "no values found"
+                format!("expected at least 1 argument value")
             ));
-            //return Err(Error::from(ErrorKind::InvalidArgumentCount));
         }
 
-        if self.arity.takes_args() {
-            let mut ret = Vec::new();
-            for value in &self.values {
-                ret.push(try_parse_str(value)?);
-            }
-            Ok(ret)
-        } else {
-            Err(Error::new(
-                ErrorKind::InvalidArgumentCount,
-                "takes not args",
-            ))
+        let mut ret = Vec::new();
+        for value in &self.values {
+            ret.push(try_parse_str(value)?);
         }
+        Ok(ret)
     }
 }
 
-impl Eq for Arguments {}
+impl Eq for Argument {}
 
-impl PartialEq for Arguments {
+impl PartialEq for Argument {
     fn eq(&self, other: &Self) -> bool {
-        self.values == other.values
+        self.name == other.name
     }
 }
 
-impl Debug for Arguments {
+impl Hash for Argument {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write(self.name.as_bytes())
+    }
+}
+
+impl Debug for Argument {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Arguments")
-            .field("parent", &self.parent)
+        f.debug_struct("Argument")
             .field("name", &self.name)
-            .field("arity", &self.arity)
-            .field(
-                "valid_values",
-                &if self.valid_values.is_some() {
-                    "Some(Validator)"
-                } else {
-                    "None"
-                },
-            )
+            .field("description", &self.description)
+            .field("arg_count", &self.arg_count)
+            .field("validator", &if self.validator.is_some() { "Some(Validator)" } else { "None" })
             .field("default_values", &self.default_values)
             .field("values", &self.values)
             .finish()
-    }
-}
-
-impl<'a> IntoIterator for &'a Arguments {
-    type Item = &'a String;
-    type IntoIter = std::slice::Iter<'a, String>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.values.iter()
     }
 }
 
@@ -448,86 +255,212 @@ where
         Ok(n) => Ok(n),
         Err(_) => {
             let type_name = std::any::type_name::<T>();
-            return Err(Error::new(
+            Err(Error::new(
                 ErrorKind::Other,
-                format!("failed to parse `{:?}` to `{}`", value, type_name))
-            );
-        },
+                format!("failed to parse `{:?}` to `{}`", value, type_name),
+            ))
+        }
     }
 }
 
-fn take_no_values_msg(args: &Arguments) -> String {
-    if let Some(parent) = &args.parent {
-        let kind = match parent {
-            Symbol::Cmd(_) => "command",
-            Symbol::Opt(_) => "option"
-        };
-        return format!("{} `{}` takes no args", kind, parent.name());
-    } else if let Some(name) = &args.name {
-        return format!("`{}` takes no args", name);
-    } else {
-        "takes not args".to_owned()
+#[derive(Default, Debug, Clone)]
+pub struct ArgumentList {
+    inner: LinkedHashSet<Argument>,
+}
+
+impl ArgumentList {
+    pub fn new() -> Self {
+        ArgumentList {
+            inner: Default::default(),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    pub fn add(&mut self, arg: Argument) -> bool {
+        if self.len() > 0 {
+            // When multiple arguments with default values are defined
+            // is not possible know to what argument a value is being passed to
+            self.assert_no_default_args();
+        }
+
+        self.inner.insert_if_absent(arg)
+    }
+
+    pub fn get<S: AsRef<str>>(&self, arg_name: S) -> Option<&Argument>{
+        self.inner.iter().find(|a| a.name == arg_name.as_ref())
+    }
+
+    pub fn get_raw_args(&self) -> Vec<String>{
+        let mut ret = Vec::new();
+        for arg in &self.inner {
+            ret.extend(arg.values.clone());
+        }
+        ret
+    }
+
+    pub fn contains<S: AsRef<str>>(&self, arg_name: S) -> bool {
+        self.inner.iter().any(|a| a.name == arg_name.as_ref())
+    }
+
+    pub fn convert<T>(&self, arg_name: &str) -> Result<T>
+        where T: FromStr + 'static,
+            <T as FromStr>::Err : Display{
+
+        match &self.get(arg_name) {
+            Some(arg) => arg.convert(),
+            None => Err(Error::new(
+                ErrorKind::InvalidArgument(arg_name.to_owned()),
+            format!("cannot find: `{}`", arg_name))
+            )
+        }
+    }
+
+    pub fn convert_at<T>(&self, index: usize) -> Result<T>
+        where T: FromStr + 'static,
+              <T as FromStr>::Err : Display{
+
+        match self.inner.iter().nth(index){
+            Some(arg) => arg.convert(),
+            None => panic!("index out of bounds: the len is {} but index was {}", self.inner.len(), index)
+        }
+    }
+
+    pub fn convert_all<T>(&self, arg_name: &str) -> Result<Vec<T>>
+        where T: FromStr + 'static,
+              <T as FromStr>::Err : Display{
+
+        match &self.get(arg_name) {
+            Some(arg) => arg.convert_all(),
+            None => Err(Error::new(
+                ErrorKind::InvalidArgument(arg_name.to_owned()),
+                format!("cannot find: `{}`", arg_name))
+            )
+        }
+    }
+
+    pub fn iter(&self) -> impl ExactSizeIterator<Item=&Argument>{
+        self.inner.iter()
+    }
+
+    fn assert_no_default_args(&self){
+        if let Some(index) = self.inner.iter().rposition(|a| a.has_default_values()){
+            let arg = self.inner.iter().nth(index).unwrap();
+            panic!("multiple arguments with default values is not allowed: `{}` contains default values", arg.name);
+        }
     }
 }
 
-fn already_have_values_msg(args: &Arguments, is_default_values: bool) -> String {
-    if let Some(parent) = &args.parent {
-        let kind = match parent {
-            Symbol::Cmd(_) => "command",
-            Symbol::Opt(_) => "option"
-        };
-        format!("{} `{}` already have {}values", kind, parent.name(), if is_default_values { "default" } else {""})
-    } else if let Some(name) = &args.name {
-        format!("`{}` already have {}values", name, if is_default_values { "default" } else {""})
-    } else {
-        format!("already have {}values", if is_default_values { "default" } else {""})
+impl Index<usize> for ArgumentList {
+    type Output = Argument;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        self.inner.iter().nth(index)
+            .unwrap_or_else(|| panic!("index out of bounds: len is {} but index was {}", self.len(), index))
     }
 }
 
-fn invalid_arg_count_msg(args: &Arguments, actual: usize) -> String {
-    if let Some(parent) = &args.parent {
-        let kind = match parent {
-            Symbol::Cmd(_) => "command",
-            Symbol::Opt(_) => "option"
-        };
+impl Index<&str> for ArgumentList{
+    type Output = Argument;
 
-        format!("{} `{}` expected {} but was {}", kind, parent.name(), args.arity, actual)
-    } else if let Some(name) = &args.name {
-        format!("`{}` expected {} but was {}", name, args.arity, actual)
-    } else {
-        format!("expected {} but was {}", args.arity, actual)
+    #[inline]
+    fn index(&self, arg_name: &str) -> &Self::Output {
+        self.get(arg_name)
+            .unwrap_or_else(|| panic!("cannot find argument: `{}`", arg_name))
+    }
+}
+
+impl Index<String> for ArgumentList{
+    type Output = Argument;
+
+    #[inline]
+    fn index(&self, arg_name: String) -> &Self::Output {
+        self.index(arg_name.as_str())
+    }
+}
+
+impl IntoIterator for ArgumentList{
+    type Item = Argument;
+    type IntoIter = linked_hash_set::IntoIter<Argument>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a ArgumentList{
+    type Item = &'a Argument;
+    type IntoIter = linked_hash_set::Iter<'a, Argument>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.iter()
     }
 }
 
 /// Provides the `Validator` trait used for validate the values of an `Arguments`.
-#[allow(dead_code)]
 pub mod validator {
-    use crate::error::{Error, ErrorKind, Result};
-    use linked_hash_set::LinkedHashSet;
     use std::fmt::Display;
+    use std::iter::FromIterator;
     use std::marker::PhantomData;
     use std::str::FromStr;
-    use std::iter::FromIterator;
+
+    use linked_hash_set::LinkedHashSet;
+
+    use crate::error::{Error, ErrorKind, Result};
 
     /// Exposes a method for check if an `str` value is a valid argument value.
     pub trait Validator {
-        // todo: change name to `validate`?
         fn validate(&self, value: &str) -> Result<()>;
     }
 
     /// A `Validator` where a `str` is considered valid if can be parsed to a type `T`.
     #[derive(Default)]
-    pub struct DefaultValidator<T>(PhantomData<T>);
-    impl<T> DefaultValidator<T> {
+    pub struct ParseValidator<T>(PhantomData<T>);
+    impl<T> ParseValidator<T> {
+        #[inline]
         pub fn new() -> Self {
-            DefaultValidator(PhantomData)
+            ParseValidator(PhantomData)
         }
     }
-    impl<T: FromStr> Validator for DefaultValidator<T> {
+    impl<T: FromStr> Validator for ParseValidator<T> {
         fn validate(&self, value: &str) -> Result<()> {
             match T::from_str(value) {
                 Ok(_) => Ok(()),
                 Err(_) => Err(Error::from(ErrorKind::InvalidArgument(value.to_string()))),
+            }
+        }
+    }
+
+    /// A `Validator` where a `str` is valid if can be parsed to type `T`
+/// and is within the specified range.
+    pub struct RangeValidator<T>(T, T);
+    impl<T: FromStr + PartialOrd + Display> RangeValidator<T> {
+        #[inline]
+        pub fn new(min: T, max: T) -> Self {
+            assert!(min < max, "min cannot be greater than max");
+            RangeValidator(min, max)
+        }
+    }
+    impl<T: FromStr + PartialOrd + Display> Validator for RangeValidator<T> {
+        fn validate(&self, value: &str) -> Result<()> {
+            match T::from_str(value) {
+                Err(_) => Err(Error::from(ErrorKind::InvalidArgument(value.to_string()))),
+                Ok(n) => {
+                    if n >= self.0 && n <= self.1 {
+                        Ok(())
+                    } else {
+                        Err(Error::new(
+                            ErrorKind::InvalidArgument(value.to_string()),
+                            format!("{} is out of range: {}..{}", n, self.0, self.1),
+                        ))
+                    }
+                }
             }
         }
     }
@@ -553,183 +486,41 @@ pub mod validator {
         }
     }
 
-    /// A `Validator` where a `str` is valid if can be parsed to type `T`
-    /// and is within the specified range.
-    pub struct RangeValidator<T>(T, T);
-    impl<T: FromStr + PartialOrd + Display> RangeValidator<T> {
-        pub fn new(min: T, max: T) -> Self {
-            assert!(min < max, "min cannot be greater than max");
-            RangeValidator(min, max)
-        }
-    }
-    impl<T: FromStr + PartialOrd + Display> Validator for RangeValidator<T> {
-        fn validate(&self, value: &str) -> Result<()> {
-            match T::from_str(value) {
-                Err(_) => Err(Error::from(ErrorKind::InvalidArgument(value.to_string()))),
-                Ok(n) => {
-                    if n >= self.0 && n <= self.1 {
-                        Ok(())
-                    } else {
-                        Err(Error::new(
-                            ErrorKind::InvalidArgument(value.to_string()),
-                            format!("{} is out of range: {}..{}", n, self.0, self.1),
-                        ))
-                    }
-                }
-            }
-        }
-    }
-
     /// Constructs a `Validator` for the specified type.
     #[inline]
-    pub fn validator_for<T: FromStr>() -> DefaultValidator<T> {
-        DefaultValidator::new()
+    pub fn parse_validator<T: FromStr>() -> ParseValidator<T> {
+        ParseValidator::new()
+    }
+
+    #[inline]
+    pub fn range_validator<T>(min: T, max: T) -> RangeValidator<T>
+        where T: FromStr + PartialOrd + Display {
+        RangeValidator::new(min, max)
+    }
+
+    #[inline]
+    pub fn list_validator<S: ToString, I: IntoIterator<Item=S>>(values: I) -> ListValidator{
+        ListValidator::new(values)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::args::validator::validator_for;
+    use crate::args::validator::parse_validator;
 
     #[test]
-    fn arity_test() {
-        assert_eq!(Arguments::new(1).get_arity(), 1.into());
-        assert_eq!(Arguments::new(0..2).get_arity(), (0..2).into());
-        assert_eq!(Arguments::none().get_arity(), 0.into());
-        assert_eq!(Arguments::zero_or_one().get_arity(), (0..=1).into());
-        assert_eq!(Arguments::zero_or_more().get_arity(), (0..).into());
-        assert_eq!(Arguments::one_or_more().get_arity(), (1..).into());
-    }
+    fn arg_test(){
+        let arg = Argument::new("number")
+            .description("the values to use")
+            .arg_count(1..)
+            .validator(parse_validator::<i64>())
+            .default(1);
 
-    #[test]
-    #[should_panic]
-    fn valid_values_panic_test() {
-        let _args = Arguments::new(0).valid_values(&[1, 2, 3]);
-    }
-
-    #[test]
-    fn is_valid_test() {
-        let args = Arguments::new(1).valid_values(&["id", "name", "age"]);
-
-        assert!(args.is_valid("id"));
-        assert!(args.is_valid("name"));
-        assert!(args.is_valid("age"));
-    }
-
-    #[test]
-    #[should_panic]
-    fn default_values_panic_test() {
-        let _args = Arguments::new(1).default_values(&[1, 2, 3]);
-    }
-
-    #[test]
-    fn default_values_test() {
-        let args = Arguments::new(3).default_values(&[1, 2, 3]);
-
-        assert!(args.get_default_values().iter().any(|n| n == "1"));
-        assert!(args.get_default_values().iter().any(|n| n == "2"));
-        assert!(args.get_default_values().iter().any(|n| n == "3"));
-    }
-
-    #[test]
-    fn set_values_test() {
-        let mut args1 = Arguments::new(1);
-        assert!(args1.set_values(&[1]).is_ok());
-        assert!(args1.get_values().iter().any(|s| s == "1"));
-
-        let mut args2 = Arguments::new(1..);
-        assert!(args2.set_values(&[1, 2, 3, 4]).is_ok());
-        assert!(args2.get_values().iter().any(|s| s == "1"));
-        assert!(args2.get_values().iter().any(|s| s == "2"));
-        assert!(args2.get_values().iter().any(|s| s == "3"));
-        assert!(args2.get_values().iter().any(|s| s == "4"));
-
-        let mut args3 = Arguments::new(1..3);
-        assert!(args3.set_values(&[1, 2, 3]).is_ok());
-        assert!(args3.get_values().iter().any(|s| s == "1"));
-        assert!(args3.get_values().iter().any(|s| s == "2"));
-        assert!(args3.get_values().iter().any(|s| s == "3"));
-
-        let mut args4 = Arguments::none();
-        assert!(args4.set_values(&[1]).is_err());
-
-        let mut args5 = Arguments::new(1..);
-        let empty: &[usize] = &[];
-        assert!(args5.set_values(empty).is_err());
-
-        let mut args6 = Arguments::new(1..3);
-        assert!(args6.set_values(&[1, 2, 3, 4]).is_err());
-    }
-
-    #[test]
-    fn validator_test1() {
-        let mut args = Arguments::new(1).validator(validator_for::<u32>());
-
-        assert!(args.set_values(&[1]).is_ok());
-        assert!(args.set_values(&["2"]).is_ok());
-        assert!(args.set_values(&["-3"]).is_err());
-        assert!(args.set_values(&["hello"]).is_err());
-    }
-
-    #[test]
-    fn validator_test2() {
-        let mut args = Arguments::new(1).validator(validator_for::<f64>());
-
-        assert!(args.set_values(&[1]).is_ok());
-        assert!(args.set_values(&["2.5"]).is_ok());
-        assert!(args.set_values(&["-0.0065"]).is_ok());
-        assert!(args.set_values(&["hello"]).is_err());
-    }
-
-    #[test]
-    fn validator_test3() {
-        let mut args = Arguments::new(1).validator(validator_for::<bool>());
-
-        assert!(args.set_values(&[true]).is_ok());
-        assert!(args.set_values(&[false]).is_ok());
-        assert!(args.set_values(&["false"]).is_ok());
-        assert!(args.set_values(&["hello"]).is_err());
-    }
-
-    #[test]
-    fn convert_ok_test() {
-        let mut args = Arguments::new(1..).name("numbers");
-        args.set_values(&["1"]).unwrap();
-        assert_eq!(args.convert::<u32>().ok(), Some(1));
-    }
-
-    #[test]
-    fn convert_err_test() {
-        let mut args = Arguments::new(1..).name("numbers");
-        args.set_values(&["1", "2", "3"]).unwrap();
-        assert!(args.convert::<u32>().is_err());
-    }
-
-    #[test]
-    fn convert_at_test() {
-        let mut args = Arguments::new(1..).name("numbers");
-
-        args.set_values(&["1", "2", "3"]).unwrap();
-
-        assert_eq!(1, args.convert_at(0).unwrap());
-        assert_eq!(2, args.convert_at(1).unwrap());
-        assert_eq!(3, args.convert_at(2).unwrap());
-    }
-
-    #[test]
-    fn convert_all_test() {
-        let mut args = Arguments::new(1..).name("numbers");
-        args.set_values(&["1", "2", "3"]).unwrap();
-
-        let values = args.convert_all::<u32>().unwrap();
-        assert_eq!(vec![1, 2, 3], values);
-    }
-
-    #[test]
-    fn convert_all_err_test() {
-        let mut args = Arguments::new(1..);
-        args.set_values(&["1", "bool", "3"]).unwrap();
-        assert!(args.convert_all::<u32>().is_err());
+        assert_eq!(arg.get_name(), "number");
+        assert_eq!(arg.get_description(), Some("the values to use"));
+        assert_eq!(arg.get_arg_count(), ArgCount::more_than(1));
+        assert!(arg.get_validator().is_some());
+        assert_eq!(arg.get_default_values()[0].clone(), "1".to_owned());
     }
 }

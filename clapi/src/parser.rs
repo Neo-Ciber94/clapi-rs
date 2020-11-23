@@ -6,6 +6,7 @@ use crate::tokenizer::{DefaultTokenizer, Token, Tokenizer};
 use crate::utils::Then;
 use std::borrow::Borrow;
 use crate::command::Command;
+use crate::args::ArgumentList;
 
 /// A trait for parse command arguments.
 pub trait Parser<Args> {
@@ -25,9 +26,8 @@ where
     fn parse(&mut self, context: &Context, args: I) -> Result<ParseResult> {
         let mut tokenizer = DefaultTokenizer::default();
         let tokens = tokenizer.tokenize(context, args)?;
-
         let mut iterator = tokens.iter().peekable();
-        let mut result_options = Options::new();
+        let mut command_options = Options::new();
         let mut command = context.root();
 
         // Finds the executing command
@@ -46,42 +46,60 @@ where
 
         // Gets the commands options
         while let Some(Token::Opt(prefix, s)) = iterator.peek() {
-            if let Some(mut option) = get_option_prefixed(context, command, prefix, s).cloned() {
-                // Consumes token
+            if let Some(option) = get_option_prefixed(context, command, prefix, s) {
+                // Consumes option token
                 iterator.next();
 
-                // If the option take args, add them
-                if option.get_args().take_args() {
-                    let mut option_args = Vec::new();
-                    let max_arg_count = option.get_args().get_arity().max_arg_count();
+                if option.take_args() {
+                    let mut option_args = ArgumentList::new();
+                    let mut option_args_iter = option.get_args()
+                        .iter()
+                        .peekable();
 
-                    while let Some(t) = iterator.peek() {
-                        // If the option don't takes more arguments exit
-                        if option_args.len() >= max_arg_count {
-                            break;
+                    while let Some(arg) = option_args_iter.next(){
+                        let mut values = Vec::new();
+                        let max_count = arg.get_arg_count().max();
+                        let mut count = 0;
+
+                        while count < max_count {
+                            if let Some(Token::Arg(value)) = iterator.peek() {
+                                iterator.next();
+                                values.push(value.clone());
+                                count += 1;
+                            } else {
+                                break;
+                            }
                         }
 
-                        if let Token::Arg(s) = t {
-                            option_args.push(s);
-                            iterator.next();
-                        } else {
-                            break;
+                        // If there is no more args, check if there is an `end of arguments`
+                        if option_args_iter.peek().is_none() {
+                            if iterator.peek().map_or(false, |t| !t.is_option()){
+                                // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html
+                                // Check Guide 10
+                                // If there is an `--` (end of arguments) we pass all the values
+                                // before to the last option (if any)
+                                if let Some(mut index) = iterator.clone().position(|t| t.is_eoo()){
+                                    while index > 0 {
+                                        let t = iterator.next().unwrap().clone().into_string();
+                                        values.push(t);
+                                        index -= 1;
+                                    }
+                                }
+                            }
                         }
+
+                        // Sets the argument values
+                        let mut arg = arg.clone();
+                        arg.set_values(values)?;
+                        option_args.add(arg);
                     }
 
-                    option.set_args_values(option_args.clone()).or_else(|error| {
-                        let args = option_args.iter().map(|s| (*s).clone()).collect();
-
-                        Err(Error::new_parse_error(
-                            error,
-                            command.clone(),
-                            Some(option.clone()),
-                            Some(args),
-                        ))
-                    })?;
+                    // Sets the option arguments
+                    command_options.add(option.clone().args(option_args));
+                } else {
+                    // Adds the option
+                    command_options.add(option.clone());
                 }
-
-                result_options.add(option);
             } else {
                 return Err(Error::new_parse_error(
                     Error::from(ErrorKind::UnrecognizedOption(prefix.clone(), s.clone())),
@@ -92,9 +110,25 @@ where
             }
         }
 
-        // If the current is `end of options` skip it
-        if let Some(Token::EOO) = iterator.peek() {
-            iterator.next();
+        // We check for `end of arguments` if any we skip it if there is no arguments before it
+        if let Some(index) = iterator.clone().position(|t| t.is_eoo()){
+            // If there is arguments before `--` (end of arguments)
+            // values are being passed to the last option which not exist.
+            if index > 0 {
+                // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html
+                // Check Guide 10
+
+                // We get the last argument to provide a hint of the error
+                let value = iterator.next().cloned().unwrap().into_string();
+                return Err(
+                    Error::new(
+                        ErrorKind::InvalidArgument(value),
+                        "there is no options that expect arguments"
+                    )
+                );
+            } else {
+                iterator.next();
+            }
         }
 
         // Check required options
@@ -103,49 +137,83 @@ where
             .filter(|o| o.is_required());
 
         for opt in required_options {
-            if !result_options.contains(opt.get_name()) {
+            if !command_options.contains(opt.get_name()) {
                 return Err(Error::from(ErrorKind::MissingOption(opt.get_name().to_owned())));
             }
         }
 
-        // Adds options with default values
+        // Gets the options that takes default arguments
         let default_options = command
             .then(|c| c.get_options().iter())
-            .filter(|o| o.get_args().has_default_values());
+            .filter(|o| o.get_args().iter().any(|a| a.has_default_values()));
 
+        // Sets the options that takes default arguments
         for opt in default_options {
-            if !result_options.contains(opt.get_name()) {
-                result_options.add(opt.clone());
+            if !command_options.contains(opt.get_name()) {
+                command_options.add(opt.clone());
             }
         }
 
-        // Sets the rest of the args to the command
-        let mut rest_args = iterator
-            .map(|t| t.clone().into_string())
-            .collect::<Vec<String>>();
+        let mut command_args = ArgumentList::new();
+        let mut args_iter = command.get_args()
+            .iter()
+            .cloned()
+            .peekable();
 
-        // Sets default values if there is not args
-        if rest_args.is_empty() && command.get_args().has_default_values() {
-            for arg in command.get_args().get_default_values() {
-                rest_args.push(arg.clone());
+        while let Some(mut arg) = args_iter.next(){
+            let mut values = Vec::new();
+            let max_count = arg.get_arg_count().max();
+            let mut count = 0;
+
+            if args_iter.peek().is_some() {
+                while count < max_count {
+                    if let Some(Token::Arg(value)) = iterator.peek() {
+                        iterator.next();
+                        values.push(value.clone());
+                        count += 1;
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                // If there is no `Argument`s left, pass the rest of the tokens as values
+                while let Some(s) = iterator.next().cloned(){
+                    values.push(s.into_string());
+                }
             }
+
+            // Sets the argument values
+            // We attempt to set them even if the values is empty
+            // to return an `invalid argument count` error.
+            if values.len() > 0 || (values.is_empty() && !arg.has_default_values()) {
+                arg.set_values(values)
+                    .or_else(|error| {
+                        Err(Error::new_parse_error(
+                            error,
+                            command.clone(),
+                            None,
+                            Some(command_args.clone()),
+                        ))
+                    })?;
+            }
+
+            command_args.add(arg);
         }
 
-        // Clones the command and set the options and args
-        let mut result_command = command.clone().options(result_options);
+        // If there is more values which weren't consume, so the current command takes not args
+        if iterator.peek().is_some() {
+            return Err(Error::new(
+                ErrorKind::InvalidArgumentCount,
+                format!("`{}` takes no arguments", command.get_name())
+            ));
+        }
 
-        result_command
-            .set_args_values(rest_args.as_slice())
-            .or_else(|error| {
-                Err(Error::new_parse_error(
-                    error,
-                    result_command.clone(),
-                    None,
-                    Some(rest_args),
-                ))
-            })?;
+        // Sets the command options and arguments
+        let command = command.clone()
+            .options(command_options)
+            .args(command_args);
 
-        Ok(ParseResult::new(result_command))
+        Ok(ParseResult::new(command))
     }
 }
 
@@ -159,148 +227,4 @@ fn get_option_prefixed<'a>(context: &'a Context, command: &'a Command, prefix: &
     }
 
     None
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::arg_count::ArgCount;
-    use crate::args::Arguments;
-    use crate::command::Command;
-    use crate::command_line::into_arg_iterator;
-    use crate::option::CommandOption;
-
-    fn parse(value: &str) -> Result<ParseResult> {
-        let root =
-            Command::root()
-                .option(CommandOption::new("version").alias("v"))
-                .option(CommandOption::new("author").alias("a"))
-                .subcommand(Command::new("echo").args(Arguments::new(1..)))
-                .subcommand(
-                    Command::new("pick")
-                        .args(Arguments::new(ArgCount::new(1, 2)))
-                        .option(CommandOption::new("color").args(
-                            Arguments::new(1).valid_values(&["red", "blue", "green"]),
-                        )),
-                )
-                .subcommand(
-                    Command::new("any").option(
-                        CommandOption::new("numbers")
-                            .required(true)
-                            .args(Arguments::new(1..)),
-                    ),
-                );
-
-        let values = into_arg_iterator(value);
-        let context = Context::new(root);
-        let mut parser = DefaultParser::default();
-        parser.parse(&context, values)
-    }
-
-    #[test]
-    fn parse_test1() {
-        let result1 = parse("version");
-        assert!(result1.is_err());
-
-        let result2 = parse("--version").unwrap();
-        assert!(result2.options().contains("version"));
-    }
-
-    #[test]
-    fn parse_test2() {
-        let result1 = parse("version");
-        assert!(result1.is_err());
-
-        let result2 = parse("--version").unwrap();
-        assert!(result2.options().contains("version"));
-        assert!(result2.options().contains("v"));
-    }
-
-    #[test]
-    fn parse_test3() {
-        let result1 = parse("--version author");
-        assert!(result1.is_err());
-
-        let result2 = parse("--version --author").unwrap();
-        println!("{:#?}", result2.options());
-        assert!(result2.options().contains("version"));
-        assert!(result2.options().contains("v"));
-        assert!(result2.options().contains("author"));
-        assert!(result2.options().contains("a"));
-    }
-
-    #[test]
-    fn parse_test4() {
-        let result = parse("any --numbers=1,2,3,4").unwrap();
-        assert_eq!(result.command().get_name(), "any");
-        assert_eq!(
-            result.options().get("numbers"),
-            Some(&CommandOption::new("numbers"))
-        );
-
-        let args = result.options().get_args("numbers").unwrap();
-        assert!(args.contains("1"));
-        assert!(args.contains("2"));
-        assert!(args.contains("3"));
-        assert!(args.contains("4"));
-    }
-
-    #[test]
-    fn parse_test5() {
-        let result = parse("any --numbers:1,2,3,4").unwrap();
-        assert_eq!(result.command().get_name(), "any");
-        assert_eq!(
-            result.options().get("numbers"),
-            Some(&CommandOption::new("numbers"))
-        );
-
-        let args = result.options().get_args("numbers").unwrap();
-        assert!(args.contains("1"));
-        assert!(args.contains("2"));
-        assert!(args.contains("3"));
-        assert!(args.contains("4"));
-    }
-
-    #[test]
-    fn parse_test6() {
-        let result = parse("any --numbers=1,2,3 -- 4");
-        assert!(result.is_err())
-    }
-
-    #[test]
-    fn parse_test7() {
-        let result = parse("any --numbers=1,2,3, 4");
-        assert!(result.is_ok());
-
-        let result = result.unwrap();
-        let options = result.options();
-        let args = options.get_args("numbers").unwrap();
-        assert!(args.contains("1"));
-        assert!(args.contains("2"));
-        assert!(args.contains("3"));
-        assert!(args.contains("4"));
-    }
-
-    #[test]
-    fn parser_ok_test() {
-        assert!(parse(" ").is_ok());
-        assert!(parse("").is_ok());
-        assert!(parse("--").is_ok());
-        assert!(parse("--version").is_ok());
-        assert!(parse("--author").is_ok());
-        assert!(parse("-v").is_ok());
-        assert!(parse("-a").is_ok());
-    }
-
-    #[test]
-    fn parse_error_test() {
-        assert!(parse("create").is_err());
-        assert!(parse("create --path=hello.txt").is_err());
-        assert!(parse("any --numbers").is_err());
-        assert!(parse("any 5").is_err());
-        assert!(parse("-version").is_err());
-        assert!(parse("-author").is_err());
-        assert!(parse("--v").is_err());
-        assert!(parse("--a").is_err());
-    }
 }

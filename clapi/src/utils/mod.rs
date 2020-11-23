@@ -9,6 +9,10 @@ mod once_cell;
 mod ext;
 pub use ext::*;
 
+#[macro_use]
+mod macros;
+pub use macros::*;
+
 /// Performs an operation over a value of type `T` and returns the result.
 ///
 /// This trait is implemented for all types.
@@ -48,3 +52,26 @@ pub trait Also: Sized {
 
 impl<T> Then for T {}
 impl<T> Also for T {}
+
+pub use debug_utils::*;
+mod debug_utils {
+    use std::fmt::{Debug, Formatter};
+
+    pub fn debug_option<'a, T>(option: &'a Option<T>, if_some: &'a str) -> impl Debug + 'a {
+        struct OptionDebug<'a, T>{
+            option: &'a Option<T>,
+            if_some: &'a str
+        }
+
+        impl<T> Debug for OptionDebug<'_, T>{
+            fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+                match &self.option {
+                    None => write!(f, "None"),
+                    Some(_) => write!(f, "Some({})", self.if_some)
+                }
+            }
+        }
+
+        OptionDebug { option, if_some }
+    }
+}

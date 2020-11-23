@@ -7,29 +7,20 @@ Numeric signed, unsigned and ranges of these types implements `Into<ArgCount>`.
 */
 #[derive(Debug, Default, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct ArgCount {
-    min_arg_count: usize,
-    max_arg_count: usize,
+    min: usize,
+    max: usize,
 }
 
 impl ArgCount {
     /// Constructs a new `ArgCount` with the specified `min` and `max` argument count.
-    pub fn new(min_arg_count: usize, max_arg_count: usize) -> Self {
-        assert!(
-            min_arg_count <= max_arg_count,
-            "min cannot be greater than max argument count"
-        );
-        ArgCount {
-            min_arg_count,
-            max_arg_count,
-        }
+    pub fn new(min: usize, max: usize) -> Self {
+        assert!(min <= max);
+        Self::new_unchecked(min, max)
     }
 
-    #[inline]
-    const fn new_unchecked(min_arg_count: usize, max_arg_count: usize) -> Self {
-        ArgCount {
-            min_arg_count,
-            max_arg_count,
-        }
+    #[inline(always)]
+    const fn new_unchecked(min: usize, max: usize) -> Self {
+        ArgCount { min, max, }
     }
 
     /// Constructs a new `ArgCount` for not arguments.
@@ -52,56 +43,56 @@ impl ArgCount {
 
     /// Constructs a new `ArgCount` for the specified number of arguments.
     #[inline]
-    pub const fn exactly(arg_count: usize) -> Self {
-        Self::new_unchecked(arg_count, arg_count)
+    pub const fn exactly(count: usize) -> Self {
+        Self::new_unchecked(count, count)
     }
 
     /// Constructs a new `ArgCount` for more than the specified number of arguments.
     #[inline]
-    pub const fn more_than(min_arg_count: usize) -> Self {
-        Self::new_unchecked(min_arg_count, usize::max_value())
+    pub const fn more_than(min: usize) -> Self {
+        Self::new_unchecked(min, usize::max_value())
     }
 
     /// Constructs a new `ArgCount` for less than the specified number of arguments.
     #[inline]
-    pub const fn less_than(max_arg_count: usize) -> Self {
-        Self::new_unchecked(0, max_arg_count)
+    pub const fn less_than(max: usize) -> Self {
+        Self::new_unchecked(0, max)
     }
 
     /// Returns the min number of arguments can takes.
     #[inline]
-    pub const fn min_arg_count(&self) -> usize {
-        self.min_arg_count
+    pub const fn min(&self) -> usize {
+        self.min
     }
 
     /// Returns the max number of arguments can takes.
     #[inline]
-    pub const fn max_arg_count(&self) -> usize {
-        self.max_arg_count
+    pub const fn max(&self) -> usize {
+        self.max
     }
 
     /// Returns `true` if this accept the provided number of arguments.
     #[inline]
     pub fn contains(&self, value: usize) -> bool {
-        (self.min_arg_count..=self.max_arg_count).contains(&value)
+        (self.min..=self.max).contains(&value)
     }
 
     /// Returns `true` if this takes arguments.
     #[inline]
     pub const fn takes_args(&self) -> bool {
-        self.max_arg_count != 0
+        self.max != 0
     }
 
     /// Returns `true` if this takes an exact number of arguments.
     #[inline]
     pub const fn is_exact(&self) -> bool {
-        self.min_arg_count == self.max_arg_count
+        self.min == self.max
     }
 
     /// Returns `true` if this takes exactly the specified number of arguments.
     #[inline]
     pub fn takes_exactly(&self, arg_count: usize) -> bool {
-        self.min_arg_count == arg_count && self.max_arg_count == arg_count
+        self.min == arg_count && self.max == arg_count
     }
 }
 
@@ -111,14 +102,14 @@ impl Display for ArgCount {
             write!(
                 f,
                 "{} argument{}",
-                self.min_arg_count,
+                self.min,
                 if self.takes_exactly(1) { "" } else { "s" }
             )
         } else {
             write!(
                 f,
                 "{} to {} arguments",
-                self.min_arg_count, self.max_arg_count
+                self.min, self.max
             )
         }
     }
@@ -126,7 +117,7 @@ impl Display for ArgCount {
 
 impl Into<RangeInclusive<usize>> for ArgCount {
     fn into(self) -> RangeInclusive<usize> {
-        self.min_arg_count..=self.max_arg_count
+        self.min..=self.max
     }
 }
 
@@ -144,8 +135,8 @@ macro_rules! impl_into_for_signed {
                 fn into(self) -> ArgCount {
                     assert!(self >= 0, "argument count cannot be negative: {}", self);
                     ArgCount{
-                        min_arg_count: self as usize,
-                        max_arg_count: self as usize
+                        min: self as usize,
+                        max: self as usize
                     }
                 }
             }
@@ -159,8 +150,8 @@ macro_rules! impl_into_for_unsigned {
             impl Into<ArgCount> for $target{
                 fn into(self) -> ArgCount {
                     ArgCount{
-                        min_arg_count: self as usize,
-                        max_arg_count: self as usize
+                        min: self as usize,
+                        max: self as usize
                     }
                 }
             }
@@ -178,8 +169,8 @@ macro_rules! impl_into_for_unsigned_range {
             impl Into<ArgCount> for RangeInclusive<$target>{
                 fn into(self) -> ArgCount {
                     ArgCount{
-                        min_arg_count: *self.start() as usize,
-                        max_arg_count: *self.end() as usize
+                        min: *self.start() as usize,
+                        max: *self.end() as usize
                     }
                 }
             }
@@ -187,8 +178,8 @@ macro_rules! impl_into_for_unsigned_range {
             impl Into<ArgCount> for Range<$target>{
                 fn into(self) -> ArgCount {
                     ArgCount{
-                        min_arg_count: self.start as usize,
-                        max_arg_count: self.end as usize
+                        min: self.start as usize,
+                        max: self.end as usize
                     }
                 }
             }
@@ -226,8 +217,8 @@ macro_rules! impl_into_for_signed_range {
                     assert!(end >= 0, "end cannot be negative");
 
                     ArgCount{
-                        min_arg_count: start as usize,
-                        max_arg_count: end as usize
+                        min: start as usize,
+                        max: end as usize
                     }
                 }
             }
@@ -241,8 +232,8 @@ macro_rules! impl_into_for_signed_range {
                     assert!(end >= 0, "end cannot be negative");
 
                     ArgCount{
-                        min_arg_count: start as usize,
-                        max_arg_count: end as usize
+                        min: start as usize,
+                        max: end as usize
                     }
                 }
             }
@@ -251,7 +242,6 @@ macro_rules! impl_into_for_signed_range {
                 fn into(self) -> ArgCount {
                     let start = self.start;
                     assert!(start >= 0, "start cannot be negative");
-
                     ArgCount::more_than(start as usize)
                 }
             }
@@ -260,7 +250,6 @@ macro_rules! impl_into_for_signed_range {
                 fn into(self) -> ArgCount {
                     let end = self.end;
                     assert!(end >= 0, "end cannot be negative");
-
                     ArgCount::less_than(end as usize)
                 }
             }
@@ -269,7 +258,6 @@ macro_rules! impl_into_for_signed_range {
                 fn into(self) -> ArgCount {
                     let end = self.end;
                     assert!(end >= 0, "end cannot be negative");
-
                     ArgCount::less_than(end as usize)
                 }
             }
@@ -290,8 +278,8 @@ mod tests {
         let arg_count = ArgCount::zero();
         assert!(!arg_count.takes_args());
         assert!(arg_count.is_exact());
-        assert_eq!(arg_count.min_arg_count, 0);
-        assert_eq!(arg_count.max_arg_count, 0);
+        assert_eq!(arg_count.min(), 0);
+        assert_eq!(arg_count.max(), 0);
     }
 
     #[test]
@@ -299,8 +287,8 @@ mod tests {
         let arg_count = ArgCount::one();
         assert!(arg_count.takes_args());
         assert!(arg_count.is_exact());
-        assert_eq!(arg_count.min_arg_count, 1);
-        assert_eq!(arg_count.max_arg_count, 1);
+        assert_eq!(arg_count.min(), 1);
+        assert_eq!(arg_count.max(), 1);
     }
 
     #[test]
@@ -308,32 +296,32 @@ mod tests {
         let arg_count = ArgCount::any();
         assert!(arg_count.takes_args());
         assert!(!arg_count.is_exact());
-        assert_eq!(arg_count.min_arg_count, 0);
-        assert_eq!(arg_count.max_arg_count, usize::max_value());
+        assert_eq!(arg_count.min(), 0);
+        assert_eq!(arg_count.max(), usize::max_value());
     }
 
     #[test]
     fn exactly_test() {
         let arg_count = ArgCount::exactly(2);
         assert!(arg_count.takes_exactly(2));
-        assert_eq!(arg_count.min_arg_count, 2);
-        assert_eq!(arg_count.max_arg_count, 2);
+        assert_eq!(arg_count.min(), 2);
+        assert_eq!(arg_count.max(), 2);
     }
 
     #[test]
     fn more_than_test() {
         let arg_count = ArgCount::more_than(1);
         assert!(!arg_count.takes_exactly(1));
-        assert_eq!(arg_count.min_arg_count, 1);
-        assert_eq!(arg_count.max_arg_count, usize::max_value());
+        assert_eq!(arg_count.min(), 1);
+        assert_eq!(arg_count.max(), usize::max_value());
     }
 
     #[test]
     fn less_than_test() {
         let arg_count = ArgCount::less_than(5);
         assert!(!arg_count.takes_exactly(5));
-        assert_eq!(arg_count.min_arg_count, 0);
-        assert_eq!(arg_count.max_arg_count, 5);
+        assert_eq!(arg_count.min(), 0);
+        assert_eq!(arg_count.max(), 5);
     }
 
     #[test]

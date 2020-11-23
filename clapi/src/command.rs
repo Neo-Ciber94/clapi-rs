@@ -1,13 +1,13 @@
-use crate::args::Arguments;
 use crate::error::Result;
 use crate::option::{CommandOption, Options};
 use crate::symbol::Symbol;
-use crate::utils::Also;
 use linked_hash_set::LinkedHashSet;
 use std::cell::{RefCell, RefMut};
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
+use crate::args::{ArgumentList, Argument};
+use crate::utils::debug_option;
 
 /// A command-line command.
 #[derive(Clone)]
@@ -19,8 +19,8 @@ pub struct Command {
     help: Option<String>,
     children: LinkedHashSet<Command>,
     options: Options,
-    args: Arguments,
-    handler: Option<Rc<RefCell<dyn FnMut(&Options, &Arguments) -> Result<()>>>>,
+    args: ArgumentList,
+    handler: Option<Rc<RefCell<dyn FnMut(&Options, &ArgumentList) -> Result<()>>>>,
 }
 
 impl Command {
@@ -38,11 +38,7 @@ impl Command {
 
     /// Constructs a new `Command` with the specified `Options`.
     pub fn with_options<S: Into<String>>(name: S, options: Options) -> Self {
-        let name = name.into();
-        assert!(!name.trim().is_empty(), "name cannot be empty");
-
-        let args =
-            Arguments::none().also_mut(|a| a.parent = Some(Symbol::Cmd(name.clone())));
+        let name = assert_not_blank!(name.into(), "`name` cannot be blank or empty");
 
         Command {
             name,
@@ -50,9 +46,9 @@ impl Command {
             description: None,
             help: None,
             children: LinkedHashSet::new(),
-            options,
             handler: None,
-            args,
+            args: ArgumentList::new(),
+            options,
         }
     }
 
@@ -81,14 +77,23 @@ impl Command {
         &self.options
     }
 
+    /// Returns the `Argument` this option takes.
+    pub fn get_arg(&self) -> Option<&Argument>{
+        if self.args.len() > 1 {
+            None
+        } else {
+            Some(&self.args[0])
+        }
+    }
+
     /// Returns the `Arguments` of this command.
-    pub fn get_args(&self) -> &Arguments {
+    pub fn get_args(&self) -> &ArgumentList {
         &self.args
     }
 
     /// Returns `true` if this command take args.
     pub fn take_args(&self) -> bool {
-        self.args.take_args()
+        self.args.len() > 0
     }
 
     /// Returns the parent `Symbol` of this command, or `None` if not have a parent.
@@ -97,9 +102,7 @@ impl Command {
     }
 
     /// Returns the handler of this command, or `None` if not set.
-    pub fn get_handler(
-        &self,
-    ) -> Option<RefMut<'_, dyn FnMut(&Options, &Arguments) -> Result<()> + 'static>> {
+    pub fn get_handler(&self) -> Option<RefMut<'_, dyn FnMut(&Options, &ArgumentList) -> Result<()> + 'static>> {
         self.handler.as_ref().map(|x| x.borrow_mut())
     }
 
@@ -110,29 +113,33 @@ impl Command {
 
     /// Sets a short description of this command.
     pub fn description<S: Into<String>>(mut self, description: S) -> Self {
-        self.description = Some(description.into());
+        self.description = Some(assert_not_blank!(description.into(), "`description` cannot be blank or empty"));
         self
     }
 
     /// Sets a usage description of this command.
     pub fn help<S: Into<String>>(mut self, help: S) -> Self {
-        self.help = Some(help.into());
+        self.help = Some(assert_not_blank!(help.into(), "`help` cannot be blank or empty"));
         self
     }
 
     /// Adds an `CommandOption` to this command.
+    #[cfg(debug_assertions)]
     pub fn option(mut self, option: CommandOption) -> Self {
-        if cfg!(debug_assertions) {
-            let option_name = option.get_name().to_string();
-            assert!(
-                self.options.add(option),
-                "`{}` already contains a `CommandOption` named: `{}`",
-                self.name,
-                option_name,
-            );
-        } else {
-            self.options.add(option);
-        }
+        let option_name = option.get_name().to_string();
+        assert!(
+            self.options.add(option),
+            "`{}` already contains a `CommandOption` named: `{}`",
+            self.name, option_name,
+        );
+
+        self
+    }
+
+    /// Adds an `CommandOption` to this command.
+    #[cfg(not(debug_assertions))]
+    pub fn option(mut self, option: CommandOption) -> Self {
+        self.options.add(option);
         self
     }
 
@@ -142,9 +149,27 @@ impl Command {
         self
     }
 
+    /// Adds a new `Argument` to this command.
+    #[cfg(debug_assertions)]
+    pub fn arg(mut self, arg: Argument) -> Self {
+        let arg_name = arg.get_name().to_string();
+        assert!(
+            self.args.add(arg),
+            "`{}` already contains an `Argument` named: `{}`",
+            self.name, arg_name,
+        );
+        self
+    }
+
+    /// Adds a new `Argument` to this command.
+    #[cfg(not(debug_assertions))]
+    pub fn arg(mut self, arg: Argument) -> Self {
+        self.args.add(arg);
+        self
+    }
+
     /// Sets the `Arguments` of this command.
-    pub fn args(mut self, mut args: Arguments) -> Self {
-        args.parent = Some(Symbol::Cmd(self.name.clone()));
+    pub fn args(mut self, args: ArgumentList) -> Self {
         self.args = args;
         self
     }
@@ -163,7 +188,7 @@ impl Command {
     /// ```
     pub fn handler<F>(mut self, f: F) -> Self
     where
-        F: FnMut(&Options, &Arguments) -> Result<()> + 'static,
+        F: FnMut(&Options, &ArgumentList) -> Result<()> + 'static,
     {
         self.handler = Some(Rc::new(RefCell::new(f)));
         self
@@ -173,15 +198,6 @@ impl Command {
     pub fn subcommand(mut self, command: Command) -> Self {
         self.add_command(command);
         self
-    }
-
-    /// Sets the argument values of this command.
-    pub fn set_args_values<'a, S, I>(&mut self, args: I) -> Result<()>
-        where
-            I: IntoIterator<Item = &'a S>,
-            S: ToString + 'a,
-    {
-        self.args.set_values(args)
     }
 
     #[inline]
@@ -226,16 +242,10 @@ impl Debug for Command {
         f.debug_struct("Command")
             .field("name", &self.get_name())
             .field("description", &self.get_description())
-            .field("parent", &self.parent)
+            .field("parent", &self.get_parent())
+            .field("options", &self.get_options())
             .field("arguments", &self.get_args())
-            .field(
-                "handler",
-                if self.handler.is_some() {
-                    &"fn(&Options, &[String) -> Result<()>"
-                } else {
-                    &"None"
-                },
-            )
+            .field("handler", &debug_option(&self.get_handler(), "FnMut(&Options, &ArgumentList) -> Result<()>"))
             .field("children", &self.get_children())
             .finish()
     }
@@ -286,16 +296,35 @@ mod tests {
     use std::ops::DerefMut;
 
     #[test]
-    fn name_test() {
-        let cmd = Command::new("time");
+    fn command_test1() {
+        let cmd = Command::new("time")
+            .description("Shows the time")
+            .help("Sets the time or show it");
+
         assert_eq!(cmd.get_name(), "time");
+        assert_eq!(cmd.get_description(), Some("Shows the time"));
+        assert_eq!(cmd.get_help(), Some("Sets the time or show it"));
     }
 
     #[test]
-    fn description() {
-        let cmd = Command::new("time").description("Shows the time");
+    #[should_panic]
+    fn command_test2() {
+        Command::new(" ");
+    }
 
-        assert_eq!(cmd.get_description(), Some("Shows the time"));
+    #[test]
+    #[should_panic]
+    fn command_test3() {
+        Command::new("time")
+            .description("");
+    }
+
+    #[test]
+    #[should_panic]
+    fn command_test4() {
+        Command::new("time")
+            .description("Show the time")
+            .help("\n");
     }
 
     #[test]
@@ -364,12 +393,10 @@ mod tests {
 
     #[test]
     fn args_test() {
-        let mut cmd = Command::new("time").args(Arguments::new(1));
+        let cmd = Command::new("time")
+            .arg(Argument::new("arg").arg_count(1));
 
-        assert_eq!(cmd.get_args(), &Arguments::new(1));
-
-        assert!(cmd.set_args_values(&["1"]).is_ok());
-        assert!(cmd.get_args().get_values().contains(&String::from("1")));
+        assert_eq!(cmd.get_arg().unwrap(), &Argument::new("arg"));
     }
 
     #[test]
@@ -378,13 +405,13 @@ mod tests {
 
         let cmd = Command::new("counter").handler(inc);
 
-        fn inc(_: &Options, _: &Arguments) -> Result<()> {
+        fn inc(_: &Options, _: &ArgumentList) -> Result<()> {
             unsafe { VALUE += 1 };
             Ok(())
         }
 
         let opts = Options::new();
-        let args = Arguments::none();
+        let args = ArgumentList::new();
 
         cmd.get_handler().unwrap().deref_mut()(&opts, &args).unwrap();
         cmd.get_handler().unwrap().deref_mut()(&opts, &args).unwrap();

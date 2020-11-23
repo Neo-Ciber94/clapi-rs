@@ -4,8 +4,9 @@ use crate::error::{Error, ErrorKind, ParseError, Result};
 use crate::help::{DefaultHelpCommand, HelpCommand};
 use crate::parser::{DefaultParser, Parser};
 use crate::suggestion::{SingleSuggestionProvider, SuggestionProvider};
-use crate::utils::OptionExt;
+use crate::utils::{OptionExt, debug_option};
 use std::fmt::{Debug, Formatter};
+use crate::ArgumentList;
 
 /// Represents a command-line app.
 pub struct CommandLine {
@@ -119,12 +120,12 @@ impl CommandLine {
 
         // Check if the command is a 'help' command
         if self.is_help_command(command) {
-            return self.display_help(parse_result.args().get_values());
+            return self.display_help(parse_result.args());
         }
 
+        // We borrow the value from the Option to avoid create a temporary
         let handler = command.get_handler();
 
-        // We borrow the value from the Option to avoid create temporary
         if let Some(mut handler) = handler {
             let options = parse_result.options();
             let args = parse_result.args();
@@ -132,8 +133,9 @@ impl CommandLine {
             (*handler)(options, args)
         } else {
             if self.show_help_when_not_handler {
-                self.display_help(&[])
+                self.display_help(&ArgumentList::new())
             } else {
+                // todo: panics instead of return error?
                 Err(Error::new(
                     ErrorKind::Other,
                     format!("No handler specified for `{}`", command.get_name()),
@@ -152,13 +154,17 @@ impl CommandLine {
 
     fn handle_error(&self, error: Error) -> Result<()> {
         if *error.kind() == ErrorKind::EmptyExpression && self.help.is_some() {
-            return self.display_help(&[]);
+            return self.display_help(&ArgumentList::new());
         }
 
         if self.suggestions.is_some() {
             let parse_error = error.try_into_parse_error()?;
             if self.is_help_command(parse_error.command()) {
-                return self.display_help(parse_error.command_args().unwrap_or_default());
+                let args = parse_error.command_args()
+                    .cloned()
+                    .unwrap_or_default();
+
+                return self.display_help(&args);
             }
 
             return Err(self.display_suggestions(parse_error));
@@ -176,7 +182,7 @@ impl CommandLine {
         }
     }
 
-    fn display_help(&self, args: &[String]) -> Result<()> {
+    fn display_help(&self, args: &ArgumentList) -> Result<()> {
         let help_command = self.help.as_ref().expect("help command is not set");
 
         fn find_command<'a>(root: &'a Command, children: &[String]) -> Result<&'a Command> {
@@ -202,7 +208,7 @@ impl CommandLine {
             0 => help_command.help(&self.context, self.context.root()),
             _ => {
                 let root = self.context.root();
-                let subcommand = find_command(root, args)?;
+                let subcommand = find_command(root, &args.get_raw_args())?;
                 help_command.help(&self.context, subcommand)
             }
         };
@@ -275,43 +281,11 @@ impl Debug for CommandLine {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CommandLine")
             .field("context", &self.context)
-            .field(
-                "help",
-                if self.help.is_some() {
-                    &"Some(HelpCommand)"
-                } else {
-                    &"None"
-                },
-            )
-            .field(
-                "suggestions",
-                if self.help.is_some() {
-                    &"Some(SuggestionProvider)"
-                } else {
-                    &"None"
-                },
-            )
+            .field("help", &debug_option(&self.help, "HelpCommand"))
+            .field("suggestions", &debug_option(&self.suggestions, "SuggestionProvider"))
             .finish()
     }
 }
-
-// impl From<Context> for CommandLine {
-//     fn from(context: Context) -> Self {
-//         CommandLine::with_context(context)
-//     }
-// }
-//
-// impl From<RootCommand> for CommandLine {
-//     fn from(root: RootCommand) -> Self {
-//         CommandLine::new(root)
-//     }
-// }
-//
-// impl From<Command> for CommandLine {
-//     fn from(command: Command) -> Self {
-//         CommandLine::new(RootCommand::from(command))
-//     }
-// }
 
 /// Split the given value `&str` into command-line args.
 ///
