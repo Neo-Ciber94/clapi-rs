@@ -162,10 +162,11 @@ where
 
         while let Some(mut arg) = args_iter.next(){
             let mut values = Vec::new();
-            let max_count = arg.get_arg_count().max();
-            let mut count = 0;
 
             if args_iter.peek().is_some() {
+                let max_count = arg.get_arg_count().max();
+                let mut count = 0;
+
                 while count < max_count {
                     if let Some(Token::Arg(value)) = iterator.peek() {
                         iterator.next();
@@ -182,6 +183,7 @@ where
                 }
             }
 
+            println!("{:?}", values);
             // Sets the argument values
             // We attempt to set them even if the values is empty
             // to return an `invalid argument count` error.

@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter};
-use std::ops::{Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive};
+use std::ops::{Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive, Sub};
 
 /**
 Represents the number of arguments a option or command can take.
@@ -43,20 +43,20 @@ impl ArgCount {
 
     /// Constructs a new `ArgCount` for the specified number of arguments.
     #[inline]
-    pub const fn exactly(count: usize) -> Self {
-        Self::new_unchecked(count, count)
+    pub fn exactly(count: usize) -> Self {
+        Self::new(count, count)
     }
 
     /// Constructs a new `ArgCount` for more than the specified number of arguments.
     #[inline]
-    pub const fn more_than(min: usize) -> Self {
-        Self::new_unchecked(min, usize::max_value())
+    pub fn more_than(min: usize) -> Self {
+        Self::new(min, usize::max_value())
     }
 
     /// Constructs a new `ArgCount` for less than the specified number of arguments.
     #[inline]
-    pub const fn less_than(max: usize) -> Self {
-        Self::new_unchecked(0, max)
+    pub fn less_than(max: usize) -> Self {
+        Self::new(0, max)
     }
 
     /// Returns the min number of arguments can takes.
@@ -128,59 +128,28 @@ impl Into<ArgCount> for RangeFull {
     }
 }
 
-macro_rules! impl_into_for_signed {
+// 0..0 -> ArgCount { 0, 0 }
+// 0..1 -> ArgCount { 0, 0 }
+// 1..0 -> ArgCount { 1, -1 } Error
+
+macro_rules! impl_into_for_unsigned_int {
     ($($target:ident),*) => {
         $(
             impl Into<ArgCount> for $target{
                 fn into(self) -> ArgCount {
-                    assert!(self >= 0, "argument count cannot be negative: {}", self);
-                    ArgCount{
-                        min: self as usize,
-                        max: self as usize
-                    }
+                    ArgCount::exactly(self as usize)
                 }
             }
-        )*
-    };
-}
 
-macro_rules! impl_into_for_unsigned {
-    ($($target:ident),*) => {
-        $(
-            impl Into<ArgCount> for $target{
-                fn into(self) -> ArgCount {
-                    ArgCount{
-                        min: self as usize,
-                        max: self as usize
-                    }
-                }
-            }
-        )*
-    };
-}
-
-impl_into_for_signed! {i8, i16, i32, i64, i128, isize}
-
-impl_into_for_unsigned! {u8, u16, u32, u64, u128, usize}
-
-macro_rules! impl_into_for_unsigned_range {
-    ($($target:ident),*) => {
-        $(
             impl Into<ArgCount> for RangeInclusive<$target>{
                 fn into(self) -> ArgCount {
-                    ArgCount{
-                        min: *self.start() as usize,
-                        max: *self.end() as usize
-                    }
+                    ArgCount::new(*self.start() as usize, *self.end() as usize)
                 }
             }
 
             impl Into<ArgCount> for Range<$target>{
                 fn into(self) -> ArgCount {
-                    ArgCount{
-                        min: self.start as usize,
-                        max: self.end as usize
-                    }
+                    ArgCount::new(self.start as usize, self.end.sub(1) as usize)
                 }
             }
 
@@ -192,7 +161,7 @@ macro_rules! impl_into_for_unsigned_range {
 
             impl Into<ArgCount> for RangeTo<$target>{
                 fn into(self) -> ArgCount {
-                    ArgCount::less_than(self.end as usize)
+                    ArgCount::less_than(self.end.sub(1) as usize)
                 }
             }
 
@@ -205,9 +174,16 @@ macro_rules! impl_into_for_unsigned_range {
     };
 }
 
-macro_rules! impl_into_for_signed_range {
+macro_rules! impl_into_for_signed_int {
     ($($target:ident),*) => {
         $(
+            impl Into<ArgCount> for $target{
+                fn into(self) -> ArgCount {
+                    assert!(self >= 0, "argument count cannot be negative: {}", self);
+                    ArgCount::exactly(self as usize)
+                }
+            }
+
             impl Into<ArgCount> for RangeInclusive<$target>{
                 fn into(self) -> ArgCount {
                     let start = *self.start();
@@ -216,25 +192,19 @@ macro_rules! impl_into_for_signed_range {
                     assert!(start >= 0, "start cannot be negative");
                     assert!(end >= 0, "end cannot be negative");
 
-                    ArgCount{
-                        min: start as usize,
-                        max: end as usize
-                    }
+                    ArgCount::new(start as usize, end as usize)
                 }
             }
 
             impl Into<ArgCount> for Range<$target>{
                 fn into(self) -> ArgCount {
                     let start = self.start;
-                    let end = self.end;
+                    let end = self.end.sub(1);
 
                     assert!(start >= 0, "start cannot be negative");
                     assert!(end >= 0, "end cannot be negative");
 
-                    ArgCount{
-                        min: start as usize,
-                        max: end as usize
-                    }
+                    ArgCount::new(start as usize, end as usize)
                 }
             }
 
@@ -248,7 +218,7 @@ macro_rules! impl_into_for_signed_range {
 
             impl Into<ArgCount> for RangeTo<$target>{
                 fn into(self) -> ArgCount {
-                    let end = self.end;
+                    let end = self.end.sub(1);
                     assert!(end >= 0, "end cannot be negative");
                     ArgCount::less_than(end as usize)
                 }
@@ -265,13 +235,64 @@ macro_rules! impl_into_for_signed_range {
     };
 }
 
-impl_into_for_unsigned_range! { u8, u16, u32, u64, u128, usize }
+impl_into_for_unsigned_int! { u8, u16, u32, u64, u128, usize }
 
-impl_into_for_signed_range! { i8, i16, i32, i64, i128, isize }
+impl_into_for_signed_int! { i8, i16, i32, i64, i128, isize }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn arg_count_test() {
+        let arg_count = ArgCount::new(2, 5);
+        assert_eq!(arg_count.min(), 2);
+        assert_eq!(arg_count.max(), 5);
+        assert!(arg_count.takes_args());
+        assert!(arg_count.contains(2));
+        assert!(arg_count.contains(3));
+        assert!(arg_count.contains(4));
+        assert!(arg_count.contains(5));
+
+    }
+
+    #[test]
+    fn into_arg_count_test(){
+        fn assert_into<A: Into<ArgCount>>(value: A, expected_min: usize, expected_max: usize){
+            let arg_count = value.into();
+            let type_name = std::any::type_name::<A>();
+            assert_eq!(arg_count.min(), expected_min, "min value - type: `{}`", type_name);
+            assert_eq!(arg_count.max(), expected_max, "max value - type: `{}`", type_name);
+        }
+
+        assert_into(2, 2, 2);
+        assert_into(.., 0, usize::max_value());
+        assert_into(10.., 10, usize::max_value());
+        assert_into(..20, 0, 19);
+        assert_into(..=20, 0, 20);
+        assert_into(1..10, 1, 9);
+        assert_into(1..=10, 1, 10);
+
+        assert_into(0..1, 0, 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn into_arg_count_panic_test1(){
+        let _ : ArgCount = (-1_i32).into();
+    }
+
+    #[test]
+    #[should_panic]
+    fn into_arg_count_panic_test2(){
+        let _ : ArgCount = (1..1).into();
+    }
+
+    #[test]
+    #[should_panic]
+    fn into_arg_count_panic_test3(){
+        let _ : ArgCount = (0..-2).into();
+    }
 
     #[test]
     fn none_test() {

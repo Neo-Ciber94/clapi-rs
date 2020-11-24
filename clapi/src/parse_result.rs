@@ -303,6 +303,50 @@ mod tests{
                 command.clone()).err().unwrap().kind(),
                 &ErrorKind::InvalidArgumentCount);
     }
+
+    #[test]
+    fn parse_result_error_kind_test(){
+        let command = Command::new("My App")
+            .arg(Argument::new("values").arg_count(0..5))
+            .subcommand(Command::new("version"))
+            .option(CommandOption::new("range").alias("r")
+                .arg(Argument::new("min").validator(parse_validator::<i64>()))
+                .arg(Argument::new("max").validator(parse_validator::<i64>())))
+            .option(CommandOption::new("A").alias("a"))
+            .option(CommandOption::new("B").alias("b"))
+            .subcommand(Command::new("read")
+                .option(CommandOption::new("mode")
+                    .required(true)
+                    .arg(Argument::new("mode")
+                        .valid_values(&["low", "mid", "high"]))))
+            .subcommand(Command::new("data")
+                .subcommand(Command::new("set")
+                    .arg(Argument::new("value")))
+                .subcommand(Command::new("get")));
+
+        let err_kind = move |value: &str| -> ErrorKind {
+            parse_with(value, command.clone()).err()
+                .unwrap_or_else(|| panic!("{}", value))
+                .kind()
+                .clone()
+        };
+
+        assert!(matches!(err_kind("version 1 2 3"), ErrorKind::InvalidArgumentCount));
+        assert!(matches!(err_kind("-- 1 2 3 4 5"), ErrorKind::InvalidArgumentCount));
+        assert!(matches!(err_kind("--range 0"), ErrorKind::InvalidArgumentCount));
+        assert!(matches!(err_kind("--range 0 10 20"), ErrorKind::InvalidArgumentCount));
+        assert!(matches!(err_kind("--range 1 2 3 -- "), ErrorKind::InvalidArgumentCount));
+        assert!(matches!(err_kind("-r:0:1"), ErrorKind::InvalidExpression));
+        assert!(matches!(err_kind("--range 10 b"), ErrorKind::InvalidArgument(x) if x == "b"));
+        assert!(matches!(err_kind("--C"), ErrorKind::UnrecognizedOption(p, o) if p == "--" && o == "C"));
+        assert!(matches!(err_kind("write"), ErrorKind::UnrecognizedCommand(x) if x == "write"));
+        assert!(matches!(err_kind("read"), ErrorKind::MissingOption(x) if x == "mode"));
+        assert!(matches!(err_kind("read lo"), ErrorKind::InvalidArgument(x) if x == "lo"));
+        assert!(matches!(err_kind("read low mid"), ErrorKind::InvalidArgumentCount));
+        assert!(matches!(err_kind("data clear"), ErrorKind::UnrecognizedCommand(x) if x == "clear"));
+        assert!(matches!(err_kind("data get 0"), ErrorKind::InvalidArgumentCount));
+        assert!(matches!(err_kind("data set \"Hello World\" Bye"), ErrorKind::InvalidArgumentCount));
+    }
 }
 
 //#[cfg(test)]
