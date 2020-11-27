@@ -199,7 +199,7 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
         .find(|d| value.contains(*d))
     {
         let option_and_args = value
-            .splitn(2, delimiter)
+            .split(delimiter)
             .map(|s| s.to_string())
             .collect::<Vec<String>>();
 

@@ -4,7 +4,7 @@ use std::ops::Index;
 use std::rc::Rc;
 use std::str::FromStr;
 use linked_hash_set::LinkedHashSet;
-use validator::{ListValidator, Validator};
+use validator::Validator;
 
 use crate::{ArgCount, Error, ErrorKind};
 use crate::error::Result;
@@ -16,6 +16,7 @@ pub struct Argument {
     arg_count: ArgCount,
     validator: Option<Rc<dyn Validator>>,
     default_values: Vec<String>,
+    valid_values: Vec<String>,
     values: Vec<String>,
 }
 
@@ -27,6 +28,7 @@ impl Argument {
             arg_count: ArgCount::exactly(1),
             validator: None,
             default_values: vec![],
+            valid_values: vec![],
             values: vec![],
         }
     }
@@ -66,6 +68,10 @@ impl Argument {
         self.default_values.as_slice()
     }
 
+    pub fn get_valid_values(&self) -> &[String]{
+        self.valid_values.as_slice()
+    }
+
     pub fn get_values(&self) -> &[String] {
         self.values.as_slice()
     }
@@ -80,9 +86,15 @@ impl Argument {
 
     pub fn is_valid<S: AsRef<str>>(&self, value: S) -> bool {
         if let Some(validator) = &self.validator {
-            validator.validate(value.as_ref()).is_ok()
-        } else {
+            if validator.validate(value.as_ref()).is_err(){
+                return false;
+            }
+        }
+
+        if self.valid_values.is_empty(){
             true
+        } else {
+            self.valid_values.iter().any(|s| s == value.as_ref())
         }
     }
 
@@ -101,17 +113,32 @@ impl Argument {
     pub fn validator<V: Validator + 'static>(mut self, validator: V) -> Self {
         assert!(self.validator.is_none(), "validator is already set");
         assert!(self.default_values.is_empty(), "validator cannot be set if there is default values");
+        assert!(self.valid_values.is_empty(), "validator cannot be set if there is valid values");
         assert!(self.values.is_empty(), "validator cannot be set if there is values");
         self.validator = Some(Rc::new(validator));
         self
     }
 
-    pub fn valid_values<S, I>(self, values: I) -> Self
+    pub fn valid_values<S, I>(mut self, values: I) -> Self
     where
         S: ToString,
         I: IntoIterator<Item = S>,
     {
-        self.validator(ListValidator::new(values))
+        assert!(self.default_values.is_empty(), "cannot have default values and valid values");
+
+        let values = values
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>();
+
+        if let Some(validator) = &self.validator {
+            for value in &values {
+                validator.validate(value).unwrap();
+            }
+        }
+
+        self.valid_values = values;
+        self
     }
 
     pub fn default<S: ToString>(self, value: S) -> Self {
@@ -129,6 +156,7 @@ impl Argument {
             .collect::<Vec<String>>();
 
         assert!(!values.is_empty(), "no values");
+        assert!(self.valid_values.is_empty(), "cannot have default values and valid values");
         assert!(self.default_values.is_empty(), "default values are already set");
         assert!(self.values.is_empty(), "already contains values");
         assert!(
@@ -170,6 +198,17 @@ impl Argument {
         if let Some(validator) = &self.validator {
             for value in &values {
                 validator.validate(value)?;
+            }
+        }
+
+        if !self.valid_values.is_empty() {
+            for value in &values {
+                if !self.valid_values.iter().any(|s| s == value) {
+                    return Err(Error::new(
+                        ErrorKind::InvalidArgument(value.clone()),
+                        format!("valid values: {}", self.valid_values.join(", "))
+                    ));
+                }
             }
         }
 
@@ -406,12 +445,8 @@ impl<'a> IntoIterator for &'a ArgumentList{
 /// Provides the `Validator` trait used for validate the values of an `Arguments`.
 pub mod validator {
     use std::fmt::Display;
-    use std::iter::FromIterator;
     use std::marker::PhantomData;
     use std::str::FromStr;
-
-    use linked_hash_set::LinkedHashSet;
-
     use crate::error::{Error, ErrorKind, Result};
 
     /// Exposes a method for check if an `str` value is a valid argument value.
@@ -465,27 +500,6 @@ pub mod validator {
         }
     }
 
-    /// A `Validator` where a `str` is valid if is contained in the `list`.
-    pub struct ListValidator(LinkedHashSet<String>);
-    impl ListValidator {
-        pub fn new<S, I>(values: I) -> Self where S : ToString, I: IntoIterator<Item=S>{
-            let iter = values.into_iter().map(|s| s.to_string());
-            ListValidator(LinkedHashSet::from_iter(iter))
-        }
-    }
-    impl Validator for ListValidator {
-        fn validate(&self, value: &str) -> Result<()> {
-            if self.0.iter().any(|s| s == value) {
-                Ok(())
-            } else {
-                Err(Error::new(
-                    ErrorKind::InvalidArgument(value.to_string()),
-                    format!("valid values: {:?}", self.0),
-                ))
-            }
-        }
-    }
-
     /// Constructs a `Validator` for the specified type.
     #[inline]
     pub fn parse_validator<T: FromStr>() -> ParseValidator<T> {
@@ -496,11 +510,6 @@ pub mod validator {
     pub fn range_validator<T>(min: T, max: T) -> RangeValidator<T>
         where T: FromStr + PartialOrd + Display {
         RangeValidator::new(min, max)
-    }
-
-    #[inline]
-    pub fn list_validator<S: ToString, I: IntoIterator<Item=S>>(values: I) -> ListValidator{
-        ListValidator::new(values)
     }
 }
 

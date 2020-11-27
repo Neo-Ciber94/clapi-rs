@@ -87,17 +87,17 @@ impl Context {
         self.alias_prefixes.contains(value)
     }
 
-    /// Returns an `ExactSizeIterator` over the option name prefixes of this context.
+    /// Returns an `Iterator` over the option name prefixes of this context.
     pub fn name_prefixes(&self) -> impl ExactSizeIterator<Item = &String> {
         self.name_prefixes.iter()
     }
 
-    /// Returns an `ExactSizeIterator` over the option alias prefixes of this context.
+    /// Returns an `Iterator` over the option alias prefixes of this context.
     pub fn alias_prefixes(&self) -> impl ExactSizeIterator<Item = &String> {
         self.alias_prefixes.iter()
     }
 
-    /// Returns an `ExactSizeIterator` over the option argument delimiter of this context.
+    /// Returns an `Iterator` over the option argument delimiter of this context.
     pub fn arg_delimiters(&self) -> impl ExactSizeIterator<Item = &char> {
         self.arg_delimiters.iter()
     }

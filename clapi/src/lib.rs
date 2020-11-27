@@ -92,3 +92,6 @@ pub mod macros {
 
 #[cfg(feature="macros")]
 pub use macros::*;
+
+#[macro_use]
+mod app_macro;

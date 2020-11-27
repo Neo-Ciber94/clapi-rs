@@ -183,7 +183,6 @@ where
                 }
             }
 
-            println!("{:?}", values);
             // Sets the argument values
             // We attempt to set them even if the values is empty
             // to return an `invalid argument count` error.

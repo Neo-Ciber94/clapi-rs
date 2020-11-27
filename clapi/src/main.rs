@@ -1,36 +1,40 @@
-use clapi::{Command, Argument, CommandOption, CommandLine, Options, ArgumentList};
-use clapi::validator::parse_validator;
-use clapi::Result;
+use clapi::*;
 
-fn main() -> Result<()> {
-    let command = Command::root()
-        .subcommand(Command::new("version")
-            .handler(show_version(1, 0, 0)))
-        .option(CommandOption::new("times")
-            .alias("t")
-            .arg(Argument::new("times")
-                .validator(parse_validator::<i64>())
-                .default(1)))
-        .arg(Argument::new("values")
-            .arg_count(1..)
-            .validator(parse_validator::<i64>()))
-        .handler(|opts, args|{
-            let times = opts.get("times").unwrap().get_arg().unwrap().convert::<i64>()?;
-            let values = args.get("values").unwrap().convert_all::<i64>()?;
+fn main(){
+    //trace_macros!(true);
+    let app = app! { MyApp =>
+        (@arg range =>
+            (count => 1..10)
+            (description => "hello desc")
+            (values => 1, 2, 3)
+            (default => 1)
+        )
+        (@option numbers =>
+            (@arg N)
+        )
+        //(@arg value)
+    };
 
-            println!("total: {}", values.iter().sum::<i64>() * times);
-            Ok(())
-        });
+    println!("{}", stringify!(hello world));
 
-    CommandLine::new(command)
-        .use_default_suggestions()
-        .use_default_help()
-        .run()
+    //trace_macros!(false);
+
+
+    println!("{:#?}", app);
 }
 
-fn show_version(mayor: u32, minor: u32, path: u32) -> impl FnMut(&Options, &ArgumentList) -> Result<()>{
-    move |_, _| {
-        println!("version {}.{}.{}", mayor, minor, path);
-        Ok(())
-    }
+/*
+app! { myApp =>
+    (handler (, args) => {
+
+    })
+    (option range =>
+        (required => true)
+        (arg min => (count => 1) (type => i64))
+        (arg min => (count => 1) (type => i64))
+    )
+    (option mode =>
+        (arg mode => (values => 1, 2, 3))
+    )
 }
+*/
