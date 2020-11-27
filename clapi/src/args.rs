@@ -124,7 +124,7 @@ impl Argument {
         S: ToString,
         I: IntoIterator<Item = S>,
     {
-        assert!(self.default_values.is_empty(), "cannot have default values and valid values");
+        assert!(self.default_values.is_empty(), "cannot set valid values when default values are already declared");
 
         let values = values
             .into_iter()
@@ -156,7 +156,6 @@ impl Argument {
             .collect::<Vec<String>>();
 
         assert!(!values.is_empty(), "no values");
-        assert!(self.valid_values.is_empty(), "cannot have default values and valid values");
         assert!(self.default_values.is_empty(), "default values are already set");
         assert!(self.values.is_empty(), "already contains values");
         assert!(
@@ -170,6 +169,14 @@ impl Argument {
         if let Some(validator) = &self.validator {
             for value in &values {
                 validator.validate(value).unwrap();
+            }
+        }
+
+        if !self.valid_values.is_empty() {
+            for value in &values {
+                if !self.valid_values.iter().any(|s| s == value){
+                    panic!("invalid default value `{}`, valid values: {}", value, self.valid_values.join(", "))
+                }
             }
         }
 
