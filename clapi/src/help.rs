@@ -131,7 +131,7 @@ impl HelpCommand for DefaultHelpCommand {
         }
 
         // Command help
-        if let Some(help) = command.get_help() {
+        if let Some(help) = command.get_about() {
             writer.writeln("");
             writer.writeln(help);
         }

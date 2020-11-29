@@ -62,8 +62,8 @@ impl Command {
         self.description.as_ref().map(|s| s.as_str())
     }
 
-    /// Returns a description of the usage of this command.
-    pub fn get_help(&self) -> Option<&str> {
+    /// Returns additional information about this command like authors, usage, examples, etc...
+    pub fn get_about(&self) -> Option<&str> {
         self.help.as_ref().map(|s| s.as_str())
     }
 
@@ -117,8 +117,8 @@ impl Command {
         self
     }
 
-    /// Sets a usage description of this command.
-    pub fn help<S: Into<String>>(mut self, help: S) -> Self {
+    /// Sets additional information about this command like authors, usage, examples, etc...
+    pub fn about<S: Into<String>>(mut self, help: S) -> Self {
         self.help = Some(assert_not_blank!(help.into(), "`help` cannot be blank or empty"));
         self
     }
@@ -299,11 +299,11 @@ mod tests {
     fn command_test1() {
         let cmd = Command::new("time")
             .description("Shows the time")
-            .help("Sets the time or show it");
+            .about("Sets the time or show it");
 
         assert_eq!(cmd.get_name(), "time");
         assert_eq!(cmd.get_description(), Some("Shows the time"));
-        assert_eq!(cmd.get_help(), Some("Sets the time or show it"));
+        assert_eq!(cmd.get_about(), Some("Sets the time or show it"));
     }
 
     #[test]
@@ -324,7 +324,7 @@ mod tests {
     fn command_test4() {
         Command::new("time")
             .description("Show the time")
-            .help("\n");
+            .about("\n");
     }
 
     #[test]

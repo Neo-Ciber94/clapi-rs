@@ -2,10 +2,30 @@
 #[macro_export]
 macro_rules! app {
     // Here start
+    (=> $($rest:tt)+) => {{
+        $crate::CommandLine::new(
+            $crate::app!{
+                @command ($crate::Command::root()) $($rest)+
+            }
+        )
+        .use_default_help()
+        .use_default_suggestions()
+    }};
+
     ($command_name:ident => $($rest:tt)+) => {{
         $crate::CommandLine::new(
             $crate::app!{
                 @command ($crate::Command::new(stringify!($command_name))) $($rest)+
+            }
+        )
+        .use_default_help()
+        .use_default_suggestions()
+    }};
+
+    ($command_name:expr => $($rest:tt)+) => {{
+        $crate::CommandLine::new(
+            $crate::app!{
+                @command ($crate::Command::new($command_name)) $($rest)+
             }
         )
         .use_default_help()
@@ -31,9 +51,9 @@ macro_rules! app {
         }
     };
 
-    (@command ($builder:expr) (help => $help:literal) $($tt:tt)*) => {
+    (@command ($builder:expr) (about => $about:literal) $($tt:tt)*) => {
         $crate::app!{
-            @command ($builder.help($help)) $($tt)*
+            @command ($builder.about($about)) $($tt)*
         }
     };
 
@@ -231,11 +251,90 @@ macro_rules! app {
 
 #[macro_export]
 macro_rules! run_app{
+    ( => $($rest:tt)+) => {
+        $crate::app!( => $($rest)+).run()
+    };
+
     ($name:ident => $($rest:tt)+) => {
+        $crate::app!($name => $($rest)+).run()
+    };
+
+    ($name:expr => $($rest:tt)+) => {
         $crate::app!($name => $($rest)+).run()
     };
 
     ($name:literal => $($rest:tt)+) => {
         $crate::app!($name => $($rest)+).run()
+    };
+}
+
+#[macro_export]
+macro_rules! app_from_package{
+    ($($rest:tt)*) => {{
+        $crate::CommandLine::new(
+            $crate::app!{
+                @command
+                (
+                    $crate::Command::new($crate::package_name!())
+                        .description($crate::package_description!())
+                        .subcommand(Command::new("version")
+                            .handler(|_, _| {
+                                println!("{}", $crate::package_version!());
+                                Ok(())
+                            })
+                        )
+                ) $($rest)*
+            }
+        )
+        .use_default_help()
+        .use_default_suggestions()
+    }};
+}
+
+#[macro_export]
+macro_rules! run_app_from_package {
+    ($($rest:tt)*) => {{
+        $crate::CommandLine::new(
+            $crate::app!{
+                @command
+                (
+                    $crate::Command::new($crate::package_name!())
+                        .description($crate::package_description!())
+                        .subcommand(Command::new("version")
+                            .handler(|_, _| {
+                                println!("{}", $crate::package_version!());
+                                Ok(())
+                            })
+                        )
+                ) $($rest)*
+            }
+        )
+        .use_default_help()
+        .use_default_suggestions()
+        .run()
+    }};
+}
+
+#[macro_export]
+macro_rules! package_name {
+    () => {
+        option_env!("CARGO_PKG_NAME")
+            .expect("package name is not defined")
+    };
+}
+
+#[macro_export]
+macro_rules! package_description {
+    () => {
+        option_env!("CARGO_PKG_DESCRIPTION")
+            .expect("package description is not defined")
+    };
+}
+
+#[macro_export]
+macro_rules! package_version {
+    () => {
+        option_env!("CARGO_PKG_VERSION")
+            .expect("package version is not defined")
     };
 }

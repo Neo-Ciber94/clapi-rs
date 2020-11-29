@@ -2,7 +2,7 @@ use clapi::*;
 
 fn main() {
     //trace_macros!(true);
-    let x = app! { root =>
+    let app = app! { =>
         (description => "A command to sum")
         (@arg numbers =>
             (type => i64)
@@ -21,6 +21,7 @@ fn main() {
             println!("{:?} * {}, total = {}", args, times, total);
         })
     };
+    //trace_macros!(false);
 
-    // handler (number: i64, enable: bool, ...args: Vec<String>) => {}
+    println!("{:#?}", app);
 }
