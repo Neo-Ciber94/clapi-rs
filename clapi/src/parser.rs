@@ -1,6 +1,6 @@
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, Result};
-use crate::option::{Options, CommandOption};
+use crate::option::{OptionList, CommandOption};
 use crate::parse_result::ParseResult;
 use crate::tokenizer::{DefaultTokenizer, Token, Tokenizer};
 use crate::utils::Then;
@@ -27,7 +27,7 @@ where
         let mut tokenizer = DefaultTokenizer::default();
         let tokens = tokenizer.tokenize(context, args)?;
         let mut iterator = tokens.iter().peekable();
-        let mut command_options = Options::new();
+        let mut command_options = OptionList::new();
         let mut command = context.root();
 
         // Finds the executing command

@@ -1,7 +1,7 @@
 use clapi::*;
 
 fn main() {
-    //trace_macros!(true);
+
     let app = app! { =>
         (description => "A command to sum")
         (@arg numbers =>
@@ -20,8 +20,7 @@ fn main() {
             let total = sum * times;
             println!("{:?} * {}, total = {}", args, times, total);
         })
-    };
-    //trace_macros!(false);
+    }.run().unwrap();
 
     println!("{:#?}", app);
 }

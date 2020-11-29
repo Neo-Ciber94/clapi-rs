@@ -1,4 +1,5 @@
 
+/// Creates a new `CommandLine` app.
 #[macro_export]
 macro_rules! app {
     // Here start
@@ -23,16 +24,6 @@ macro_rules! app {
     }};
 
     ($command_name:expr => $($rest:tt)+) => {{
-        $crate::CommandLine::new(
-            $crate::app!{
-                @command ($crate::Command::new($command_name)) $($rest)+
-            }
-        )
-        .use_default_help()
-        .use_default_suggestions()
-    }};
-
-    ($command_name:literal => $($rest:tt)+) => {{
         $crate::CommandLine::new(
             $crate::app!{
                 @command ($crate::Command::new($command_name)) $($rest)+
@@ -82,7 +73,17 @@ macro_rules! app {
     (@command ($builder:expr) (handler (...$name:ident: $ty:ty) => $block:block ) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|opts, args|{
-                let $name = $crate::try_parse_values::<$ty>(args.get_raw_args())?[0];
+                let $name = match $crate::try_parse_values::<$ty>(args.get_raw_args()){
+                    Err(error) => { Err(error) },
+                    Ok(x) if x.len() == 1 => { Ok(x[0]) },
+                    Ok(x) => {
+                        Err($crate::Error::new(
+                                $crate::ErrorKind::InvalidArgumentCount,
+                                format!("`{}` expect 1 value but was {}", stringify!($name), x.len())
+                            )
+                        )
+                    },
+                }?;
                 $block
                 Ok(())
             })) $($tt)*
@@ -141,7 +142,17 @@ macro_rules! app {
                 )+
 
                 $(
-                    let $args_name = $crate::try_parse_values::<$args_type>(args.get_raw_args())?[0];
+                    let $args_name = match $crate::try_parse_values::<$args_type>(args.get_raw_args()){
+                        Err(error) => { Err(error) },
+                        Ok(x) if x.len() == 1 => { Ok(x[0]) },
+                        Ok(x) => {
+                            Err($crate::Error::new(
+                                    $crate::ErrorKind::InvalidArgumentCount,
+                                format!("`{}` expect 1 value but was {}", stringify!($args_name), x.len())
+                                )
+                            )
+                        },
+                    }?;
                 )?
 
                 $block
@@ -170,6 +181,15 @@ macro_rules! app {
         }
     };
 
+    (@command ($builder:expr) (@option $option_name:expr $(=> $($rest:tt)+)?) $($tt:tt)*) => {
+        $crate::app!{
+            @command
+            ($builder.option(
+                $crate::app!{ @option ($crate::CommandOption::new($option_name)) $($($rest)+)? }
+            )) $($tt)*
+        }
+    };
+
     (@option ($option_builder:expr)) => { $option_builder };
 
     (@option ($option_builder:expr) (@arg $arg_name:ident $(=> $($rest:tt)+)?) $($tt:tt)*) => {
@@ -193,7 +213,7 @@ macro_rules! app {
         }
     };
 
-     (@option ($option_builder:expr) (required => false) $($tt:tt)*) => {
+    (@option ($option_builder:expr) (required => false) $($tt:tt)*) => {
         $crate::app!{
             @option ($option_builder.required(false)) $($tt)*
         }
@@ -212,6 +232,15 @@ macro_rules! app {
             @command
             ($builder.arg(
                 $crate::app!{ @arg ($crate::Argument::new(stringify!($arg_name))) $($($rest)+)? }
+            )) $($tt)*
+        }
+    };
+
+    (@command ($builder:expr) (@arg $arg_name:expr $(=> $($rest:tt)+)?) $($tt:tt)*) => {
+        $crate::app!{
+            @command
+            ($builder.arg(
+                $crate::app!{ @arg ($crate::Argument::new($arg_name:expr)) $($($rest)+)? }
             )) $($tt)*
         }
     };
@@ -250,7 +279,7 @@ macro_rules! app {
 }
 
 #[macro_export]
-macro_rules! run_app{
+macro_rules! run_app {
     ( => $($rest:tt)+) => {
         $crate::app!( => $($rest)+).run()
     };
@@ -269,7 +298,7 @@ macro_rules! run_app{
 }
 
 #[macro_export]
-macro_rules! app_from_package{
+macro_rules! crate_app {
     ($($rest:tt)*) => {{
         $crate::CommandLine::new(
             $crate::app!{
@@ -292,7 +321,7 @@ macro_rules! app_from_package{
 }
 
 #[macro_export]
-macro_rules! run_app_from_package {
+macro_rules! run_crate_app {
     ($($rest:tt)*) => {{
         $crate::CommandLine::new(
             $crate::app!{
@@ -316,7 +345,7 @@ macro_rules! run_app_from_package {
 }
 
 #[macro_export]
-macro_rules! package_name {
+macro_rules! crate_name {
     () => {
         option_env!("CARGO_PKG_NAME")
             .expect("package name is not defined")
@@ -324,7 +353,7 @@ macro_rules! package_name {
 }
 
 #[macro_export]
-macro_rules! package_description {
+macro_rules! crate_description {
     () => {
         option_env!("CARGO_PKG_DESCRIPTION")
             .expect("package description is not defined")
@@ -332,7 +361,7 @@ macro_rules! package_description {
 }
 
 #[macro_export]
-macro_rules! package_version {
+macro_rules! crate_version {
     () => {
         option_env!("CARGO_PKG_VERSION")
             .expect("package version is not defined")

@@ -263,7 +263,7 @@ impl CommandLine {
     }
 }
 
-fn prefix_option(context: &Context, options: &crate::option::Options, name: String) -> String {
+fn prefix_option(context: &Context, options: &crate::option::OptionList, name: String) -> String {
     if options.get_by_alias(&name).is_some() {
         let prefix: String = context.alias_prefixes().next().cloned().unwrap();
         return format!("{}{}", prefix, name);
@@ -403,5 +403,13 @@ mod tests {
         assert_eq!("--times", args[1]);
         assert_eq!("5", args[2]);
         assert_eq!("\"bla\"", args[3]);
+    }
+
+    #[test]
+    fn into_arg_iterator_test3() {
+        let args = into_arg_iterator("print\t --times:3 \"hello world\"");
+        assert_eq!("print", args[0]);
+        assert_eq!("--times:3", args[1]);
+        assert_eq!("hello world", args[2]);
     }
 }

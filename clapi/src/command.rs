@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::option::{CommandOption, Options};
+use crate::option::{CommandOption, OptionList};
 use crate::symbol::Symbol;
 use linked_hash_set::LinkedHashSet;
 use std::cell::{RefCell, RefMut};
@@ -12,22 +12,22 @@ use crate::utils::debug_option;
 /// A command-line command.
 #[derive(Clone)]
 pub struct Command {
-    // Name of the parent command
-    pub(crate) parent: Option<Symbol>,
+    // Name of the parent command, used for debugging, may be removed
+    parent: Option<Symbol>,
     name: String,
     description: Option<String>,
-    help: Option<String>,
+    about: Option<String>,
     children: LinkedHashSet<Command>,
-    options: Options,
+    options: OptionList,
     args: ArgumentList,
-    handler: Option<Rc<RefCell<dyn FnMut(&Options, &ArgumentList) -> Result<()>>>>,
+    handler: Option<Rc<RefCell<dyn FnMut(&OptionList, &ArgumentList) -> Result<()>>>>,
 }
 
 impl Command {
     /// Constructs a new `Command`.
     #[inline]
     pub fn new<S: Into<String>>(name: S) -> Self {
-        Command::with_options(name, Options::new())
+        Command::with_options(name, OptionList::new())
     }
 
     /// Constructs a new `Command` named after the running executable.
@@ -37,14 +37,14 @@ impl Command {
     }
 
     /// Constructs a new `Command` with the specified `Options`.
-    pub fn with_options<S: Into<String>>(name: S, options: Options) -> Self {
+    pub fn with_options<S: Into<String>>(name: S, options: OptionList) -> Self {
         let name = assert_not_blank!(name.into(), "`name` cannot be blank or empty");
 
         Command {
             name,
             parent: None,
             description: None,
-            help: None,
+            about: None,
             children: LinkedHashSet::new(),
             handler: None,
             args: ArgumentList::new(),
@@ -64,7 +64,7 @@ impl Command {
 
     /// Returns additional information about this command like authors, usage, examples, etc...
     pub fn get_about(&self) -> Option<&str> {
-        self.help.as_ref().map(|s| s.as_str())
+        self.about.as_ref().map(|s| s.as_str())
     }
 
     /// Returns an `ExactSizeIterator` over the children of this command.
@@ -73,11 +73,11 @@ impl Command {
     }
 
     /// Returns the `Options` of this command.
-    pub fn get_options(&self) -> &Options {
+    pub fn get_options(&self) -> &OptionList {
         &self.options
     }
 
-    /// Returns the `Argument` this option takes.
+    /// Returns the `Argument` this option takes or `None` if have more than 1 argument.
     pub fn get_arg(&self) -> Option<&Argument>{
         if self.args.len() > 1 {
             None
@@ -102,7 +102,7 @@ impl Command {
     }
 
     /// Returns the handler of this command, or `None` if not set.
-    pub fn get_handler(&self) -> Option<RefMut<'_, dyn FnMut(&Options, &ArgumentList) -> Result<()> + 'static>> {
+    pub fn get_handler(&self) -> Option<RefMut<'_, dyn FnMut(&OptionList, &ArgumentList) -> Result<()> + 'static>> {
         self.handler.as_ref().map(|x| x.borrow_mut())
     }
 
@@ -119,7 +119,7 @@ impl Command {
 
     /// Sets additional information about this command like authors, usage, examples, etc...
     pub fn about<S: Into<String>>(mut self, help: S) -> Self {
-        self.help = Some(assert_not_blank!(help.into(), "`help` cannot be blank or empty"));
+        self.about = Some(assert_not_blank!(help.into(), "`help` cannot be blank or empty"));
         self
     }
 
@@ -144,7 +144,7 @@ impl Command {
     }
 
     /// Replaces the options of this command with the specified.
-    pub fn options(mut self, options: Options) -> Self {
+    pub fn options(mut self, options: OptionList) -> Self {
         self.options = options;
         self
     }
@@ -188,7 +188,7 @@ impl Command {
     /// ```
     pub fn handler<F>(mut self, f: F) -> Self
     where
-        F: FnMut(&Options, &ArgumentList) -> Result<()> + 'static,
+        F: FnMut(&OptionList, &ArgumentList) -> Result<()> + 'static,
     {
         self.handler = Some(Rc::new(RefCell::new(f)));
         self
@@ -405,12 +405,12 @@ mod tests {
 
         let cmd = Command::new("counter").handler(inc);
 
-        fn inc(_: &Options, _: &ArgumentList) -> Result<()> {
+        fn inc(_: &OptionList, _: &ArgumentList) -> Result<()> {
             unsafe { VALUE += 1 };
             Ok(())
         }
 
-        let opts = Options::new();
+        let opts = OptionList::new();
         let args = ArgumentList::new();
 
         cmd.get_handler().unwrap().deref_mut()(&opts, &args).unwrap();

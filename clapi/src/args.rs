@@ -5,10 +5,10 @@ use std::rc::Rc;
 use std::str::FromStr;
 use linked_hash_set::LinkedHashSet;
 use validator::Validator;
-
 use crate::{ArgCount, Error, ErrorKind};
 use crate::error::Result;
 
+/// Represents the arguments of an `option` or `command`.
 #[derive(Clone)]
 pub struct Argument {
     name: String,
@@ -21,6 +21,7 @@ pub struct Argument {
 }
 
 impl Argument {
+    /// Constructs a new `Argument`.
     pub fn new<S: Into<String>>(name: S) -> Self {
         Argument {
             name: name.into(),
@@ -33,57 +34,70 @@ impl Argument {
         }
     }
 
+    /// Constructs a new `Argument` that takes 0 or 1 values.
     #[inline]
     pub fn zero_or_one<S: Into<String>>(name: S) -> Self {
         Self::new(name).arg_count(0..=1)
     }
 
+    /// Constructs a new `Argument` that takes 0 or more values.
     #[inline]
     pub fn zero_or_more<S: Into<String>>(name: S) -> Self {
         Self::new(name).arg_count(0..)
     }
 
+    /// Constructs a new `Argument` that takes 1 or more values.
     #[inline]
     pub fn one_or_more<S: Into<String>>(name: S) -> Self {
         Self::new(name).arg_count(1..)
     }
 
+    /// Returns the name of this argument.
     pub fn get_name(&self) -> &str {
         self.name.as_str()
     }
 
+    /// Returns the description of this argument.
     pub fn get_description(&self) -> Option<&str> {
         self.description.as_ref().map(|s| s.as_str())
     }
 
+    /// Returns the number of values this argument takes.
     pub fn get_arg_count(&self) -> ArgCount {
         self.arg_count
     }
 
+    /// Returns the value `Validator` used by this argument.
     pub fn get_validator(&self) -> Option<&dyn Validator> {
         self.validator.as_ref().map(|s| s.as_ref())
     }
 
+    /// Returns the default values of this argument or a 0-length slice if none.
     pub fn get_default_values(&self) -> &[String] {
         self.default_values.as_slice()
     }
 
+    /// Returns the valid values of this argument or a 0-length slice if none.
     pub fn get_valid_values(&self) -> &[String]{
         self.valid_values.as_slice()
     }
 
+    /// Returns the values of this argument or a 0-length slice if none.
     pub fn get_values(&self) -> &[String] {
         self.values.as_slice()
     }
 
+    /// Returns `true` if this argument contains the specified value, `false` otherwise.
     pub fn contains<S: AsRef<str>>(&self, value: S) -> bool {
         self.values.iter().any(|s| s == value.as_ref())
     }
 
+    /// Returns `true` if this argument have default values.
     pub fn has_default_values(&self) -> bool {
         self.default_values.len() > 0
     }
 
+    /// Returns `true` if the given value is valid for this argument.
     pub fn is_valid<S: AsRef<str>>(&self, value: S) -> bool {
         if let Some(validator) = &self.validator {
             if validator.validate(value.as_ref()).is_err(){
@@ -98,6 +112,10 @@ impl Argument {
         }
     }
 
+    /// Sets the number of values this argument takes.
+    ///
+    /// # Panics
+    /// If the value is exactly 0, an argument must take from 0 to 1 values.
     pub fn arg_count<A: Into<ArgCount>>(mut self, arg_count: A) -> Self {
         let arg_count = arg_count.into();
         assert!(!arg_count.takes_exactly(0), "`{}` cannot takes 0 values", self.name);
@@ -105,11 +123,18 @@ impl Argument {
         self
     }
 
+    /// Sets the description of this argument.
     pub fn description<S: Into<String>>(mut self, name: S) -> Self {
         self.description = Some(name.into());
         self
     }
 
+    /// Sets the value `Validator` of this argument.
+    ///
+    /// # Panics
+    /// - If there is already a validator.
+    /// - If there is default values; a validator must be set before the default values.
+    /// - If there is values.
     pub fn validator<V: Validator + 'static>(mut self, validator: V) -> Self {
         assert!(self.validator.is_none(), "validator is already set");
         assert!(self.default_values.is_empty(), "validator cannot be set if there is default values");
@@ -119,6 +144,11 @@ impl Argument {
         self
     }
 
+    /// Sets the valid values of this argument.
+    ///
+    /// # Panics
+    /// If the argument contains default values.
+    /// Default values must be set before the valid values.
     pub fn valid_values<S, I>(mut self, values: I) -> Self
     where
         S: ToString,
@@ -141,10 +171,22 @@ impl Argument {
         self
     }
 
+    /// Sets the default value of this argument.
+    ///
+    /// # Panics
+    /// - If argument already contains values.
+    /// - If already contains default values.
+    /// - If the number of arguments is invalid.
     pub fn default<S: ToString>(self, value: S) -> Self {
         self.defaults(vec![value])
     }
 
+    /// Sets the default values of this argument.
+    ///
+    /// # Panics
+    /// - If argument already contains values.
+    /// - If already contains default values.
+    /// - If the number of arguments is invalid.
     pub fn defaults<S, I>(mut self, values: I) -> Self
     where
         S: ToString,
@@ -155,9 +197,8 @@ impl Argument {
             .map(|s| s.to_string())
             .collect::<Vec<String>>();
 
-        assert!(!values.is_empty(), "no values");
-        assert!(self.default_values.is_empty(), "default values are already set");
         assert!(self.values.is_empty(), "already contains values");
+        assert!(self.default_values.is_empty(), "default values are already set");
         assert!(
             self.arg_count.contains(values.len()),
             "invalid argument count expected {} but was {}",
@@ -185,6 +226,7 @@ impl Argument {
         self
     }
 
+    /// Sets the values of this argument.
     pub fn set_values<S, I>(&mut self, values: I) -> Result<()>
     where
         S: ToString,
@@ -223,6 +265,14 @@ impl Argument {
         Ok(())
     }
 
+    /// Converts the value of this argument to a concrete type.
+    ///
+    /// # Returns
+    /// - `Ok(T)` : If the `String` value can be parse to `T`.
+    /// - `Err(error)`:
+    ///     - If the value cannot be parse.
+    ///     - if there no value to parse.
+    ///     - if there is more than 1 value.
     pub fn convert<T>(&self) -> Result<T>
         where
             T: FromStr + 'static,
@@ -245,6 +295,13 @@ impl Argument {
         try_parse_str(&self.values[0])
     }
 
+    /// Converts the values of this argument to a concrete type.
+    ///
+    /// # Returns
+    /// - `Ok(Vec<T>)` : If all the values are parsed.
+    /// - `Err(error)`:
+    ///     - If one of the values cannot be parse.
+    ///     - if there no values to parse.
     pub fn convert_all<T>(&self) -> Result<Vec<T>>
         where
             T: FromStr + 'static,
@@ -329,20 +386,25 @@ pub struct ArgumentList {
 }
 
 impl ArgumentList {
+    /// Constructs a new `ArgumentList`.
     pub fn new() -> Self {
         ArgumentList {
             inner: Default::default(),
         }
     }
 
+    /// Returns the number of arguments.
     pub fn len(&self) -> usize {
         self.inner.len()
     }
 
+    /// Returns `true` if there is no arguments.
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
 
+    /// Adds an argument to the list, returns `true` if the argument was added
+    /// otherwise if is a duplicate returns `false`.
     pub fn add(&mut self, arg: Argument) -> bool {
         if self.len() > 0 {
             // When multiple arguments with default values are defined
@@ -353,10 +415,12 @@ impl ArgumentList {
         self.inner.insert_if_absent(arg)
     }
 
+    /// Returns the `Argument` with the given name or `None` if no found.
     pub fn get<S: AsRef<str>>(&self, arg_name: S) -> Option<&Argument>{
         self.inner.iter().find(|a| a.name == arg_name.as_ref())
     }
 
+    /// Returns a `Vec` with the `String` values of the arguments of this `ArgumentList`.
     pub fn get_raw_args(&self) -> Vec<String>{
         let mut ret = Vec::new();
         for arg in &self.inner {
@@ -365,10 +429,20 @@ impl ArgumentList {
         ret
     }
 
+    /// Returns `true` if contains an argument with the given `name`.
     pub fn contains<S: AsRef<str>>(&self, arg_name: S) -> bool {
         self.inner.iter().any(|a| a.name == arg_name.as_ref())
     }
 
+    /// Converts the value of the `Argument` with the given name.
+    ///
+    /// # Returns
+    /// - `Ok(T)` : If the `String` value of the argument can be parse to `T`.
+    /// - `Err(error)`:
+    ///     - If the argument cannot be found.
+    ///     - If the value cannot be parse.
+    ///     - if there no value to parse.
+    ///     - if there is more than 1 value.
     pub fn convert<T>(&self, arg_name: &str) -> Result<T>
         where T: FromStr + 'static,
             <T as FromStr>::Err : Display{
@@ -382,6 +456,17 @@ impl ArgumentList {
         }
     }
 
+    /// Converts the value of the `Argument` with the given index.
+    ///
+    /// # Panics
+    /// If the index is out of bounds.
+    ///
+    /// # Returns
+    /// - `Ok(T)` : If the `String` value of the argument can be parse to `T`.
+    /// - `Err(error)`:
+    ///     - If the value cannot be parse.
+    ///     - if there no value to parse.
+    ///     - if there is more than 1 value.
     pub fn convert_at<T>(&self, index: usize) -> Result<T>
         where T: FromStr + 'static,
               <T as FromStr>::Err : Display{
@@ -392,6 +477,14 @@ impl ArgumentList {
         }
     }
 
+    /// Converts all values of the `Argument` with the given name.
+    ///
+    /// # Returns
+    /// - `Ok(Vec<T>)` : If all the values can be parsed to `T`.
+    /// - `Err(error)`:
+    ///     - If the argument cannot be found.
+    ///     - If one of the values cannot be parse.
+    ///     - if there no values to parse.
     pub fn convert_all<T>(&self, arg_name: &str) -> Result<Vec<T>>
         where T: FromStr + 'static,
               <T as FromStr>::Err : Display{
@@ -494,7 +587,7 @@ pub mod validator {
     }
 
     /// A `Validator` where a `str` is valid if can be parsed to type `T`
-/// and is within the specified range.
+    /// and is within the specified range.
     pub struct RangeValidator<T>(T, T);
     impl<T: FromStr + PartialOrd + Display> RangeValidator<T> {
         #[inline]

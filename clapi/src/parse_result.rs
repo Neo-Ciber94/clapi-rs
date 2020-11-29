@@ -1,5 +1,5 @@
 use crate::command::Command;
-use crate::option::{CommandOption, Options};
+use crate::option::{CommandOption, OptionList};
 use crate::args::ArgumentList;
 use crate::Argument;
 
@@ -22,7 +22,7 @@ impl ParseResult {
     }
 
     /// Returns the `Options` of the command.
-    pub fn options(&self) -> &Options {
+    pub fn options(&self) -> &OptionList {
         &self.command.get_options()
     }
 

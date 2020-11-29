@@ -8,73 +8,14 @@ pub struct Context {
     root: Command,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
-    arg_delimiters: LinkedHashSet<char>,
+    arg_assign: LinkedHashSet<char>,
+    delimiter: char,
 }
 
 impl Context {
-    fn empty(root: Command) -> Self {
-        Context {
-            root,
-            name_prefixes: LinkedHashSet::new(),
-            alias_prefixes: LinkedHashSet::new(),
-            arg_delimiters: LinkedHashSet::new(),
-        }
-    }
-
     /// Constructs a new `Context` with the `RootCommand`.
     pub fn new(root: Command) -> Self {
-        let mut context = Context::empty(root);
-        context.add_name_prefix("--");
-        context.add_alias_prefix("-");
-        context.add_arg_delimiter(':');
-        context.add_arg_delimiter('=');
-        context
-    }
-
-    /// Constructs a new `Context` with the given values.
-    ///
-    /// # Arguments
-    /// - `root`: the `RootCommand` used.
-    /// - `name_prefixes`: the name prefixes used for the options, by default `"--"` is used.
-    /// - `alias_prefixes`: the alias prefixed used for the options, by default `"-"` is used.
-    /// - `arg_delimiter`: the delimiter to declare option arguments.
-    pub fn with<'a, I, U>(
-        root: Command,
-        name_prefixes: I,
-        alias_prefixes: I,
-        arg_delimiters: U,
-    ) -> Self
-    where
-        I: IntoIterator<Item = &'a str>,
-        U: IntoIterator<Item = char>,
-    {
-        let mut context = Context::empty(root);
-
-        for prefix in name_prefixes {
-            context.add_name_prefix(prefix);
-        }
-
-        for prefix in alias_prefixes {
-            context.add_alias_prefix(prefix);
-        }
-
-        for delimiter in arg_delimiters {
-            context.add_arg_delimiter(delimiter);
-        }
-
-        // The context require both 1 option name and alias prefix
-        // but the arguments delimiters aren't required
-
-        assert!(
-            context.name_prefixes().len() > 0,
-            "context require at least 1 option name prefix"
-        );
-        assert!(
-            context.alias_prefixes().len() > 0,
-            "context require at least 1 option alias prefix"
-        );
-
-        context
+        ContextBuilder::new(root).build()
     }
 
     /// Returns `true` if the value is a name prefix.
@@ -97,9 +38,14 @@ impl Context {
         self.alias_prefixes.iter()
     }
 
-    /// Returns an `Iterator` over the option argument delimiter of this context.
-    pub fn arg_delimiters(&self) -> impl ExactSizeIterator<Item = &char> {
-        self.arg_delimiters.iter()
+    /// Returns an `Iterator` over the argument assign `char`s.
+    pub fn arg_assign(&self) -> impl ExactSizeIterator<Item = &char> {
+        self.arg_assign.iter()
+    }
+
+    /// Returns the delimiter used in this context.
+    pub fn delimiter(&self) -> char {
+        self.delimiter
     }
 
     /// Returns the `CommandOption` by the specified name or alias or `None` if not found.
@@ -133,25 +79,12 @@ impl Context {
                 .any(|prefix| value.starts_with(prefix))
     }
 
-    /// Trims the option prefix of the given value, and returns the value without prefix.
+    /// Split the option and returns the `option` name.
     pub fn trim_prefix<'a>(&self, value: &'a str) -> &'a str {
-        if let Some(prefix) = self
-            .name_prefixes()
-            .find(|prefix| value.starts_with(prefix.as_str()))
-        {
-            return value.trim_start_matches(prefix);
-        }
-
-        if let Some(prefix) = self
-            .alias_prefixes()
-            .find(|prefix| value.starts_with(prefix.as_str()))
-        {
-            return value.trim_start_matches(prefix);
-        }
-
-        value
+       self.trim_and_get_prefix(value).1
     }
 
+    /// Split the option and returns its `prefix` (if any) and the `option` name.
     pub fn trim_and_get_prefix<'a>(&self, value: &'a str) -> (Option<&'a str>, &'a str) {
         if let Some(prefix) = self
             .name_prefixes()
@@ -194,42 +127,79 @@ impl Context {
     pub(crate) fn root_mut(&mut self) -> &mut Command {
         &mut self.root
     }
+}
 
-    fn add_name_prefix(&mut self, prefix: &str) {
-        self.assert_valid_prefix(prefix, "prefix");
-        self.name_prefixes.insert(prefix.to_string());
-    }
+#[derive(Clone)]
+pub struct ContextBuilder{
+    root: Command,
+    name_prefixes: LinkedHashSet<String>,
+    alias_prefixes: LinkedHashSet<String>,
+    arg_assign: LinkedHashSet<char>,
+    delimiter: Option<char>
+}
 
-    fn add_alias_prefix(&mut self, prefix: &str) {
-        self.assert_valid_prefix(prefix, "prefix");
-        self.alias_prefixes.insert(prefix.to_string());
-    }
-
-    fn add_arg_delimiter(&mut self, delimiter: char) {
-        assert!(
-            !delimiter.is_whitespace(),
-            "delimiter cannot be a whitespace"
-        );
-        self.arg_delimiters.insert(delimiter);
-    }
-
-    #[inline(always)]
-    fn assert_valid_prefix(&self, prefix: &str, symbol_name: &str) {
-        if prefix.is_empty() {
-            panic!("{} cannot be empty", symbol_name);
+impl ContextBuilder {
+    pub fn new(root: Command) -> Self {
+        ContextBuilder {
+            root,
+            name_prefixes: Default::default(),
+            alias_prefixes: Default::default(),
+            arg_assign: Default::default(),
+            delimiter: None
         }
+    }
 
-        if prefix.chars().any(|c| c.is_whitespace()) {
-            panic!("{} cannot contains whitespaces", symbol_name)
-        }
+    pub fn name_prefix<S: Into<String>>(mut self, prefix: S) -> Self {
+        self.name_prefixes.insert(prefix.into());
+        self
+    }
 
-        if prefix.chars().count() == 1 {
-            let c = &prefix.chars().next().unwrap();
-            assert!(
-                !self.arg_delimiters.contains(&c),
-                "`{}` is an arg delimiter",
-                prefix
-            );
+    pub fn alias_prefix<S: Into<String>>(mut self, prefix: S) -> Self {
+        self.alias_prefixes.insert(prefix.into());
+        self
+    }
+
+    pub fn arg_assign(mut self, value: char) -> Self {
+        self.arg_assign.insert(value);
+        self
+    }
+
+    pub fn delimiter(mut self, value: char) -> Self {
+        self.delimiter = Some(value);
+        self
+    }
+
+    pub fn build(mut self) -> Context {
+        let name_prefixes = {
+            if self.name_prefixes.is_empty() {
+                self.name_prefixes.insert("--".to_owned());
+            }
+            self.name_prefixes
+        };
+
+        let alias_prefixes = {
+            if self.alias_prefixes.is_empty() {
+                self.alias_prefixes.insert("-".to_owned());
+            }
+            self.alias_prefixes
+        };
+
+        let arg_assign = {
+            if self.arg_assign.is_empty() {
+                self.arg_assign.insert('=');
+                self.arg_assign.insert(':');
+            }
+            self.arg_assign
+        };
+
+        let delimiter = self.delimiter.unwrap_or(',');
+
+        Context {
+            root: self.root,
+            name_prefixes,
+            alias_prefixes,
+            arg_assign,
+            delimiter
         }
     }
 }
