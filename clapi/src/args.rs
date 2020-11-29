@@ -292,7 +292,8 @@ impl Debug for Argument {
     }
 }
 
-fn try_parse_str<T: 'static>(value: &str) -> Result<T>
+#[doc(hidden)]
+pub fn try_parse_str<T: 'static>(value: &str) -> Result<T>
 where
     T: FromStr,
     <T as FromStr>::Err: Display,
@@ -307,6 +308,19 @@ where
             ))
         }
     }
+}
+
+#[doc(hidden)]
+pub fn try_parse_values<T: 'static>(values: Vec<String>) -> crate::Result<Vec<T>>
+    where
+        T: std::str::FromStr,
+        <T as std::str::FromStr>::Err: std::fmt::Display,
+{
+    let mut ret = Vec::new();
+    for value in values {
+        ret.push(crate::try_parse_str(&value)?);
+    }
+    Ok(ret)
 }
 
 #[derive(Default, Debug, Clone)]

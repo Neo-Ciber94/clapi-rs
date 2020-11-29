@@ -1,40 +1,26 @@
 use clapi::*;
 
-fn main(){
+fn main() {
     //trace_macros!(true);
-    let app = app! { MyApp =>
-        (@arg range =>
-            (count => 1..10)
-            (description => "hello desc")
-            (values => 1, 2, 3)
-            (default => 1)
+    let x = app! { root =>
+        (description => "A command to sum")
+        (@arg numbers =>
+            (type => i64)
+            (count => 0..)
         )
-        (@option numbers =>
-            (@arg N)
+        (@option times =>
+            (alias => "t")
+            (@arg times =>
+                (type => i64)
+                (default => 1)
+            )
         )
-        //(@arg value)
+        (handler (times: i64, ...args: Vec<i64>) => {
+            let sum = args.iter().sum::<i64>();
+            let total = sum * times;
+            println!("{:?} * {}, total = {}", args, times, total);
+        })
     };
 
-    println!("{}", stringify!(hello world));
-
-    //trace_macros!(false);
-
-
-    println!("{:#?}", app);
+    // handler (number: i64, enable: bool, ...args: Vec<String>) => {}
 }
-
-/*
-app! { myApp =>
-    (handler (, args) => {
-
-    })
-    (option range =>
-        (required => true)
-        (arg min => (count => 1) (type => i64))
-        (arg min => (count => 1) (type => i64))
-    )
-    (option mode =>
-        (arg mode => (values => 1, 2, 3))
-    )
-}
-*/

@@ -94,4 +94,4 @@ pub mod macros {
 pub use macros::*;
 
 #[macro_use]
-mod app_macro;
+mod app_macros;
