@@ -25,7 +25,7 @@ mod var;
 ///
 /// # Options:
 /// - `description`: Description of the command.
-/// - `help`: Help information about the command.
+/// - `about`: Information about the command.
 /// - `version`: Version of the command-line app.
 ///
 /// # Example:
@@ -54,7 +54,7 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// # Options:
 /// - `description`: Description of the command.
-/// - `help`: Help information about the command.
+/// - `about`: Information about the command.
 /// - `version`: Version of the command-line app.
 ///
 /// # Example:
@@ -62,7 +62,7 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// use clapi::macros::*;
 ///
 /// #[command(description="A sample app", version=1.0)]
-/// fn main(x: u32){
+/// fn main(){
 ///     println!("Hello World!");
 /// }
 ///
@@ -89,6 +89,7 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Options:
 /// - `description`: Description of the command.
 /// - `help`: Help information about the command.
+/// - `version`: Version of the subcommand.
 ///
 /// # Example:
 /// ```no_run
@@ -122,12 +123,15 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
 
 /// Declares a command option.
 ///
+/// Any option declaration must contains the name of the argument for example:
+/// `#[option(name)]`.
+///
 /// By default any function argument is considered a command `option`,
-/// Use this attribute to provide additional information like `alias`,
+/// Use this attribute to provide additional information like `arg`, `alias`,
 /// `description` or `min`, `max` and `default` arguments.
 ///
 /// # Options
-/// - `name` (required): Name of the function argument.
+/// - `arg`: Name of the argument.
 /// - `alias`: Alias of the function argument.
 /// - `description`: Description of the option.
 /// - `min`: Min number of values the option takes.
@@ -145,8 +149,8 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
 /// use clapi::macros::*;
 ///
 /// #[command]
-/// #[option(name="repeat", alias="r", default=1)]
-/// #[option(name="upper_case", alias="u", description="Display the message in uppercase")]
+/// #[option(repeat, alias="r", default=1)]
+/// #[option(upper_case, alias="u", description="Display the message in uppercase")]
 /// fn main(repeat: u32, upper_case: bool){
 ///     for _ in 0..repeat {
 ///         if upper_case {
@@ -167,8 +171,11 @@ pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
 
 /// Declares a command argument.
 ///
+/// Any argument declaration must contains the name of the argument for example:
+/// `#[arg(name)]`.
+///
 /// # Options
-/// - `name` (required): Name of the function argument.
+/// - `arg`: Name of the argument.
 /// - `min`: Min number of values the option takes.
 /// - `max`: Max number of values the option takes.
 /// - `default`: Default value(s) of the option.
@@ -184,7 +191,7 @@ pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
 /// use clapi::macros::*;
 ///
 /// #[command]
-/// #[arg(name="args", min=1, max=10, default="Hello World")]
+/// #[arg(name, min=1, max=10, default="Hello World")]
 /// fn main(args: Vec<String>){
 ///     println!("{}", args.join(" "));
 /// }

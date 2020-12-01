@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use crate::command::Command;
 use crate::context::Context;
 pub use crate::help::help_writer::*;
@@ -23,10 +24,16 @@ pub use crate::help::indented_writer::*;
 /// SUBCOMMANDS:
 ///     print   Prints information
 /// ```
-pub trait HelpCommand {
-    /// Returns a `String` information about the usage of the command being passed like:
+pub trait HelpProvider {
+    /// Returns a `String` information about the command.
     /// - Name, description, options and subcommands.
     fn help(&self, context: &Context, command: &Command) -> String;
+
+    /// Returns a `String` information about the usage of the command.
+    fn usage(&self, context: &Context, command: &Command) -> String;
+
+    /// Type of the `HelpProvider`.
+    fn kind(&self) -> HelpKind;
 
     /// Returns the name of this help command, the default name is: `help`.
     #[inline]
@@ -42,13 +49,25 @@ pub trait HelpCommand {
     }
 }
 
-/// Default implementation of the `HelpCommand` trait.
-#[derive(Debug, Clone, Default)]
-pub struct DefaultHelpCommand;
-impl HelpCommand for DefaultHelpCommand {
-    fn help(&self, context: &Context, command: &Command) -> String {
-        use std::fmt::Write;
+/// Type of the `HelpProvider`.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum HelpKind{
+    /// The help is a root command child like: `command help`.
+    Subcommand,
+    /// The help is a root command option like: `command --help`.
+    Option
+}
 
+/// Default implementation of the `HelpCommand` trait.
+#[derive(Debug, Clone)]
+pub struct DefaultHelpProvider(pub HelpKind);
+impl Default for DefaultHelpProvider{
+    fn default() -> Self {
+        DefaultHelpProvider(HelpKind::Subcommand)
+    }
+}
+impl HelpProvider for DefaultHelpProvider {
+    fn help(&self, context: &Context, command: &Command) -> String {
         let mut writer = HelpWriter::new(context);
 
         // Command name
@@ -130,13 +149,51 @@ impl HelpCommand for DefaultHelpCommand {
             });
         }
 
-        // Command help
-        if let Some(help) = command.get_about() {
+        // Command about
+        if let Some(about) = command.get_about() {
             writer.writeln("");
-            writer.writeln(help);
+            writer.writeln(about);
         }
 
         writer.into_string()
+    }
+
+    fn usage(&self, context: &Context, command: &Command) -> String {
+        let mut writer = HelpWriter::new(context);
+        writer.section("USAGE", |w| {
+            let mut args_names = Vec::new();
+
+            for arg in command.get_args() {
+                if arg.get_arg_count().takes_exactly(1){
+                    args_names.push(format!("<{}>", arg.get_name().to_uppercase()));
+                } else {
+                    args_names.push(format!("<{}...>", arg.get_name().to_uppercase()));
+                }
+            }
+
+            let args_names: String = args_names.join(" ");
+
+            if command.take_args() {
+                w.writeln(format!("{} {}", command.get_name(), args_names));
+            }
+
+            if command.get_options().len() > 0 {
+                let mut result = String::from(command.get_name());
+                write!(result, " [OPTIONS]").unwrap();
+
+                if command.get_options().iter().any(|o| o.take_args()) {
+                    write!(result, " {}", args_names).unwrap();
+                }
+
+                w.writeln(result);
+            }
+        });
+
+        writer.into_string()
+    }
+
+    fn kind(&self) -> HelpKind{
+        self.0
     }
 }
 
@@ -454,9 +511,9 @@ mod help_writer {
                 option.get_name(),
             )
         } else {
-            // A width of 6 should be enough to align with the alias prefix
+            // A width of 2 should be enough to align with the alias prefix
             // which is expected to be 2 characters as: '-a', '-v', '/b'
-            format!("{:>6}{}", name_prefix, option.get_name())
+            format!("{:>2}{}", name_prefix, option.get_name())
         };
 
         if option.get_args().len() > 0 {

@@ -216,6 +216,11 @@ impl OptionList {
         self.inner.is_empty()
     }
 
+    /// Removes all the `Option`s.
+    pub fn clear(&mut self){
+        self.inner.clear();
+    }
+
     /// Returns an `ExactSizeIterator` over the `CommandOption` of this collection.
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &'_ CommandOption> + Debug {
         self.inner.iter()

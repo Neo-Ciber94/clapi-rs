@@ -201,7 +201,7 @@ impl Argument {
         assert!(self.default_values.is_empty(), "default values are already set");
         assert!(
             self.arg_count.contains(values.len()),
-            "invalid argument count expected {} but was {}",
+            "invalid value count expected {} but was {}",
             self.arg_count,
             values.len()
         );
@@ -498,6 +498,12 @@ impl ArgumentList {
         }
     }
 
+    /// Removes all the `Argument`s.
+    pub fn clear(&mut self){
+        self.inner.clear();
+    }
+
+    /// Returns an `Iterator` over the arguments.
     pub fn iter(&self) -> impl ExactSizeIterator<Item=&Argument>{
         self.inner.iter()
     }

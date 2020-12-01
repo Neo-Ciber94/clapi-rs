@@ -3,7 +3,7 @@ use crate::error::{Error, ErrorKind, Result};
 use crate::option::{OptionList, CommandOption};
 use crate::parse_result::ParseResult;
 use crate::tokenizer::{DefaultTokenizer, Token, Tokenizer};
-use crate::utils::Then;
+use crate::utils::{Then, Also};
 use std::borrow::Borrow;
 use crate::command::Command;
 use crate::args::ArgumentList;
@@ -35,7 +35,11 @@ where
             command = command.find_subcommand(name.as_str()).ok_or_else(|| {
                 Error::new_parse_error(
                     Error::from(ErrorKind::UnrecognizedCommand(name.clone())),
-                    command.clone(),
+                    command.clone()
+                        .also_mut(|c| {
+                            c.clear_options();
+                            c.clear_args()
+                    }),
                     None,
                     None,
                 )
@@ -90,7 +94,20 @@ where
 
                         // Sets the argument values
                         let mut arg = arg.clone();
-                        arg.set_values(values)?;
+                        arg.set_values(values)
+                            .or_else(|error| {
+                                let command = command.clone()
+                                    .also_mut(|c| c.clear_args())
+                                    .also_mut(|c| c.clear_options());
+
+                                Err(Error::new_parse_error(
+                                    error,
+                                    command,
+                                    Some(option.clone()),
+                                    None,
+                                ))
+                            })?;
+
                         option_args.add(arg);
                     }
 
@@ -103,7 +120,11 @@ where
             } else {
                 return Err(Error::new_parse_error(
                     Error::from(ErrorKind::UnrecognizedOption(prefix.clone(), s.clone())),
-                    command.clone(),
+                    command.clone()
+                        .also_mut(|c| {
+                            c.clear_options();
+                            c.clear_args()
+                        }),
                     None,
                     None,
                 ));
@@ -191,7 +212,11 @@ where
                     .or_else(|error| {
                         Err(Error::new_parse_error(
                             error,
-                            command.clone(),
+                            command.clone()
+                                .also_mut(|c| {
+                                    c.clear_options();
+                                    c.clear_args()
+                            }),
                             None,
                             Some(command_args.clone()),
                         ))
@@ -211,6 +236,10 @@ where
 
         // Sets the command options and arguments
         let command = command.clone()
+            .also_mut(|c| {
+                c.clear_options();
+                c.clear_args();
+            })
             .options(command_options)
             .args(command_args);
 

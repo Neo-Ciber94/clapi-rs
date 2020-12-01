@@ -1,17 +1,17 @@
 use crate::command::Command;
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, ParseError, Result};
-use crate::help::{DefaultHelpCommand, HelpCommand};
+use crate::help::{DefaultHelpProvider, HelpProvider};
 use crate::parser::{DefaultParser, Parser};
 use crate::suggestion::{SingleSuggestionProvider, SuggestionProvider};
 use crate::utils::{OptionExt, debug_option};
 use std::fmt::{Debug, Formatter};
-use crate::ArgumentList;
+use crate::{Argument, HelpKind, CommandOption};
 
 /// Represents a command-line app.
 pub struct CommandLine {
     context: Context,
-    help: Option<Box<dyn HelpCommand>>,
+    help: Option<Box<dyn HelpProvider>>,
     suggestions: Option<Box<dyn SuggestionProvider>>,
     show_help_when_not_handler: bool,
 }
@@ -44,7 +44,7 @@ impl CommandLine {
     }
 
     /// Returns the `HelpCommand` used by this command-line or `None` if not set.
-    pub fn help(&self) -> Option<&Box<dyn HelpCommand>> {
+    pub fn help(&self) -> Option<&Box<dyn HelpProvider>> {
         self.help.as_ref()
     }
 
@@ -61,22 +61,33 @@ impl CommandLine {
 
     /// Sets the default `HelpCommand`.
     pub fn use_default_help(self) -> Self {
-        self.set_help(DefaultHelpCommand)
+        self.set_help(DefaultHelpProvider(crate::HelpKind::Option))
     }
 
-    /// Sets the specified `HelpCommand`.
-    pub fn set_help(mut self, help_command: impl HelpCommand + 'static) -> Self {
-        assert_eq!(
-            self.context.root().find_subcommand(help_command.name()),
-            None,
-            "Command `{}` already exists",
-            help_command.name()
-        );
+    /// Sets the specified `HelpProvider`.
+    pub fn set_help(mut self, help: impl HelpProvider + 'static) -> Self {
+        match help.kind() {
+            HelpKind::Subcommand => {
+                assert_eq!(
+                    self.context.root().find_subcommand(help.name()),
+                    None, "Command `{}` already exists", help.name()
+                );
 
-        let command = Command::new(help_command.name()).description(help_command.description());
+                let command = Command::new(help.name())
+                    .description(help.description())
+                    .arg(Argument::zero_or_more("args"));
 
-        self.context.root_mut().add_command(command);
-        self.help = Some(Box::new(help_command));
+                self.context.root_mut().add_command(command);
+            }
+            HelpKind::Option => {
+                let option = CommandOption::new(help.name())
+                    .description(help.description())
+                    .arg(Argument::zero_or_more("args"));
+
+                self.context.root_mut().add_option(option);
+            }
+        }
+        self.help = Some(Box::new(help));
         self
     }
 
@@ -117,10 +128,24 @@ impl CommandLine {
         };
 
         let command = parse_result.command();
+        println!("{:#?}", command);
 
-        // Check if the command is a 'help' command
-        if self.is_help_command(command) {
-            return self.display_help(parse_result.args());
+        // Check if the command is a 'help' command and display help
+        if self.is_help(command) {
+            let help = self.help.as_ref().unwrap();
+            return match help.kind() {
+                HelpKind::Subcommand => {
+                    self.display_help(parse_result.arg())
+                },
+                HelpKind::Option => {
+                    let args = parse_result
+                        .get_option(help.name())
+                        .unwrap()
+                        .get_arg();
+
+                    self.display_help(args)
+                }
+            }
         }
 
         // We borrow the value from the Option to avoid create a temporary
@@ -133,7 +158,7 @@ impl CommandLine {
             (*handler)(options, args)
         } else {
             if self.show_help_when_not_handler {
-                self.display_help(&ArgumentList::new())
+                self.display_help(None)
             } else {
                 // todo: panics instead of return error?
                 Err(Error::new(
@@ -153,40 +178,56 @@ impl CommandLine {
     }
 
     fn handle_error(&self, error: Error) -> Result<()> {
-        if *error.kind() == ErrorKind::EmptyExpression && self.help.is_some() {
-            return self.display_help(&ArgumentList::new());
+        if error.kind() == &ErrorKind::InvalidArgumentCount && error.is_parse_error() {
+            let message = self.get_help_message(None)?;
+            return Err(
+                Error::new(
+                    error.kind().clone(),
+                    format!("{}\n{}", error, message)
+                )
+            );
         }
 
         if self.suggestions.is_some() {
+            // todo: Error is produce here due to trying to read a unrecognized command
             let parse_error = error.try_into_parse_error()?;
-            if self.is_help_command(parse_error.command()) {
-                let args = parse_error.command_args()
-                    .cloned()
-                    .unwrap_or_default();
-
-                return self.display_help(&args);
+            if self.is_help(parse_error.command()) {
+                let args = parse_error.command().get_arg();
+                return self.display_help(args);
             }
 
             return Err(self.display_suggestions(parse_error));
         }
 
-
         return Err(error);
     }
 
-    fn is_help_command(&self, command: &Command) -> bool {
+    fn is_help(&self, command: &Command) -> bool {
         if let Some(help_provider) = &self.help {
-            help_provider.name() == command.get_name()
+            match help_provider.kind(){
+                HelpKind::Subcommand => {
+                    help_provider.name() == command.get_name()
+                },
+                HelpKind::Option => {
+                    command.get_options().iter()
+                        .any(|s| s.get_name() == help_provider.name())
+                }
+            }
         } else {
             false
         }
     }
 
-    fn display_help(&self, args: &ArgumentList) -> Result<()> {
+    fn display_help(&self, args: Option<&Argument>) -> Result<()>{
+        print!("{}", self.get_help_message(args)?);
+        Ok(())
+    }
+
+    fn get_help_message(&self, args: Option<&Argument>) -> Result<String> {
         let help_command = self.help.as_ref().expect("help command is not set");
 
         fn find_command<'a>(root: &'a Command, children: &[String]) -> Result<&'a Command> {
-            debug_assert!(children.len() > 0);
+            //debug_assert!(children.len() > 0);
 
             let mut current = root;
 
@@ -204,17 +245,18 @@ impl CommandLine {
             Ok(current)
         }
 
-        let output = match args.len() {
-            0 => help_command.help(&self.context, self.context.root()),
-            _ => {
+        let output = match args {
+            None => {
+                help_command.help(&self.context, self.context.root())
+            }
+            Some(args) => {
                 let root = self.context.root();
-                let subcommand = find_command(root, &args.get_raw_args())?;
+                let subcommand = find_command(root, args.get_values())?;
                 help_command.help(&self.context, subcommand)
             }
         };
 
-        print!("{}", output);
-        Ok(())
+        Ok(output)
     }
 
     fn display_suggestions(&self, parse_error: ParseError) -> Error {

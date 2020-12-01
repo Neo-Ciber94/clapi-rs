@@ -64,7 +64,6 @@ impl CommandData {
 
     pub fn set_version(&mut self, version: String) {
         assert!(!version.is_empty(), "command version cannot be empty");
-        assert!(!self.is_child, "only root `command` can define a version");
         self.version = Some(version);
     }
 
@@ -658,9 +657,9 @@ mod cmd {
     fn split_attr_path_and_name_values(attr: &MacroAttribute) -> (String, NameValueAttribute){
         let name = attr.get(0)
             .cloned()
-            .expect("function argument name must be the first element in #[arg()] but was empty")
+            .expect("function argument name must be the first element in `#[arg()]` but was empty")
             .into_path()
-            .expect("first element in #[arg(...)] must be a path like: #[arg(argument)] where `argument` is the name of the function argument");
+            .expect("first element in `#[arg(...)]` must be a path like: `#[arg(name)]` where `argument` is the name of the function argument");
 
         let name_value_attribute = if attr.len() == 1 {
           NameValueAttribute::empty(attr.path().to_owned())

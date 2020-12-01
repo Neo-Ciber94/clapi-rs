@@ -18,6 +18,7 @@ fn echo(times: usize, values: Vec<String>) {
 }
 
 #[command]
-fn main(enable: Option<bool>, numbers: Vec<i64>) {
-    println!("enable: {:?}, numbers: {:?}", enable, numbers)
+#[option(value, alias="v", description="The value", default="Hello World")]
+fn main(value: String) {
+    println!("{:?}", value);
 }

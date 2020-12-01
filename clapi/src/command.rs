@@ -128,7 +128,7 @@ impl Command {
     pub fn option(mut self, option: CommandOption) -> Self {
         let option_name = option.get_name().to_string();
         assert!(
-            self.options.add(option),
+            self.add_option(option),
             "`{}` already contains a `CommandOption` named: `{}`",
             self.name, option_name,
         );
@@ -139,7 +139,7 @@ impl Command {
     /// Adds an `CommandOption` to this command.
     #[cfg(not(debug_assertions))]
     pub fn option(mut self, option: CommandOption) -> Self {
-        self.options.add(option);
+        self.add_option(option);
         self
     }
 
@@ -200,8 +200,22 @@ impl Command {
         self
     }
 
+    /// Removes the `Argument`s from this command.
+    ///
+    /// This is intended to be use before set the args to the command during parsing.
+    pub fn clear_args(&mut self){
+        self.args.clear();
+    }
+
+    /// Removes the `Option`s from this command.
+    ///
+    /// This is intended to be use before set the options to the command during parsing.
+    pub fn clear_options(&mut self){
+        self.options.clear();
+    }
+
     #[inline]
-    pub(crate) fn add_command(&mut self, mut command: Command) {
+    pub(crate) fn add_command(&mut self, mut command: Command) -> bool {
         debug_assert!(
             !self.children.contains(&command),
             "`{}` already contains a command named: `{}`",
@@ -209,17 +223,12 @@ impl Command {
             self.name
         );
         command.parent = Some(Symbol::Cmd(self.name.clone()));
-        self.children.insert(command);
+        self.children.insert(command)
     }
 
-    #[allow(dead_code)]
-    // todo: remove?
-    pub(crate) fn full_name(&self) -> String {
-        if let Some(parent) = &self.parent {
-            format!("{} {}", parent.name(), self.name)
-        } else {
-            self.name.clone()
-        }
+    #[inline]
+    pub(crate) fn add_option(&mut self, option: CommandOption) -> bool {
+        self.options.add(option)
     }
 }
 

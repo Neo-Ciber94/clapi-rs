@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::{ToTokens, Formatter};
-use syn::{GenericArgument, Pat, PatType, Type, PathSegment, PathArguments};
+use syn::{GenericArgument, Pat, PatType, Type, PathArguments};
 use syn::spanned::Spanned;
 use crate::{IteratorExt, TypeExtensions};
 use syn::export::fmt::Display;
@@ -143,7 +143,7 @@ pub enum ArgumentType {
 
 impl ArgumentType {
     pub fn new(pat_type: &PatType) -> Self {
-        get_arg_type(pat_type)
+        get_argument_type(pat_type)
     }
 
     pub fn get_type(&self) -> &Type{
@@ -183,10 +183,6 @@ impl Display for ArgumentType {
     }
 }
 
-enum OuterType {
-    Vec, Option
-}
-
 fn new_arg_local_var(pat_type: PatType, source: VarSource) -> ArgLocalVar {
     let name =  pat_type.pat.to_token_stream().to_string();
     let ty = get_argument_type(&pat_type);
@@ -196,83 +192,6 @@ fn new_arg_local_var(pat_type: PatType, source: VarSource) -> ArgLocalVar {
     };
 
     ArgLocalVar { name, is_mut, source, ty, }
-}
-
-fn get_arg_type(pat_type: &PatType) -> ArgumentType {
-    match pat_type.ty.as_ref() {
-        Type::Path(type_path) => {
-            let last_path = type_path.path.segments
-                .last()
-                .unwrap_or_else(|| panic!("invalid arg type: `{}`", pat_type.to_token_stream().to_string()));
-
-            match last_path.ident.to_string() {
-                ident if is_vec(ident.as_str()) => {
-                    get_inner_type(pat_type, OuterType::Vec, last_path)
-                },
-                ident if is_option(ident.as_str()) => {
-                    get_inner_type(pat_type, OuterType::Option, last_path)
-                },
-                _ => ArgumentType::Type(pat_type.ty.clone())
-            }
-        }
-        Type::Reference(ref_type) => {
-            if let Type::Slice(array) = ref_type.elem.as_ref() {
-                match ref_type.mutability {
-                    Some(_) => ArgumentType::MutSlice(array.elem.clone()),
-                    None => ArgumentType::Slice(array.elem.clone()),
-                }
-            } else {
-                panic!("expected slice found reference: `{}`", ref_type.to_token_stream().to_string());
-            }
-        }
-        _ => panic!(
-            "invalid type: arg `{}`",
-            pat_type.to_token_stream().to_string()
-        ),
-    }
-}
-
-fn get_inner_type(pat_type: &PatType, outer: OuterType, path_segment: &PathSegment) -> ArgumentType {
-    match &path_segment.arguments {
-        PathArguments::AngleBracketed(angle_bracketed) => {
-            let generic_arg =
-                angle_bracketed.args.iter().single().unwrap_or_else(|| {
-                    panic!("multiple generics defined: `{}`",
-                           pat_type.to_token_stream().to_string()
-                    )
-                });
-
-            let ty = match generic_arg {
-                GenericArgument::Type(ty) => Box::new(ty.clone()),
-                _ => {
-                    panic!("invalid arg: `{}`", pat_type.to_token_stream().to_string())
-                }
-            };
-
-            match outer {
-                OuterType::Vec => ArgumentType::Vec(ty.clone()),
-                OuterType::Option => ArgumentType::Option(ty.clone())
-            }
-        }
-        _ => panic!("invalid arg type: `{}`", pat_type.to_token_stream().to_string())
-    }
-}
-
-fn is_vec(ident: &str) -> bool{
-    match ident {
-        "Vec" => true,
-        "std::vec::Vec" => true,
-        _ => false
-    }
-}
-
-fn is_option(ident: &str) -> bool{
-    match ident {
-        "Option" => true,
-        "std::option::Option" => true,
-        "core::option::Option" => true,
-        _ => false
-    }
 }
 
 fn get_argument_type(pat_type: &PatType) -> ArgumentType {

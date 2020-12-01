@@ -136,8 +136,6 @@ pub enum ErrorKind {
     InvalidArgumentCount,
     /// The expression is invalid.
     InvalidExpression,
-    /// The expression is empty.
-    EmptyExpression,
     /// The option is not found in the command.
     UnrecognizedOption(String, String),
     /// The command is not found in the parent.
@@ -154,7 +152,6 @@ impl Display for ErrorKind {
             ErrorKind::InvalidArgument(s) => write!(f, "invalid argument: '{}'", s),
             ErrorKind::InvalidArgumentCount => write!(f, "invalid argument count"),
             ErrorKind::InvalidExpression => write!(f, "invalid expression"),
-            ErrorKind::EmptyExpression => write!(f, "empty expression"),
             ErrorKind::UnrecognizedOption(p, s) => write!(f, "unrecognized option: '{}{}'", p, s),
             ErrorKind::UnrecognizedCommand(s) => write!(f, "unrecognized command: '{}'", s),
             ErrorKind::MissingOption(s) => write!(f, "'{}' is required", s),
