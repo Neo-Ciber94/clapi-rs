@@ -84,6 +84,10 @@ pub use help::*;
 mod symbol;
 pub use symbol::*;
 
+#[macro_use]
+mod app_macros;
+pub use app_macros::*;
+
 #[cfg(feature="macros")]
 pub mod macros {
     extern crate clapi_macros;
@@ -92,6 +96,3 @@ pub mod macros {
 
 #[cfg(feature="macros")]
 pub use macros::*;
-
-#[macro_use]
-mod app_macros;

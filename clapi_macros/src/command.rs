@@ -4,14 +4,14 @@ use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::fmt::Display;
 use syn::export::{Formatter, ToTokens};
-use syn::{Attribute, AttributeArgs, FnArg, ItemFn, PatType, ReturnType, Stmt, Item};
+use syn::{Attribute, AttributeArgs, ItemFn, ReturnType, Stmt, Item};
 
 use macro_attribute::NameValueAttribute;
 
 use crate::args::ArgData;
 use crate::attr;
 use crate::option::OptionData;
-use crate::var::{ArgLocalVar, ArgType};
+use crate::var::{ArgLocalVar, ArgumentType};
 use crate::TypeExtensions;
 
 /// Tokens for:
@@ -28,7 +28,7 @@ pub struct CommandData {
     is_child: bool,
     version: Option<String>,
     description: Option<String>,
-    help: Option<String>,
+    about: Option<String>,
     item_fn: Option<ItemFn>,
     children: Vec<CommandData>,
     options: Vec<OptionData>,
@@ -43,7 +43,7 @@ impl CommandData {
             is_child,
             version: None,
             description: None,
-            help: None,
+            about: None,
             item_fn: None,
             children: vec![],
             options: vec![],
@@ -72,8 +72,8 @@ impl CommandData {
         self.description = Some(description);
     }
 
-    pub fn set_help(&mut self, help: String) {
-        self.help = Some(help);
+    pub fn set_about(&mut self, about: String) {
+        self.about = Some(about);
     }
 
     pub fn set_child(&mut self, command: CommandData) {
@@ -129,7 +129,7 @@ impl CommandData {
         let args = self
             .args
             .as_ref()
-            .map(|tokens| quote! { .args(#tokens)})
+            .map(|tokens| quote! { .arg(#tokens)})
             .unwrap_or_else(|| quote! {});
 
         // Command version
@@ -148,11 +148,11 @@ impl CommandData {
             .unwrap_or_else(|| quote! {});
 
         // Command help
-        let help = self
-            .help
+        let about = self
+            .about
             .as_ref()
             .map(|s| quote! { #s })
-            .map(|tokens| quote! { .help(#tokens)})
+            .map(|tokens| quote! { .about(#tokens)})
             .unwrap_or_else(|| quote! {});
 
         // Get the function body
@@ -188,7 +188,7 @@ impl CommandData {
         command = quote! {
             #command
                 #description
-                #help
+                #about
                 #args
                 #version
                 #(#options)*
@@ -241,8 +241,8 @@ impl CommandData {
             let inputs = self.vars.iter().map(|var| {
                 let var_name = var.name().parse::<TokenStream>().unwrap();
                 let is_ref = match var.arg_type() {
-                    ArgType::Slice(_) => quote! { & },
-                    ArgType::MutSlice(_) => quote! { &mut },
+                    ArgumentType::Slice(_) => quote! { & },
+                    ArgumentType::MutSlice(_) => quote! { &mut },
                     _ => quote! {},
                 };
 
@@ -309,20 +309,6 @@ impl ToTokens for CommandData {
     }
 }
 
-#[derive(Debug)]
-struct CommandFnArg {
-    arg_name: String,
-    pat_type: PatType,
-    attr: Option<NameValueAttribute>,
-    is_option: bool,
-}
-
-#[derive(Debug)]
-struct NamedFnArg {
-    name: String,
-    fn_arg: FnArg,
-}
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct FnName {
     path: Option<String>,
@@ -372,18 +358,25 @@ mod cmd {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use syn::export::ToTokens;
     use syn::{Attribute, AttributeArgs, File, FnArg, Item, ItemFn, ItemMod, PatType, Stmt, Type};
 
-    use macro_attribute::{literal_to_string, MacroAttribute, NameValueAttribute, Value};
+    use macro_attribute::{MacroAttribute, NameValueAttribute, Value, MetaItem};
 
     use crate::args::ArgData;
-    use crate::command::{drop_command_attributes, CommandData, CommandFnArg, FnName, NamedFnArg};
+    use crate::command::{drop_command_attributes, CommandData, FnName};
     use crate::option::OptionData;
     use crate::utils::{pat_type_to_string, path_to_string};
     use crate::var::{ArgLocalVar, VarSource};
     use crate::{attr, AttrQuery};
-    use crate::{IteratorExt, TypeExtensions};
+    use crate::TypeExtensions;
+
+    #[derive(Debug)]
+    struct CommandFnArg {
+        name: String,
+        pat_type: PatType,
+        attribute: Option<NameValueAttribute>,
+        is_option: bool,
+    }
 
     // Create a new command from an `ItemFn`
 
@@ -421,11 +414,11 @@ mod cmd {
                         .expect("`description` is expected to be string literal");
                     command.set_description(description);
                 }
-                attr::HELP => {
+                attr::ABOUT => {
                     let help = value
                         .clone()
                         .as_string_literal()
-                        .expect("`help` is expected to be string literal");
+                        .expect("`about` is expected to be string literal");
                     command.set_description(help);
                 }
                 attr::VERSION => {
@@ -439,39 +432,8 @@ mod cmd {
             }
         }
 
-        let attributes = item_fn
-            .attrs
-            .iter()
-            .cloned()
-            .map(|att| MacroAttribute::new(att).into_name_values().unwrap())
-            .filter(|att| attr::is_option(att.path()) || attr::is_arg(att.path()))
-            .collect::<Vec<NameValueAttribute>>();
-
-        let named_fn_args = item_fn
-            .sig
-            .inputs
-            .iter()
-            .cloned()
-            .map(|fn_arg| {
-                if let FnArg::Typed(pat_type) = &fn_arg {
-                    let name = pat_type.pat.to_token_stream().to_string();
-                    let fn_arg = fn_arg.clone();
-                    NamedFnArg { name, fn_arg }
-                } else {
-                    panic!("FnArg is not a free function")
-                }
-            })
-            .collect::<Vec<NamedFnArg>>();
-
-        // Check all attributes have the `name` key declared, is a literal and is not empty
-        assert_attributes_name_is_declared(&attributes);
-
-        // Check all attributes `name` match a function arg
-        assert_attr_name_match_fn_arg(&item_fn, &named_fn_args, &attributes);
-
-        let fn_args = get_fn_args(&attributes, &named_fn_args);
+        let fn_args = get_fn_args(&item_fn);
         let arg_count = fn_args.iter().filter(|f| !f.is_option).count();
-        let mut arg_index = 0;
 
         // Pass function arguments in order
         for fn_arg in &fn_args {
@@ -479,7 +441,7 @@ mod cmd {
                 let source = if is_implicit_bool_arg(fn_arg) {
                     VarSource::OptBool
                 } else {
-                    VarSource::Opts
+                    VarSource::Opts(fn_arg.name.clone())
                 };
                 command.set_var(ArgLocalVar::new(fn_arg.pat_type.clone(), source));
             } else {
@@ -491,7 +453,7 @@ mod cmd {
                           pat_type_to_string(&fn_arg.pat_type));
                     }
 
-                    if let Some(attr) = &fn_arg.attr {
+                    if let Some(attr) = &fn_arg.attribute {
                         assert!(
                             attr.get("default").is_none(),
                             "`default` is not supported when multiple arguments are defined"
@@ -509,41 +471,40 @@ mod cmd {
 
                 command.set_var(ArgLocalVar::new(
                     fn_arg.pat_type.clone(),
-                    VarSource::Args(arg_index),
+                    VarSource::Args(fn_arg.name.clone()),
                 ));
-
-                arg_index += 1;
             }
         }
 
         // Add args
         if arg_count > 0 {
-            if let Some(fn_arg) = fn_args.iter().filter(|f| !f.is_option).single() {
-                command.set_args(ArgData::from_attribute(
-                    fn_arg.attr.clone().unwrap(),
-                    &fn_arg.pat_type,
-                ));
-            } else {
-                // unimplemented!("multiple args is not supported");
-                let mut args = ArgData::new();
-                args.set_min(arg_count);
-                args.set_max(arg_count);
-                command.set_args(args);
+            for fn_arg in fn_args.iter().filter(|f| !f.is_option) {
+                let arg = if fn_arg.attribute.is_some() {
+                    ArgData::new(fn_arg.attribute.as_ref(), &fn_arg.pat_type)
+                }  else {
+                    ArgData::with_name(fn_arg.name.clone())
+                };
+
+                command.set_args(arg)
             }
         }
 
         // Add options
         for fn_arg in fn_args.iter().filter(|n| n.is_option) {
-            let mut option = OptionData::new(fn_arg.arg_name.clone());
-            let mut args = ArgData::from_pat_type(&fn_arg.pat_type);
+            let mut option = OptionData::new(fn_arg.name.clone());
+            let mut args = ArgData::new(None, &fn_arg.pat_type);
 
-            // Arguments that belong to options don't will be named
-            args.set_name(None);
-
-            if let Some(att) = &fn_arg.attr {
+            if let Some(att) = &fn_arg.attribute {
                 for (key, value) in att {
                     match key.as_str() {
-                        attr::NAME => { /* Ignore */ }
+                        attr::ARG => {
+                            let arg_name = value
+                                .clone()
+                                .as_string_literal()
+                                .expect("option `arg` is expected to be string literal");
+
+                            args.set_name(arg_name);
+                        }
                         attr::ALIAS => {
                             let alias = value
                                 .clone()
@@ -584,7 +545,7 @@ mod cmd {
                 }
             }
 
-            // An argument is considered implicit if:
+            // An argument is considered implicit bool if:
             // - Is bool type
             // - Don't contains `min`, `max` or `default`
             if !is_implicit_bool_arg(fn_arg) {
@@ -647,42 +608,72 @@ mod cmd {
         ret
     }
 
-    fn get_fn_args(attrs: &[NameValueAttribute], fn_args: &[NamedFnArg]) -> Vec<CommandFnArg> {
-        let mut ret = Vec::new();
-
-        for fn_arg in fn_args {
-            if let FnArg::Typed(pat_type) = fn_arg.fn_arg.clone() {
-                let attr = attrs
-                    .iter()
-                    .find(|att| {
-                        att.get(attr::NAME)
-                            .map(|v| v.as_string_literal())
-                            .flatten()
-                            .filter(|s| s == &fn_arg.name)
-                            .is_some()
-                    })
-                    .cloned();
-
-                let arg_name = fn_arg.name.clone();
-                let is_option = match &attr {
-                    Some(att) => attr::is_option(att.path()),
-                    None => true,
-                };
-
-                ret.push(CommandFnArg {
-                    arg_name,
-                    pat_type,
-                    attr,
-                    is_option,
-                });
+    fn get_fn_args(item_fn: &ItemFn) -> Vec<CommandFnArg> {
+        fn get_fn_arg_ident_name(fn_arg: &FnArg) -> (String, PatType) {
+            if let FnArg::Typed(pat_type) = &fn_arg {
+                if let syn::Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
+                    return (pat_ident.ident.to_string(), pat_type.clone());
+                }
             }
+
+            unreachable!("No a function arg")
+        }
+
+        let mut ret = Vec::new();
+        let attributes = item_fn
+            .attrs
+            .iter()
+            .cloned()
+            .map(|att| MacroAttribute::new(att))
+            .filter(|att| attr::is_option(att.path()) || attr::is_arg(att.path()))
+            .map(|att| split_attr_path_and_name_values(&att))
+            .collect::<Vec<(String, NameValueAttribute)>>();
+
+        let fn_args = item_fn.sig.inputs.iter()
+            .map(|f| get_fn_arg_ident_name(f))
+            .collect::<Vec<(String, PatType)>>();
+
+        for (arg_name, pat_type) in fn_args {
+            let attribute = attributes.iter().find_map(|(path, att)| {
+                if path == &arg_name { Some(att.clone()) } else { None }
+            });
+
+            let is_option = attribute.as_ref()
+                .map(|att| attr::is_option(att.path()))
+                .unwrap_or(true);
+
+            let name = attribute
+                .as_ref()
+                .map(|att| att.get(attr::NAME))
+                .flatten()
+                .map(|value| value.as_string_literal().expect("`name` is expected to be a string literal"))
+                .unwrap_or(arg_name);
+
+            ret.push(CommandFnArg { name, pat_type, attribute, is_option });
         }
 
         ret
     }
 
+    fn split_attr_path_and_name_values(attr: &MacroAttribute) -> (String, NameValueAttribute){
+        let name = attr.get(0)
+            .cloned()
+            .expect("function argument name must be the first element in #[arg()] but was empty")
+            .into_path()
+            .expect("first element in #[arg(...)] must be a path like: #[arg(argument)] where `argument` is the name of the function argument");
+
+        let name_value_attribute = if attr.len() == 1 {
+          NameValueAttribute::empty(attr.path().to_owned())
+        } else {
+            let meta_items = attr[1..].iter().cloned().collect::<Vec<MetaItem>>();
+            NameValueAttribute::new(attr.path(), meta_items).unwrap()
+        };
+
+        (name, name_value_attribute)
+    }
+
     fn is_implicit_bool_arg(fn_arg: &CommandFnArg) -> bool {
-        if let Some(attr) = &fn_arg.attr {
+        if let Some(attr) = &fn_arg.attribute {
             fn_arg.pat_type.ty.is_bool()
                 && !(attr.contains_name(attr::MIN)
                     || attr.contains_name(attr::MAX)
@@ -699,42 +690,6 @@ mod cmd {
                 \nwhen multiples `arg` are defined, arguments cannot be declared as `Vec` or `slice`",
                 pat_type_to_string(pat_type)
             );
-        }
-    }
-
-    fn assert_attr_name_match_fn_arg(
-        item_fn: &ItemFn,
-        fn_args: &[NamedFnArg],
-        attr: &[NameValueAttribute],
-    ) {
-        for name_value in attr {
-            if let Some(Value::Literal(lit)) = name_value.get(attr::NAME) {
-                let name = literal_to_string(lit);
-                let contains_name = fn_args.iter().any(|arg| arg.name == name);
-
-                assert!(
-                    contains_name,
-                    "cannot find function argument named `{}` in `{}` function",
-                    name,
-                    item_fn.sig.ident.to_string()
-                )
-            } else {
-                panic!("expected string literal for `name`")
-            }
-        }
-    }
-
-    fn assert_attributes_name_is_declared(fn_attrs: &[NameValueAttribute]) {
-        for att in fn_attrs {
-            if let Some(value) = att.get(attr::NAME) {
-                assert!(value.is_string(), "`name` must be a string literal");
-                assert!(
-                    !value.as_string_literal().unwrap().is_empty(),
-                    "`name` cannot be empty"
-                );
-            } else {
-                panic!("`name` is required in `{}`", att.path());
-            }
         }
     }
 

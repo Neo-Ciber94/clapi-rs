@@ -70,7 +70,7 @@ impl OptionData {
         // CommandOption::set_args
         let args = if let Some(args) = &self.args{
             let tokens = args.expand();
-            quote!{ .args(#tokens) }
+            quote!{ .arg(#tokens) }
         } else {
             quote!{}
         };

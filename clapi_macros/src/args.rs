@@ -1,5 +1,5 @@
 use crate::utils::pat_type_to_string;
-use crate::var::ArgType;
+use crate::var::ArgumentType;
 use crate::{LitExtensions, TypeExtensions, attr};
 use macro_attribute::{literal_to_string, NameValueAttribute, Value};
 use proc_macro2::TokenStream;
@@ -18,7 +18,7 @@ use syn::{Lit, PatType};
 /// ```
 #[derive(Debug)]
 pub struct ArgData {
-    name: Option<String>,
+    name: String,
     min: Option<usize>,
     max: Option<usize>,
     fn_arg: Option<NamedFnArg>,
@@ -26,38 +26,25 @@ pub struct ArgData {
 }
 
 impl ArgData {
-    pub fn new() -> Self {
+    pub fn with_name(name: String) -> Self {
         ArgData {
+            name,
             min: None,
             max: None,
             fn_arg: None,
-            name: None,
             default_values: vec![],
         }
     }
 
-    pub fn from_pat_type(pat_type: &PatType) -> Self {
-        let fn_arg = NamedFnArg::new(pat_type);
-        let name = fn_arg.name.clone(); // use the same var name
-
-        ArgData {
-            min: None,
-            max: None,
-            fn_arg: Some(fn_arg),
-            name: Some(name),
-            default_values: vec![],
-        }
-    }
-
-    pub fn from_attribute(attr: NameValueAttribute, pat_type: &PatType) -> ArgData {
-        new_arg_tokens_from_attr_data(attr, pat_type)
+    pub fn new(attribute: Option<&NameValueAttribute>, pat_type: &PatType) -> ArgData {
+        new_arg_data(attribute, pat_type)
     }
 
     pub fn has_default_values(&self) -> bool {
         !self.default_values.is_empty()
     }
 
-    pub fn set_name(&mut self, name: Option<String>) {
+    pub fn set_name(&mut self, name: String){
         self.name = name;
     }
 
@@ -96,20 +83,22 @@ impl ArgData {
         let min = quote!{ #min };
         let max = quote!{ #max };
 
+        let arg_count = quote! {
+            .arg_count(#min..=#max)
+        };
+
         let default_values = if self.default_values.is_empty() {
             quote! {}
         } else {
             let tokens = self.default_values.iter().map(|s| quote! { #s });
-            quote! { .default_values(&[#(#tokens),*]) }
+            quote! { .defaults(&[#(#tokens),*]) }
         };
 
-        let name = self.name.as_ref()
-            .map(|s| quote!{ .name(#s)} )
-            .unwrap_or_else(|| quote!{ });
+        let name = quote_expr!(self.name);
 
         quote! {
-            clapi::Arguments::new(clapi::ArgCount::new(#min, #max))
-            #name
+            clapi::Argument::new(#name)
+            #arg_count
             #default_values
         }
     }
@@ -129,9 +118,9 @@ impl ArgData {
             (Some(min), None) => (min, usize::max_value()),
             (None, Some(max)) => (0, max),
             (None, None) => match arg.ty {
-                ArgType::Raw(_) => (1, 1),
-                ArgType::Option(_) => (0, 1),
-                ArgType::Vec(_) | ArgType::Slice(_) | ArgType::MutSlice(_) => {
+                ArgumentType::Type(_) => (1, 1),
+                ArgumentType::Option(_) => (0, 1),
+                ArgumentType::Vec(_) | ArgumentType::Slice(_) | ArgumentType::MutSlice(_) => {
                     (0, usize::max_value())
                 }
             },
@@ -140,19 +129,19 @@ impl ArgData {
         assert!(min <= max, "invalid arguments range `min` cannot be greater than `max`");
 
         match arg.ty {
-            ArgType::Raw(_) => {
+            ArgumentType::Type(_) => {
                 if min != 1 || max != 1 {
                     panic!("invalid number of arguments for `{}` expected 1", pat_type_to_string(&arg.pat_type));
                 }
                 (min, max)
             }
-            ArgType::Option(_) => {
+            ArgumentType::Option(_) => {
                 if min != 0 || max != 1{
                     panic!("invalid number of arguments for `{}` expected 0 or 1", pat_type_to_string(&arg.pat_type));
                 }
                 (min, max)
             }
-            ArgType::Vec(_) | ArgType::Slice(_) | ArgType::MutSlice(_) => (min, max),
+            ArgumentType::Vec(_) | ArgumentType::Slice(_) | ArgumentType::MutSlice(_) => (min, max),
         }
     }
 }
@@ -167,7 +156,7 @@ impl ToTokens for ArgData {
 struct NamedFnArg {
     name: String,
     pat_type: PatType,
-    ty: ArgType,
+    ty: ArgumentType,
 }
 
 impl NamedFnArg {
@@ -181,38 +170,55 @@ impl NamedFnArg {
         NamedFnArg {
             name,
             pat_type: pat_type.clone(),
-            ty: ArgType::new(pat_type),
+            ty: ArgumentType::new(pat_type),
         }
     }
 }
 
-fn new_arg_tokens_from_attr_data(attr: NameValueAttribute, pat_type: &PatType) -> ArgData {
-    let mut args = ArgData::from_pat_type(pat_type);
+fn new_arg_data(attribute: Option<&NameValueAttribute>, pat_type: &PatType) -> ArgData {
+    let fn_arg = NamedFnArg::new(pat_type);
 
-    for (key, value) in &attr {
-        match key.as_str() {
-            attr::NAME => { /* Ignore */ }
-            attr::MIN => {
-                let min = value
-                    .clone()
-                    .parse_literal::<usize>()
-                    .expect("option `min` is expected to be an integer literal");
+    let mut args = ArgData{
+        name: fn_arg.name.clone(),
+        fn_arg: Some(fn_arg),
+        min: None,
+        max: None,
+        default_values: vec![]
+    };
 
-                args.set_min(min);
+    if let Some(attribute) = attribute {
+        for (key, value) in attribute {
+            match key.as_str() {
+                attr::ARG => {
+                    let name = value
+                        .clone()
+                        .as_string_literal()
+                        .expect("arg `arg` is expected to be a string literal");
+
+                    args.set_name(name);
+                }
+                attr::MIN => {
+                    let min = value
+                        .clone()
+                        .parse_literal::<usize>()
+                        .expect("option `min` is expected to be an integer literal");
+
+                    args.set_min(min);
+                }
+                attr::MAX => {
+                    let max = value
+                        .clone()
+                        .parse_literal::<usize>()
+                        .expect("option `max` is expected to be an integer literal");
+
+                    args.set_max(max);
+                }
+                attr::DEFAULT => match value {
+                    Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
+                    Value::Array(array) => args.set_default_values(array.clone()),
+                },
+                _ => panic!("invalid {} key `{}`", attribute.path(), key),
             }
-            attr::MAX => {
-                let max = value
-                    .clone()
-                    .parse_literal::<usize>()
-                    .expect("option `max` is expected to be an integer literal");
-
-                args.set_max(max);
-            }
-            attr::DEFAULT => match value {
-                Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
-                Value::Array(array) => args.set_default_values(array.clone()),
-            },
-            _ => panic!("invalid {} key `{}`", attr.path(), key),
         }
     }
 

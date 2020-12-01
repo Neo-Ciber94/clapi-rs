@@ -2,6 +2,7 @@ use crate::{NameValue, NameValueAttribute, NameValueError, Value};
 use std::iter::Peekable;
 use std::ops::Index;
 use syn::{Attribute, AttributeArgs, Lit, Meta, MetaList, MetaNameValue, NestedMeta, Path};
+use std::slice::SliceIndex;
 
 /// Represents a macro attribute and its arguments like:
 ///
@@ -44,6 +45,10 @@ impl MacroAttribute {
         self.args.len()
     }
 
+    pub fn get(&self, index: usize) -> Option<&MetaItem>{
+        self.args.get(index)
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &MetaItem> {
         self.args.iter()
     }
@@ -57,11 +62,11 @@ impl MacroAttribute {
     }
 }
 
-impl Index<usize> for MacroAttribute {
-    type Output = MetaItem;
+impl<I: SliceIndex<[MetaItem]>> Index<I> for MacroAttribute {
+    type Output = I::Output;
 
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.args[index]
+    fn index(&self, index: I) -> &Self::Output {
+        self.args.index(index)
     }
 }
 
@@ -109,7 +114,7 @@ impl MetaItem {
         matches!(self, MetaItem::NameValue(_))
     }
 
-    pub fn is_nested(&self) -> bool {
+    pub fn is_nested(self) -> bool {
         matches!(self, MetaItem::Nested(_))
     }
 
@@ -135,6 +140,34 @@ impl MetaItem {
     }
 
     pub fn into_nested(self) -> Option<Box<MacroAttribute>> {
+        match self {
+            MetaItem::Nested(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn as_path(&self) -> Option<&String> {
+        match self {
+            MetaItem::Path(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn as_literal(&self) -> Option<&Lit> {
+        match self {
+            MetaItem::Literal(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn as_name_value(&self) -> Option<&NameValue> {
+        match self {
+            MetaItem::NameValue(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn as_nested(&self) -> Option<&Box<MacroAttribute>> {
         match self {
             MetaItem::Nested(x) => Some(x),
             _ => None,

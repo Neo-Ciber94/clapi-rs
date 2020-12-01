@@ -1,4 +1,4 @@
-use syn::Type;
+use syn::{Type, PathArguments, GenericArgument};
 
 macro_rules! is_primitive_type {
     ($name:ident, $t:ty) => {
@@ -67,6 +67,20 @@ pub trait TypeExtensions {
             }
             _ => false
         }
+    }
+
+    fn generic_arguments(&self) -> Vec<GenericArgument> {
+        if let Type::Path(type_path) = &self.as_type() {
+            let last_segment = type_path.path.segments.last().unwrap();
+            if let PathArguments::AngleBracketed(generics) = &last_segment.arguments {
+                return generics.args
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<GenericArgument>>();
+            }
+        }
+
+        Vec::new()
     }
 
     fn is_integer(&self) -> bool {

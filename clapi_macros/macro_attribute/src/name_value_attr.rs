@@ -18,14 +18,22 @@ pub struct NameValueAttribute {
 }
 
 impl NameValueAttribute {
-    pub fn new(path: &str, meta_items: Vec<MetaItem>) -> Result<Self, NameValueError> {
-        if let Some(index) = meta_items.iter().position(|n| !n.is_name_value()) {
-            return Err(NameValueError::InvalidValue(meta_items[index].clone()));
+    pub fn empty(path: String) -> Self {
+        NameValueAttribute {
+            path,
+            args: Default::default()
         }
+    }
 
+    pub fn new(path: &str, meta_items: Vec<MetaItem>) -> Result<Self, NameValueError> {
         let mut args = Map::new();
 
-        for name_value in meta_items.into_iter().map(|n| n.into_name_value().unwrap()) {
+        for meta_item in meta_items.into_iter() {
+            let name_value = meta_item
+                .as_name_value()
+                .cloned()
+                .ok_or_else(|| NameValueError::InvalidValue(meta_item.clone()))?;
+
             if args.contains_key(&name_value.name) {
                 return Err(NameValueError::DuplicatedKey(name_value.name));
             } else {
