@@ -3,7 +3,7 @@ use crate::error::{Error, ErrorKind, Result};
 use crate::option::{OptionList, CommandOption};
 use crate::parse_result::ParseResult;
 use crate::tokenizer::{DefaultTokenizer, Token, Tokenizer};
-use crate::utils::{Then, Also};
+use crate::utils::Then;
 use std::borrow::Borrow;
 use crate::command::Command;
 use crate::args::ArgumentList;
@@ -35,13 +35,11 @@ where
             command = command.find_subcommand(name.as_str()).ok_or_else(|| {
                 Error::new_parse_error(
                     Error::from(ErrorKind::UnrecognizedCommand(name.clone())),
-                    command.clone()
-                        .also_mut(|c| {
-                            c.clear_options();
-                            c.clear_args()
-                    }),
-                    None,
-                    None,
+                    ParseResult::new(
+                        command.clone(),
+                        OptionList::default(),
+                        ArgumentList::default()
+                    )
                 )
             })?;
 
@@ -96,15 +94,17 @@ where
                         let mut arg = arg.clone();
                         arg.set_values(values)
                             .or_else(|error| {
-                                let command = command.clone()
-                                    .also_mut(|c| c.clear_args())
-                                    .also_mut(|c| c.clear_options());
+                                // We add the last option
+                                let mut options = command_options.clone();
+                                options.add(option.clone());
 
                                 Err(Error::new_parse_error(
                                     error,
-                                    command,
-                                    Some(option.clone()),
-                                    None,
+                                    ParseResult::new(
+                                        command.clone(),
+                                        options,
+                                        ArgumentList::default()
+                                    ),
                                 ))
                             })?;
 
@@ -120,13 +120,11 @@ where
             } else {
                 return Err(Error::new_parse_error(
                     Error::from(ErrorKind::UnrecognizedOption(prefix.clone(), s.clone())),
-                    command.clone()
-                        .also_mut(|c| {
-                            c.clear_options();
-                            c.clear_args()
-                        }),
-                    None,
-                    None,
+                    ParseResult::new(
+                        command.clone(),
+                        command_options.clone(),
+                        ArgumentList::default()
+                    ),
                 ));
             }
         }
@@ -210,15 +208,18 @@ where
             if values.len() > 0 || (values.is_empty() && !arg.has_default_values()) {
                 arg.set_values(values)
                     .or_else(|error| {
+                        // We add the last add
+                        #[allow(unused_mut)]
+                        let mut args = command_args.clone();
+                        //args.add(arg.clone());
+
                         Err(Error::new_parse_error(
                             error,
-                            command.clone()
-                                .also_mut(|c| {
-                                    c.clear_options();
-                                    c.clear_args()
-                            }),
-                            None,
-                            Some(command_args.clone()),
+                            ParseResult::new(
+                                command.clone(),
+                                command_options.clone(),
+                                args
+                            ),
                         ))
                     })?;
             }
@@ -235,15 +236,7 @@ where
         }
 
         // Sets the command options and arguments
-        let command = command.clone()
-            .also_mut(|c| {
-                c.clear_options();
-                c.clear_args();
-            })
-            .options(command_options)
-            .args(command_args);
-
-        Ok(ParseResult::new(command))
+        Ok(ParseResult::new(command.clone(), command_options, command_args))
     }
 }
 

@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::fmt::Display;
 use syn::export::{Formatter, ToTokens};
-use syn::{Attribute, AttributeArgs, ItemFn, ReturnType, Stmt, Item};
+use syn::{Attribute, AttributeArgs, ItemFn, ReturnType, Stmt, Item, Type};
 
 use macro_attribute::NameValueAttribute;
 
@@ -135,7 +135,7 @@ impl CommandData {
         let version = self.version
             .as_ref()
             .map(|_| {
-                quote! { .set_option(clapi::option::CommandOption::new("version").set_alias("v")) }
+                quote! { .option(clapi::CommandOption::new("version").alias("v")) }
             }).unwrap_or_else(|| quote!{});
 
         // Command description
@@ -171,7 +171,7 @@ impl CommandData {
             .map(|s| {
                 let ret = match &self.item_fn.as_ref().unwrap().sig.output{
                     ReturnType::Default => quote! { return; },
-                    ReturnType::Type(_, ty) if ty.is_result() => quote! { return Ok(()) },
+                    ReturnType::Type(_, ty) if is_result_type(ty) => quote! { return Ok(()) },
                     _ => panic!("invalid return type for `{}`, expected `()` or `Result`", self.fn_name.name)
                 };
 
@@ -206,7 +206,7 @@ impl CommandData {
             let attrs = &self.item_fn.as_ref().unwrap().attrs;
             let outer = self.outer_body();
             let error_handling = match ret {
-                ReturnType::Type(_, ty) if ty.is_result() => quote! {},
+                ReturnType::Type(_, ty) if is_result_type(ty) => quote! {},
                 _ => quote! { .expect("an error occurred"); },
             };
 
@@ -230,7 +230,7 @@ impl CommandData {
     fn get_body(&self, vars: &[TokenStream]) -> TokenStream {
         let ret = &self.item_fn.as_ref().unwrap().sig.output;
         let error_handling = match ret {
-            ReturnType::Type(_, ty) if ty.is_result() => quote! {},
+            ReturnType::Type(_, ty) if is_result_type(ty) => quote! {},
             // If return type is not `Result` we need return `fn_name(args) ; Ok(())`
             _ => quote! { ; Ok(()) },
         };
@@ -336,6 +336,10 @@ impl Display for FnName {
             write!(f, "{}", self.name)
         }
     }
+}
+
+fn is_result_type(ty: &Type) -> bool {
+    ty.is_result() || ty.path().unwrap() == "clapi::Result"
 }
 
 pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {

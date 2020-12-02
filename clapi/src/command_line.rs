@@ -6,11 +6,12 @@ use crate::parser::{DefaultParser, Parser};
 use crate::suggestion::{SingleSuggestionProvider, SuggestionProvider};
 use crate::utils::{OptionExt, debug_option};
 use std::fmt::{Debug, Formatter};
-use crate::{Argument, HelpKind, CommandOption};
+use crate::{Argument, HelpKind, CommandOption, ParseResult};
 
 /// Represents a command-line app.
 pub struct CommandLine {
     context: Context,
+    //parser: P,
     help: Option<Box<dyn HelpProvider>>,
     suggestions: Option<Box<dyn SuggestionProvider>>,
     show_help_when_not_handler: bool,
@@ -61,7 +62,7 @@ impl CommandLine {
 
     /// Sets the default `HelpCommand`.
     pub fn use_default_help(self) -> Self {
-        self.set_help(DefaultHelpProvider(crate::HelpKind::Option))
+        self.set_help(DefaultHelpProvider(crate::HelpKind::Subcommand))
     }
 
     /// Sets the specified `HelpProvider`.
@@ -128,10 +129,9 @@ impl CommandLine {
         };
 
         let command = parse_result.command();
-        println!("{:#?}", command);
 
         // Check if the command is a 'help' command and display help
-        if self.is_help(command) {
+        if self.is_help(&parse_result) {
             let help = self.help.as_ref().unwrap();
             return match help.kind() {
                 HelpKind::Subcommand => {
@@ -178,8 +178,10 @@ impl CommandLine {
     }
 
     fn handle_error(&self, error: Error) -> Result<()> {
-        if error.kind() == &ErrorKind::InvalidArgumentCount && error.is_parse_error() {
-            let message = self.get_help_message(None)?;
+        // If is a parse error and `InvalidArgumentCount`
+        // we show a message about the usage of the command
+        if error.kind() == &ErrorKind::InvalidArgumentCount {
+            let message = self.get_message(None, MessageKind::Usage)?;
             return Err(
                 Error::new(
                     error.kind().clone(),
@@ -191,8 +193,8 @@ impl CommandLine {
         if self.suggestions.is_some() {
             // todo: Error is produce here due to trying to read a unrecognized command
             let parse_error = error.try_into_parse_error()?;
-            if self.is_help(parse_error.command()) {
-                let args = parse_error.command().get_arg();
+            if self.is_help(parse_error.parse_result()) {
+                let args = parse_error.parse_result().arg();
                 return self.display_help(args);
             }
 
@@ -202,14 +204,14 @@ impl CommandLine {
         return Err(error);
     }
 
-    fn is_help(&self, command: &Command) -> bool {
+    fn is_help(&self, parse_result: &ParseResult) -> bool {
         if let Some(help_provider) = &self.help {
             match help_provider.kind(){
                 HelpKind::Subcommand => {
-                    help_provider.name() == command.get_name()
+                    help_provider.name() == parse_result.command().get_name()
                 },
                 HelpKind::Option => {
-                    command.get_options().iter()
+                    parse_result.options().iter()
                         .any(|s| s.get_name() == help_provider.name())
                 }
             }
@@ -219,12 +221,12 @@ impl CommandLine {
     }
 
     fn display_help(&self, args: Option<&Argument>) -> Result<()>{
-        print!("{}", self.get_help_message(args)?);
+        print!("{}", self.get_message(args, MessageKind::Help)?);
         Ok(())
     }
 
-    fn get_help_message(&self, args: Option<&Argument>) -> Result<String> {
-        let help_command = self.help.as_ref().expect("help command is not set");
+    fn get_message(&self, args: Option<&Argument>, kind: MessageKind) -> Result<String> {
+        let help_provider = self.help.as_ref().expect("help command is not set");
 
         fn find_command<'a>(root: &'a Command, children: &[String]) -> Result<&'a Command> {
             //debug_assert!(children.len() > 0);
@@ -247,12 +249,26 @@ impl CommandLine {
 
         let output = match args {
             None => {
-                help_command.help(&self.context, self.context.root())
-            }
+                match kind {
+                    MessageKind::Help => {
+                        help_provider.help(&self.context, self.context.root())
+                    }
+                    MessageKind::Usage => {
+                        help_provider.usage(&self.context, self.context.root())
+                    }
+                }
+            },
             Some(args) => {
                 let root = self.context.root();
                 let subcommand = find_command(root, args.get_values())?;
-                help_command.help(&self.context, subcommand)
+                match kind {
+                    MessageKind::Help => {
+                        help_provider.help(&self.context, subcommand)
+                    }
+                    MessageKind::Usage => {
+                        help_provider.usage(&self.context, subcommand)
+                    }
+                }
             }
         };
 
@@ -303,6 +319,10 @@ impl CommandLine {
             Error::from(parse_error)
         }
     }
+}
+
+enum MessageKind{
+    Help, Usage
 }
 
 fn prefix_option(context: &Context, options: &crate::option::OptionList, name: String) -> String {

@@ -101,7 +101,7 @@ impl HelpProvider for DefaultHelpProvider {
 
                 if command.get_options().len() > 0 {
                     let mut result = String::from(command.get_name());
-                    write!(result, " [OPTIONS]").unwrap();
+                    write!(result, " [OPTION]").unwrap();
 
                     if command.get_options().iter().any(|o| o.take_args()) {
                         write!(result, " {}", args_names).unwrap();
@@ -119,7 +119,7 @@ impl HelpProvider for DefaultHelpProvider {
 
                     if children.any(|c| c.get_options().len() > 0) {
                         let mut result = String::from(command.get_name());
-                        write!(result, " [SUBCOMMAND] [OPTIONS]").unwrap();
+                        write!(result, " [SUBCOMMAND] [OPTION]").unwrap();
 
                         if children.any(|c| c.get_options().iter().any(|o| o.take_args())) {
                             write!(result, " <ARGS>").unwrap();

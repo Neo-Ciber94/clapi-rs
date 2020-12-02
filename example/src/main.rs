@@ -17,8 +17,9 @@ fn echo(times: usize, values: Vec<String>) {
     }
 }
 
-#[command]
-#[option(value, alias="v", description="The value", default="Hello World")]
-fn main(value: String) {
+#[command(version=1.0)]
+#[option(value, description="The value", default="Hello World")]
+fn main(value: String) -> clapi::Result<()> {
     println!("{:?}", value);
+    Ok(())
 }

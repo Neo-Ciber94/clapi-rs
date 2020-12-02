@@ -1,9 +1,8 @@
 use crate::command::Command;
 use crate::error::Inner::{Custom, Parsed, Simple};
-use crate::option::CommandOption;
 use std::fmt::{Debug, Display, Formatter};
 use std::result;
-use crate::ArgumentList;
+use crate::{ArgumentList, ParseResult, OptionList};
 
 /// A convenient `Result` type.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -44,18 +43,10 @@ impl Error {
     ///
     /// # Parameters
     /// - `inner`: the inner error.
-    /// - `command`: the command or parent command where the error occurred.
-    /// - `option`: the option where the error occurred.
-    /// - `args`: the args being passed to the command or option, if the `option` is not set
-    /// the args will be considered part of the command.
-    pub fn new_parse_error(
-        inner: Error,
-        command: Command,
-        option: Option<CommandOption>,
-        args: Option<ArgumentList>,
-    ) -> Self {
+    /// - `parse_result`: the current result of the parse operation.
+    pub fn new_parse_error(inner: Error, parse_result: ParseResult) -> Self {
         Error {
-            inner: Parsed(Box::new(ParseError::new(inner, command, option, args))),
+            inner: Parsed(Box::new(ParseError::new(inner, parse_result))),
         }
     }
 
@@ -95,7 +86,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.inner {
             Inner::Simple(kind) => Display::fmt(kind, f),
-            Inner::Parsed(error) => Display::fmt(error.inner(), f),
+            Inner::Parsed(error) => Display::fmt(error.error(), f),
             Inner::Custom(custom) => {
                 if matches!(custom.kind, ErrorKind::Other) {
                     write!(f, "{}", custom.error)
@@ -174,28 +165,19 @@ struct CustomError {
 /// Represents an error occurred in a parse operation.
 pub struct ParseError {
     inner: Error,
-    command: Command,
-    option: Option<CommandOption>,
-    args: Option<ArgumentList>,
+    parse_result: ParseResult
 }
 
 impl ParseError {
-    fn new(
-        inner: Error,
-        command: Command,
-        option: Option<CommandOption>,
-        args: Option<ArgumentList>,
-    ) -> Self {
+    fn new(inner: Error, parse_result: ParseResult) -> Self {
         ParseError {
             inner,
-            command,
-            option,
-            args,
+            parse_result,
         }
     }
 
     /// Returns the inner error.
-    pub fn inner(&self) -> &Error {
+    pub fn error(&self) -> &Error {
         &self.inner
     }
 
@@ -204,31 +186,23 @@ impl ParseError {
         &self.inner.kind()
     }
 
+    /// Returns the `ParseResult` before this error.
+    pub fn parse_result(&self) -> &ParseResult {
+        &self.parse_result
+    }
+
     /// Returns the `Command` where the error occurred.
     pub fn command(&self) -> &Command {
-        &self.command
+        &self.parse_result.command()
     }
 
-    /// Returns the `CommandOption` where the error occurred.
-    pub fn option(&self) -> Option<&CommandOption> {
-        self.option.as_ref()
+    /// Returns the `OptionList`s of the executing command.
+    pub fn options(&self) -> &OptionList {
+        self.parse_result.options()
     }
 
-    /// Returns the argument values of the option if any.
-    pub fn option_args(&self) -> Option<&ArgumentList> {
-        if self.option.is_some() {
-            self.args.as_ref()
-        } else {
-            None
-        }
-    }
-
-    /// Returns the argument values of the command if any.
-    pub fn command_args(&self) -> Option<&ArgumentList> {
-        if self.option.is_none() {
-            self.args.as_ref()
-        } else {
-            None
-        }
+    /// Returns the arguments values of the command.
+    pub fn args(&self) -> &ArgumentList {
+        self.parse_result.args()
     }
 }

@@ -5,50 +5,56 @@ use crate::Argument;
 
 /// Represents the result of a parse operation
 /// and provides a set of methods to query over the values.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ParseResult {
     command: Command,
+    options: OptionList,
+    args: ArgumentList
 }
 
 impl ParseResult {
     /// Constructs a new `ParseResult`.
-    pub fn new(command: Command) -> Self {
-        ParseResult { command }
+    pub fn new(command: Command, options: OptionList, args: ArgumentList) -> Self {
+        ParseResult { command, options, args }
     }
 
-    /// Returns the `Command` to execute.
+    /// Returns the executing `Command`.
     pub fn command(&self) -> &Command {
         &self.command
     }
 
     /// Returns the `Options` of the command.
     pub fn options(&self) -> &OptionList {
-        &self.command.get_options()
+        &self.options
     }
 
-    /// Returns the argument of the command.
+    /// Returns the `Argument` of the command or `None` is there is more than 1 argument.
     pub fn arg(&self) -> Option<&Argument>{
-        self.command.get_arg()
+        if self.args.len() == 1 {
+            Some(&self.args[0])
+        } else {
+            None
+        }
     }
 
-    /// Returns the arguments of the command.
+    /// Returns the `Argument`s of the command.
     pub fn args(&self) -> &ArgumentList {
-        self.command.get_args()
+        &self.args
     }
 
-    /// Returns `true` if the resulting command contains the option with the given name or alias.
+    /// Returns `true` if the executing command contains a option with the given name or alias.
     pub fn contains_option<S: AsRef<str>>(&self, name_or_alias: S) -> bool {
-        self.command.get_options().contains(name_or_alias)
+        self.options.contains(name_or_alias)
     }
 
-    /// Returns `true` if the resulting command contains an argument with the given name.
+    /// Returns `true` if the executing command contains an argument with the given name.
     pub fn contains_arg<S: AsRef<str>>(&self, arg_name: S) -> bool {
-        self.command.get_args().contains(arg_name)
+        self.args.contains(arg_name)
     }
 
     /// Returns the `CommandOption` with the given name or alias, or `None`.
     pub fn get_option<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&CommandOption> {
-        self.command.get_options().get(name_or_alias)
+        self.options.get(name_or_alias)
     }
 
     /// Returns the single argument of the option with the given name or alias,
@@ -67,7 +73,7 @@ impl ParseResult {
 
     /// Returns the `Argument` with the given name or `None` if not found.
     pub fn get_arg<S: AsRef<str>>(&self, arg_name: S) -> Option<&Argument>{
-        self.command.get_args().get(arg_name)
+        self.args.get(arg_name)
     }
 }
 

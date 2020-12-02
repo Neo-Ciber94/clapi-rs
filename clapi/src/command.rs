@@ -126,13 +126,18 @@ impl Command {
     /// Adds an `CommandOption` to this command.
     #[cfg(debug_assertions)]
     pub fn option(mut self, option: CommandOption) -> Self {
-        let option_name = option.get_name().to_string();
-        assert!(
-            self.add_option(option),
-            "`{}` already contains a `CommandOption` named: `{}`",
-            self.name, option_name,
-        );
+        if self.options.contains(option.get_name()){
+            panic!("`{}` already contains an option named `{}`", self.name, option.get_name())
+        }
 
+        for alias in option.get_aliases() {
+            if let Some(option) = self.options.get(alias){
+                panic!("`{}` contains an option `{}` with alias `{}` that conflicts with new option: `{}`",
+                self.name, option.get_name(), alias, option.get_name())
+            }
+        }
+
+        assert!(self.options.add(option));
         self
     }
 
@@ -198,20 +203,6 @@ impl Command {
     pub fn subcommand(mut self, command: Command) -> Self {
         self.add_command(command);
         self
-    }
-
-    /// Removes the `Argument`s from this command.
-    ///
-    /// This is intended to be use before set the args to the command during parsing.
-    pub fn clear_args(&mut self){
-        self.args.clear();
-    }
-
-    /// Removes the `Option`s from this command.
-    ///
-    /// This is intended to be use before set the options to the command during parsing.
-    pub fn clear_options(&mut self){
-        self.options.clear();
     }
 
     #[inline]
