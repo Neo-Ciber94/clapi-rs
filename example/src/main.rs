@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use clapi::macros::*;
+use clapi::{DefaultParser, Parser, Context, Command};
 
 // mod count;
 // mod utils;
@@ -22,4 +23,9 @@ fn echo(times: usize, values: Vec<String>) {
 fn main(value: String) -> clapi::Result<()> {
     println!("{:?}", value);
     Ok(())
+}
+
+fn entry(){
+    let context = Context::new(Command::root());
+    let result = DefaultParser.parse(&context, vec!["args", "one", "two"]);
 }

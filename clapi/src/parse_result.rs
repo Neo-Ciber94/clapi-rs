@@ -23,12 +23,12 @@ impl ParseResult {
         &self.command
     }
 
-    /// Returns the `Options` of the command.
+    /// Returns the `Options` passed to the executing command.
     pub fn options(&self) -> &OptionList {
         &self.options
     }
 
-    /// Returns the `Argument` of the command or `None` is there is more than 1 argument.
+    /// Returns the `Argument` passed to the executing command or `None` is there is more than 1 argument.
     pub fn arg(&self) -> Option<&Argument>{
         if self.args.len() == 1 {
             Some(&self.args[0])
@@ -37,12 +37,12 @@ impl ParseResult {
         }
     }
 
-    /// Returns the `Argument`s of the command.
+    /// Returns the `Argument`s passed to the executing command.
     pub fn args(&self) -> &ArgumentList {
         &self.args
     }
 
-    /// Returns `true` if the executing command contains a option with the given name or alias.
+    /// Returns `true` if the executing command contains an option with the given name or alias.
     pub fn contains_option<S: AsRef<str>>(&self, name_or_alias: S) -> bool {
         self.options.contains(name_or_alias)
     }
@@ -80,13 +80,13 @@ impl ParseResult {
 #[cfg(test)]
 mod tests{
     use super::*;
-    use crate::{Context, DefaultParser, into_arg_iterator, Parser, ErrorKind};
+    use crate::{Context, DefaultParser, split_into_args, Parser, ErrorKind, DefaultTokenizer};
     use crate::args::validator::parse_validator;
 
     fn parse_with(value: &str, command: Command) -> crate::Result<ParseResult> {
         let context = Context::new(command);
         let mut parser = DefaultParser::default();
-        parser.parse(&context, into_arg_iterator(value))
+        parser.parse(&context, &mut DefaultTokenizer, split_into_args(value))
     }
 
     #[test]
@@ -351,153 +351,5 @@ mod tests{
         assert!(matches!(err_kind("data clear"), ErrorKind::UnrecognizedCommand(x) if x == "clear"));
         assert!(matches!(err_kind("data get 0"), ErrorKind::InvalidArgumentCount));
         assert!(matches!(err_kind("data set \"Hello World\" Bye"), ErrorKind::InvalidArgumentCount));
-    }
-}
-
-//#[cfg(test)]
-#[allow(dead_code)]
-mod tests2 {
-    use super::*;
-    use crate::args::validator::parse_validator;
-    use crate::command_line::into_arg_iterator;
-    use crate::context::Context;
-    use crate::error::Result;
-    use crate::parser::{DefaultParser, Parser};
-    use crate::args::Argument;
-
-    fn parse(value: &str) -> Result<ParseResult> {
-        let root = Command::root()
-            .arg(Argument::new("args").arg_count(0..=2))
-            .option(
-                CommandOption::new("number")
-                    .alias("n")
-                    .arg(Argument::new("number").validator(parse_validator::<i32>())),
-            )
-            .option(
-                CommandOption::new("letter")
-                    .alias("l")
-                    .arg(Argument::new("letter").validator(parse_validator::<char>())),
-            )
-            .subcommand(
-                Command::new("select")
-                    .arg(Argument::new("select"))
-                    .option(CommandOption::new("sort")),
-            )
-            .subcommand(
-                Command::new("any")
-                    .arg(Argument::new("any"))
-                    .option(CommandOption::new("A").alias("a"))
-                    .option(CommandOption::new("B").alias("b"))
-                    .option(CommandOption::new("C").alias("c")),
-            );
-
-        let context = Context::new(root);
-        let mut parser = DefaultParser::default();
-        parser.parse(&context, into_arg_iterator(value))
-    }
-
-    //#[test]
-    fn parse_result_test1() {
-        let result = parse("--number 1 2 3 --letter c -- hello").unwrap();
-
-        assert!(result.contains_option("number"));
-        assert!(result.contains_option("letter"));
-        assert!(result.contains_arg("hello"));
-
-        assert!(result
-            .get_option_args("number")
-            .unwrap()
-            .contains(&String::from("1")));
-
-        assert!(result
-            .get_option_args("number")
-            .unwrap()
-            .contains(&String::from("2")));
-
-        assert!(result
-            .get_option_args("number")
-            .unwrap()
-            .contains(&String::from("3")));
-
-        assert!(result
-            .get_option_args("letter")
-            .unwrap()
-            .contains(&String::from("c")));
-    }
-
-    //#[test]
-    fn parse_result_test2() {
-        let result = parse("select a z 1 9").unwrap();
-
-        assert_eq!(result.command().get_name(), "select");
-        assert!(result.contains_arg("a"));
-        assert!(result.contains_arg("z"));
-        assert!(result.contains_arg("1"));
-        assert!(result.contains_arg("9"));
-    }
-
-    //#[test]
-    fn parse_result_test3() {
-        let result = parse("select --sort 3 2 1").unwrap();
-
-        assert_eq!(result.command().get_name(), "select");
-        assert!(result.contains_option("sort"));
-        assert!(result.contains_arg("3"));
-        assert!(result.contains_arg("2"));
-        assert!(result.contains_arg("1"));
-    }
-
-    //#[test]
-    fn parse_result_test4() {
-        let result = parse("any --A --B --C hello").unwrap();
-
-        assert_eq!(result.command().get_name(), "any");
-        assert!(result.contains_arg("hello"));
-        assert!(result.contains_option("A"));
-        assert!(result.contains_option("B"));
-        assert!(result.contains_option("C"));
-    }
-
-    //#[test]
-    fn parse_result_test5() {
-        let result = parse("any --A --B --C -a -b -c hello").unwrap();
-
-        assert_eq!(result.command().get_name(), "any");
-        assert!(result.contains_arg("hello"));
-        assert_eq!(result.options().len(), 3);
-        assert!(result.contains_option("A"));
-        assert!(result.contains_option("B"));
-        assert!(result.contains_option("C"));
-    }
-
-    //#[test]
-    fn parse_result_test6() {
-        let result = parse("any --A --B -- --C").unwrap();
-
-        assert_eq!(result.command().get_name(), "any");
-        assert_eq!(result.options().len(), 2);
-        assert!(result.contains_option("A"));
-        assert!(result.contains_option("B"));
-        assert_eq!(result.arg().unwrap().get_values().len(), 1);
-        assert!(result.arg().unwrap().contains("--C"));
-    }
-
-    //#[test]
-    fn parse_result_error_test() {
-        assert!(parse("-n").is_err());
-        assert!(parse("-l").is_err());
-        assert!(parse("select --sort").is_err());
-        assert!(parse("any -a -b -c hello world").is_err());
-    }
-
-    //#[test]
-    fn parse_result_ok_test() {
-        assert!(parse("-n 3 2 1").is_ok());
-        assert!(parse("-l a").is_ok());
-        assert!(parse("select --sort a b c").is_ok());
-        assert!(parse("any -a -b -c \"hello world\"").is_ok());
-        assert!(parse("--letter h --number 1 2 3 4 5").is_ok());
-        assert!(parse("--letter h -- hello").is_ok());
-        assert!(parse("--letter h hello --").is_ok());
     }
 }

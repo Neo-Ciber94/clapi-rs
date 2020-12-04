@@ -2,7 +2,7 @@ use crate::context::Context;
 use crate::error::{Error, ErrorKind, Result};
 use crate::option::{OptionList, CommandOption};
 use crate::parse_result::ParseResult;
-use crate::tokenizer::{DefaultTokenizer, Token, Tokenizer};
+use crate::tokenizer::{Token, Tokenizer};
 use crate::utils::Then;
 use std::borrow::Borrow;
 use crate::command::Command;
@@ -12,19 +12,16 @@ use crate::args::ArgumentList;
 pub trait Parser<Args> {
     /// Parse the provided command arguments and returns a `Ok(ParseResult)` if not error is found,
     /// otherwise returns `Err(Error)`.
-    fn parse(&mut self, context: &Context, args: Args) -> Result<ParseResult>;
+    fn parse<T: Tokenizer<Args>>(&mut self, context: &Context, tokenizer: &mut T, args: Args) -> Result<ParseResult>;
 }
 
 /// A default implementation of the `Parser` trait.
 #[derive(Debug, Default)]
 pub struct DefaultParser;
-impl<'a, S, I> Parser<I> for DefaultParser
-where
-    S: Borrow<str> + 'a,
-    I: IntoIterator<Item = S>,
-{
-    fn parse(&mut self, context: &Context, args: I) -> Result<ParseResult> {
-        let mut tokenizer = DefaultTokenizer::default();
+impl<S, I> Parser<I> for DefaultParser
+where S: Borrow<str>,
+      I: IntoIterator<Item = S>, {
+    fn parse<T: Tokenizer<I>>(&mut self, context: &Context, tokenizer: &mut T, args: I) -> Result<ParseResult> {
         let tokens = tokenizer.tokenize(context, args)?;
         let mut iterator = tokens.iter().peekable();
         let mut command_options = OptionList::new();

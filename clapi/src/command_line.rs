@@ -1,24 +1,30 @@
+use std::borrow::Borrow;
+use std::env::Args;
+use std::fmt::{Debug, Formatter};
+use crate::{Argument, CommandOption, DefaultTokenizer, HelpKind, ParseResult, Tokenizer};
 use crate::command::Command;
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, ParseError, Result};
 use crate::help::{DefaultHelpProvider, HelpProvider};
 use crate::parser::{DefaultParser, Parser};
 use crate::suggestion::{SingleSuggestionProvider, SuggestionProvider};
-use crate::utils::{OptionExt, debug_option};
-use std::fmt::{Debug, Formatter};
-use crate::{Argument, HelpKind, CommandOption, ParseResult};
+use crate::utils::{debug_option, OptionExt};
+
+/// Represents the command-line arguments,
+/// ignoring the first value that may be the path of the executable.
+pub type RestArgs = std::iter::Skip<Args>;
 
 /// Represents a command-line app.
-pub struct CommandLine {
+pub struct CommandLine<P> {
     context: Context,
-    //parser: P,
+    parser: P,
     help: Option<Box<dyn HelpProvider>>,
     suggestions: Option<Box<dyn SuggestionProvider>>,
     show_help_when_not_handler: bool,
 }
 
-impl CommandLine {
-    /// Constructs a new `CommandLine` with the provided `RootCommand`.
+impl CommandLine<DefaultParser>{
+    /// Constructs a new `CommandLine` with the provided `Command`.
     #[inline]
     pub fn new(root: Command) -> Self {
         CommandLine::with_context(Context::new(root))
@@ -26,8 +32,15 @@ impl CommandLine {
 
     /// Constructs a new `CommandLine` with the provided `Context`.
     pub fn with_context(context: Context) -> Self {
+        CommandLine::with_parser(context, DefaultParser)
+    }
+}
+
+impl<P> CommandLine<P> {
+    pub fn with_parser(context: Context, parser: P) -> Self {
         CommandLine {
             context,
+            parser,
             help: None,
             suggestions: None,
             show_help_when_not_handler: true,
@@ -39,12 +52,17 @@ impl CommandLine {
         &self.context
     }
 
-    /// Returns the `RootCommand` used by this command-line.
+    /// Returns the parser used by this command-line.
+    pub fn parser(&self) -> &P {
+        &self.parser
+    }
+
+    /// Returns the `Command` used by this command-line.
     pub fn root(&self) -> &Command {
         &self.context.root()
     }
 
-    /// Returns the `HelpCommand` used by this command-line or `None` if not set.
+    /// Returns the `HelpProvider` used by this command-line or `None` if not set.
     pub fn help(&self) -> Option<&Box<dyn HelpProvider>> {
         self.help.as_ref()
     }
@@ -110,19 +128,22 @@ impl CommandLine {
         self
     }
 
-    /// Executes this command-line app and pass the specified arguments as `&str`.
-    ///
-    /// This forwards the call to `CommandLine::exec` by slit the `str`.
-    pub fn exec_str(&self, args: &str) -> Result<()> {
-        self.exec(into_arg_iterator(args))
+    /// Executes this command-line app passing the specified arguments.
+    #[inline]
+    pub fn exec<S, I>(&mut self, args: I) -> Result<()>
+        where P: Parser<I>,
+              S: Borrow<str>,
+              I: IntoIterator<Item = S> {
+        self.exec_with_tokenizer(&mut DefaultTokenizer, args)
     }
 
-    /// Executes this command-line app and pass the specified arguments.
-    pub fn exec<I: IntoIterator<Item = String>>(&self, args: I) -> Result<()> {
-        let mut parser = DefaultParser::default();
-        let args = args.into_iter().collect::<Vec<String>>();
-        let result = parser.parse(&self.context, args);
-
+    /// Executes this command-line app with a custom tokenizer passing the specified arguments.
+    pub fn exec_with_tokenizer<T, S, I>(&mut self, tokenizer: &mut T, args: I) -> Result<()>
+        where P: Parser<I>,
+              T: Tokenizer<I>,
+              S: Borrow<str>,
+              I: IntoIterator<Item = S> {
+        let result = self.parser.parse(&self.context, tokenizer, args);
         let parse_result = match result {
             Ok(r) => r,
             Err(error) => return self.handle_error(error),
@@ -169,12 +190,29 @@ impl CommandLine {
         }
     }
 
-    /// Runs this command-line app.
-    ///
-    /// This is equivalent to `cmd_line.exec(std::env::args().skip(1))`.
     #[inline]
-    pub fn run(&self) -> Result<()> {
+    pub fn run_with_tokenizer<T>(&mut self, tokenizer: &mut T) -> Result<()>
+        where P: Parser<RestArgs>,
+              T: Tokenizer<RestArgs> {
+        self.exec_with_tokenizer(tokenizer, std::env::args().skip(1))
+    }
+
+    /// Runs this command-line app.
+///
+/// This is equivalent to `cmd_line.exec(std::env::args().skip(1))`.
+    #[inline]
+    pub fn run(&mut self) -> Result<()>
+        where P: Parser<RestArgs> {
         self.exec(std::env::args().skip(1))
+    }
+
+    /// Executes this command-line app and pass the specified arguments as `&str`.
+    ///
+    /// This forwards the call to `CommandLine::exec` by slit the `str`.
+    #[inline]
+    pub fn exec_str(&mut self, args: &str) -> Result<()>
+        where P: Parser<Vec<String>> {
+        self.exec(split_into_args(args))
     }
 
     fn handle_error(&self, error: Error) -> Result<()> {
@@ -218,11 +256,6 @@ impl CommandLine {
         } else {
             false
         }
-    }
-
-    fn display_help(&self, args: Option<&Argument>) -> Result<()>{
-        print!("{}", self.get_message(args, MessageKind::Help)?);
-        Ok(())
     }
 
     fn get_message(&self, args: Option<&Argument>, kind: MessageKind) -> Result<String> {
@@ -273,6 +306,11 @@ impl CommandLine {
         };
 
         Ok(output)
+    }
+
+    fn display_help(&self, args: Option<&Argument>) -> Result<()>{
+        print!("{}", self.get_message(args, MessageKind::Help)?);
+        Ok(())
     }
 
     fn display_suggestions(&self, parse_error: ParseError) -> Error {
@@ -339,11 +377,12 @@ fn prefix_option(context: &Context, options: &crate::option::OptionList, name: S
     name
 }
 
-impl Debug for CommandLine {
+impl<P: Debug> Debug for CommandLine<P> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CommandLine")
             .field("context", &self.context)
-            .field("help", &debug_option(&self.help, "HelpCommand"))
+            .field("parser", &self.parser)
+            .field("help", &debug_option(&self.help, "HelpProvider"))
             .field("suggestions", &debug_option(&self.suggestions, "SuggestionProvider"))
             .finish()
     }
@@ -353,9 +392,9 @@ impl Debug for CommandLine {
 ///
 /// # Example
 /// ```rust
-/// use clapi::into_arg_iterator;
+/// use clapi::split_into_args;
 ///
-/// let result = into_arg_iterator("echo \"Hello World\" 123");
+/// let result = split_into_args("echo \"Hello World\" 123");
 /// assert_eq!(
 /// vec![
 ///     "echo".to_string(),
@@ -365,8 +404,8 @@ impl Debug for CommandLine {
 /// ```
 #[inline]
 #[doc(hidden)]
-pub fn into_arg_iterator(value: &str) -> Vec<String> {
-    into_arg_iterator_with_quote_escape(value, '\\')
+pub fn split_into_args(value: &str) -> Vec<String> {
+    split_into_args_with_quote_escape(value, '\\')
 }
 
 /// Split the given value `&str` into command-line args using the default
@@ -376,32 +415,32 @@ pub fn into_arg_iterator(value: &str) -> Vec<String> {
 ///
 /// # Example
 /// ```rust
-/// use clapi::into_platform_arg_iterator;
+/// use clapi::split_into_platform_args;
 ///
 /// // on windows
 /// if cfg!(windows){
-///     let result = into_platform_arg_iterator("echo ^\"Hello^\"");
+///     let result = split_into_platform_args("echo ^\"Hello^\"");
 ///     assert_eq!(vec!["echo".to_string(), "\"Hello\"".to_string()], result);
 /// } else {
-///     let result = into_platform_arg_iterator("echo \\\"Hello\\\"");
+///     let result = split_into_platform_args("echo \\\"Hello\\\"");
 ///     assert_eq!(vec!["echo".to_string(), "\"Hello\"".to_string()], result);
 /// }
 /// ```
 #[inline]
 #[doc(hidden)]
-pub fn into_platform_arg_iterator(value: &str) -> Vec<String> {
+pub fn split_into_platform_args(value: &str) -> Vec<String> {
     #[cfg(target_os = "windows")]
     const QUOTE_ESCAPE: char = '^';
     #[cfg(not(target_os = "windows"))]
     const QUOTE_ESCAPE: char = '\\';
 
-    into_arg_iterator_with_quote_escape(value, QUOTE_ESCAPE)
+    split_into_args_with_quote_escape(value, QUOTE_ESCAPE)
 }
 
 /// Split the given value `&str` into command-line args
 /// using the specified `quote_escape`.
 #[doc(hidden)]
-pub fn into_arg_iterator_with_quote_escape(value: &str, quote_escape: char) -> Vec<String> {
+pub fn split_into_args_with_quote_escape(value: &str, quote_escape: char) -> Vec<String> {
     const DOUBLE_QUOTE: char = '"';
 
     let mut result = Vec::new();
@@ -452,7 +491,7 @@ mod tests {
 
     #[test]
     fn into_arg_iterator_test1() {
-        let args = into_arg_iterator("create file \"hello_world.txt\"");
+        let args = split_into_args("create file \"hello_world.txt\"");
         assert_eq!("create", args[0]);
         assert_eq!("file", args[1]);
         assert_eq!("hello_world.txt", args[2]);
@@ -460,7 +499,7 @@ mod tests {
 
     #[test]
     fn into_arg_iterator_test2() {
-        let args = into_arg_iterator("echo --times 5 \\\"bla\\\"");
+        let args = split_into_args("echo --times 5 \\\"bla\\\"");
         assert_eq!("echo", args[0]);
         assert_eq!("--times", args[1]);
         assert_eq!("5", args[2]);
@@ -469,7 +508,7 @@ mod tests {
 
     #[test]
     fn into_arg_iterator_test3() {
-        let args = into_arg_iterator("print\t --times:3 \"hello world\"");
+        let args = split_into_args("print\t --times:3 \"hello world\"");
         assert_eq!("print", args[0]);
         assert_eq!("--times:3", args[1]);
         assert_eq!("hello world", args[2]);

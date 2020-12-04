@@ -25,13 +25,13 @@
 //! use clapi::macros::*;
 //!
 //! // We need to mark the app entry point as a `command`
-//! #[command(version="version 1.0")]
+//! #[command(version=1.0)]
 //! fn main(){ }
 //!
 //! // Mark a function as a `subcommand` and defines if `option` and `arg`
 //! #[subcommand]
-//! #[option(name="times", alias="t", default=1)]
-//! #[arg(name="values")]
+//! #[option(times, alias="t", default=1)]
+//! #[arg(values)]
 //! fn repeat(times: u32, values: Vec<String>){
 //!     let values = values.join(" ");
 //!     for _ in 0..times {

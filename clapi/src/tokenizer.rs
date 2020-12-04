@@ -70,9 +70,9 @@ pub trait Tokenizer<Args> {
 /// A default implementation of the `Tokenizer` trait.
 #[derive(Default, Debug)]
 pub struct DefaultTokenizer;
-impl<'a, S, I> Tokenizer<I> for DefaultTokenizer
+impl<S, I> Tokenizer<I> for DefaultTokenizer
 where
-    S: Borrow<str> + 'a,
+    S: Borrow<str>,
     I: IntoIterator<Item = S>,
 {
     fn tokenize(&mut self, context: &Context, args: I) -> Result<Vec<Token>> {
@@ -268,12 +268,12 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Command, into_arg_iterator, Argument, CommandOption};
+    use crate::{Command, split_into_args, Argument, CommandOption};
 
     fn tokenize(command: Command, value: &str) -> crate::Result<Vec<Token>>{
         let mut tokenizer = DefaultTokenizer::default();
         let context = Context::new(command);
-        tokenizer.tokenize(&context, into_arg_iterator(value))
+        tokenizer.tokenize(&context, split_into_args(value))
     }
 
     #[test]
