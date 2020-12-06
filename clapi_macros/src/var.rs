@@ -34,6 +34,7 @@ impl ArgLocalVar {
             VarSource::Args(arg_name) => self.get_args_source(arg_name),
             VarSource::Opts(arg_name) => self.get_opts_source(arg_name),
             VarSource::OptBool => {
+                // todo: This only check flags, also need accepts bool values
                 let opt_name = quote_expr!(self.name);
                 quote! { opts.contains(#opt_name) }
             }

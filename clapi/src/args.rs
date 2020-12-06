@@ -7,6 +7,7 @@ use linked_hash_set::LinkedHashSet;
 use validator::Validator;
 use crate::{ArgCount, Error, ErrorKind};
 use crate::error::Result;
+use std::borrow::Borrow;
 
 /// Represents the arguments of an `option` or `command`.
 #[derive(Clone)]
@@ -200,7 +201,7 @@ impl Argument {
         assert!(self.values.is_empty(), "already contains values");
         assert!(self.default_values.is_empty(), "default values are already set");
         assert!(
-            self.arg_count.contains(values.len()),
+            self.arg_count.takes(values.len()),
             "invalid value count expected {} but was {}",
             self.arg_count,
             values.len()
@@ -237,7 +238,7 @@ impl Argument {
             .map(|s| s.to_string())
             .collect::<Vec<String>>();
 
-        if !self.arg_count.contains(values.len()) {
+        if !self.arg_count.takes(values.len()) {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
                 format!("`{}` expect {} but was {}", self.name, self.arg_count, values.len()),
@@ -375,7 +376,7 @@ pub fn try_parse_values<T: 'static>(values: Vec<String>) -> crate::Result<Vec<T>
 {
     let mut ret = Vec::new();
     for value in values {
-        ret.push(crate::try_parse_str(&value)?);
+        ret.push(crate::try_parse_str(value.borrow())?);
     }
     Ok(ret)
 }
@@ -420,13 +421,29 @@ impl ArgumentList {
         self.inner.iter().find(|a| a.name == arg_name.as_ref())
     }
 
-    /// Returns a `Vec` with the `String` values of the arguments of this `ArgumentList`.
+    /// Returns the `String` values of all the arguments of this `ArgumentList`.
     pub fn get_raw_args(&self) -> Vec<String>{
+        self.inner.iter()
+            .flat_map(|arg| arg.get_values())
+            .cloned()
+            .collect::<Vec<String>>()
+    }
+
+    /// Returns the values of all the arguments of this `ArgumentList` and convert them to type `T`.
+    ///
+    /// # Error
+    /// If one of the value cannot be parse to `T`.
+    pub fn get_raw_args_as_type<T: 'static>(&self) -> Result<Vec<T>>
+        where
+            T: std::str::FromStr,
+            <T as std::str::FromStr>::Err: std::fmt::Display {
         let mut ret = Vec::new();
-        for arg in &self.inner {
-            ret.extend(arg.values.clone());
+        for arg in self.inner.iter() {
+            for value in arg.get_values() {
+                ret.push(try_parse_str(value)?);
+            }
         }
-        ret
+        Ok(ret)
     }
 
     /// Returns `true` if contains an argument with the given `name`.
@@ -651,5 +668,21 @@ mod tests {
         assert_eq!(arg.get_arg_count(), ArgCount::more_than(1));
         assert!(arg.get_validator().is_some());
         assert_eq!(arg.get_default_values()[0].clone(), "1".to_owned());
+    }
+
+    #[test]
+    fn argument_list_test(){
+        let mut arg_list = ArgumentList::new();
+        let mut colors = Argument::new("color");
+        colors.set_values(vec!["red"]).unwrap();
+
+        let mut numbers = Argument::one_or_more("number");
+        numbers.set_values(vec![1, 2, 3]).unwrap();
+
+        assert!(arg_list.add(colors.clone()));
+        assert!(!arg_list.add(colors));
+        assert!(arg_list.add(numbers));
+        assert_eq!(arg_list.len(), 2);
+        assert_eq!(arg_list.get_raw_args(), vec!["red".to_owned(), "1".to_owned(), "2".to_owned(), "3".to_owned()]);
     }
 }

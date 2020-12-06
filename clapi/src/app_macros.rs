@@ -49,112 +49,41 @@ macro_rules! app {
     };
 
     // Handler
-    (@command ($builder:expr) (handler (...$name:ident: Vec<$args_type:ty>) => $block:block ) $($tt:tt)*) => {
+    (@command ($builder:expr) (handler ($options:ident, $arguments:ident) => $block:block ) $($tt:tt)*) => {
         $crate::app!{
-            @command ($builder.handler(|opts, args|{
-                let $name = $crate::try_parse_values::<$args_type>(args.get_raw_args())?;
+            @command ($builder.handler(|$options, $arguments|{
                 $block
                 Ok(())
             })) $($tt)*
         }
     };
 
-    (@command ($builder:expr) (handler (...$name:ident: &[$ty:ty]) => $block:block ) $($tt:tt)*) => {
+    (@command ($builder:expr) (handler (...$($arg_name:ident: $arg_type:ty),+) => $block:block ) $($tt:tt)*) => {
         $crate::app!{
-            @command ($builder.handler(|opts, args|{
-                let temp = $crate::try_parse_values::<$ty>(args.get_raw_args())?;
-                let $name = temp.as_slice();
-                $block
-                Ok(())
-            })) $($tt)*
-        }
-    };
-
-    (@command ($builder:expr) (handler (...$name:ident: $ty:ty) => $block:block ) $($tt:tt)*) => {
-        $crate::app!{
-            @command ($builder.handler(|opts, args|{
-                let $name = match $crate::try_parse_values::<$ty>(args.get_raw_args()){
-                    Err(error) => { Err(error) },
-                    Ok(x) if x.len() == 1 => { Ok(x[0]) },
-                    Ok(x) => {
-                        Err($crate::Error::new(
-                                $crate::ErrorKind::InvalidArgumentCount,
-                                format!("`{}` expect 1 value but was {}", stringify!($name), x.len())
-                            )
-                        )
-                    },
-                }?;
-                $block
-                Ok(())
-            })) $($tt)*
-        }
-    };
-
-    (@command ($builder:expr) (handler ($($name:ident: $ty:ty),+ $(,...$args_name:ident: Vec<$args_type:ty>)?) => $block:block ) $($tt:tt)*) => {
-        $crate::app!{
-            @command ($builder.handler(|opts, args|{
-                #[cfg(debug_assertions)]
-                fn assert_non_duplicate_arguments($($name: $ty),+ $(,$args_name: Vec<$args_type>)?){}
-
+            @command ($builder.handler(|options, arguments|{
                 $(
-                    let $name = opts.get_arg(stringify!($name)).unwrap().convert::<$ty>()?;
+                    let $arg_name = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
                 )+
-
-                $(
-                    let $args_name = $crate::try_parse_values::<$args_type>(args.get_raw_args())?;
-                )?
-
                 $block
                 Ok(())
             })) $($tt)*
         }
     };
 
-    (@command ($builder:expr) (handler ($($name:ident: $ty:ty),+ $(,...$args_name:ident: &[$args_type:ty])?) => $block:block ) $($tt:tt)*) => {
+    (@command ($builder:expr) (handler ($($name:ident : $ty:ty)+ $(,...$($arg_name:ident: $arg_type:ty),+)?) => $block:block ) $($tt:tt)*) => {
         $crate::app!{
-            @command ($builder.handler(|opts, args|{
+            @command ($builder.handler(|options, arguments|{
                 #[cfg(debug_assertions)]
-                fn assert_non_duplicate_arguments($($name: $ty),+ $(,$args_name: &[$args_type])?){}
+                fn assert_non_duplicate_arguments($($name: $ty),+ $(,$($arg_name: $arg_type),+)?){}
 
                 $(
-                    let $name = opts.get_arg(stringify!($name)).unwrap().convert::<$ty>()?;
+                    let $name = $crate::declare_option_var!(options, $name: $ty);
                 )+
-
                 $(
-                    let temp = $crate::try_parse_values::<$args_type>(args.get_raw_args())?;
-                    let $args_name = temp.as_slice();
+                    $(
+                        let $arg_name = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
+                    )+
                 )?
-
-                $block
-                Ok(())
-            })) $($tt)*
-        }
-    };
-
-    (@command ($builder:expr) (handler ($($name:ident: $ty:ty),+ $(,...$args_name:ident: $args_type:ty)?) => $block:block ) $($tt:tt)*) => {
-        $crate::app!{
-            @command ($builder.handler(|opts, args|{
-                #[cfg(debug_assertions)]
-                fn assert_non_duplicate_arguments($($name: $ty),+ $(,$args_name: $args_type)?){}
-
-                $(
-                    let $name = opts.get_arg(stringify!($name)).unwrap().convert::<$ty>()?;
-                )+
-
-                $(
-                    let $args_name = match $crate::try_parse_values::<$args_type>(args.get_raw_args()){
-                        Err(error) => { Err(error) },
-                        Ok(x) if x.len() == 1 => { Ok(x[0]) },
-                        Ok(x) => {
-                            Err($crate::Error::new(
-                                    $crate::ErrorKind::InvalidArgumentCount,
-                                format!("`{}` expect 1 value but was {}", stringify!($args_name), x.len())
-                                )
-                            )
-                        },
-                    }?;
-                )?
-
                 $block
                 Ok(())
             })) $($tt)*
@@ -377,7 +306,6 @@ macro_rules! crate_version {
     };
 }
 
-////
 #[macro_export]
 macro_rules! debug_app {
     // Here start
@@ -436,72 +364,10 @@ macro_rules! debug_app {
     };
 
     // Handler
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (handler (...$name:ident: Vec<$args_type:ty>) => $block:block ) $($tt:tt)*) => {
+    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (handler ($options:ident, $arguments:ident) => $block:block ) $($tt:tt)*) => {
         $crate::debug_app!{
             @command ($builder.handler({
-            $type_checker.assert_same_type::<$ty>(&$command_name, stringify!($name));
-            |opts, args|{
-                let $name = $crate::try_parse_values::<$args_type>(args.get_raw_args())?;
-                $block
-                Ok(())
-            }
-            }), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (handler (...$name:ident: &[$ty:ty]) => $block:block ) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @command ($builder.handler({
-            $type_checker.assert_same_type::<$ty>(&$command_name, stringify!($name));
-            |opts, args|{
-                let temp = $crate::try_parse_values::<$ty>(args.get_raw_args())?;
-                let $name = temp.as_slice();
-                $block
-                Ok(())
-            }
-            }), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (handler (...$name:ident: $ty:ty) => $block:block ) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @command ($builder.handler({
-            $type_checker.assert_same_type::<$ty>(&$command_name, stringify!($name));
-            |opts, args|{
-                let $name = match $crate::try_parse_values::<$ty>(args.get_raw_args()){
-                    Err(error) => { Err(error) },
-                    Ok(x) if x.len() == 1 => { Ok(x[0]) },
-                    Ok(x) => {
-                        Err($crate::Error::new(
-                                $crate::ErrorKind::InvalidArgumentCount,
-                                format!("`{}` expect 1 value but was {}", stringify!($name), x.len())
-                            )
-                        )
-                    },
-                }?;
-                $block
-                Ok(())
-            }
-            }), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (handler ($($name:ident: $ty:ty),+ $(,...$args_name:ident: Vec<$args_type:ty>)?) => $block:block ) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @command ($builder.handler({
-                $($type_checker.assert_same_type::<$ty>(&$command_name, stringify!($name));)+
-                $($type_checker.assert_same_type::<$args_type>(&$command_name, stringify!($args_name));)?
-                |opts, args|{
-                    #[cfg(debug_assertions)]
-                    fn assert_non_duplicate_arguments($($name: $ty),+ $(,$args_name: Vec<$args_type>)?){}
-
-                    $(
-                        let $name = opts.get_arg(stringify!($name)).unwrap().convert::<$ty>()?;
-                    )+
-                    $(
-                        let $args_name = $crate::try_parse_values::<$args_type>(args.get_raw_args())?;
-                    )?
-
+                |$options, $arguments|{
                     $block
                     Ok(())
                 }
@@ -509,23 +375,15 @@ macro_rules! debug_app {
         }
     };
 
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (handler ($($name:ident: $ty:ty),+ $(,...$args_name:ident: &[$args_type:ty])?) => $block:block ) $($tt:tt)*) => {
+    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (handler (...$($arg_name:ident: $arg_type:ty),+) => $block:block ) $($tt:tt)*) => {
         $crate::debug_app!{
             @command ($builder.handler({
-                $($type_checker.assert_same_type::<$ty>(&$command_name, stringify!($name));)+
-                $($type_checker.assert_same_type::<$args_type>(&$command_name, stringify!($args_name));)?
-                |opts, args|{
-                    #[cfg(debug_assertions)]
-                    fn assert_non_duplicate_arguments($($name: $ty),+ $(,$args_name: &[$args_type])?){}
+                $($type_checker.assert_same_type::<$crate::var_type!($arg_type)>(&$command_name, stringify!($arg_name));)+
 
+                |options, arguments|{
                     $(
-                        let $name = opts.get_arg(stringify!($name)).unwrap().convert::<$ty>()?;
+                        let $arg_name = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
                     )+
-                    $(
-                        let temp = $crate::try_parse_values::<$args_type>(args.get_raw_args())?;
-                        let $args_name = temp.as_slice();
-                    )?
-
                     $block
                     Ok(())
                 }
@@ -533,32 +391,24 @@ macro_rules! debug_app {
         }
     };
 
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (handler ($($name:ident: $ty:ty),+ $(,...$args_name:ident: $args_type:ty)?) => $block:block ) $($tt:tt)*) => {
+    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (handler ($($name:ident : $ty:ty)+ $(,...$($arg_name:ident: $arg_type:ty),+)?) => $block:block ) $($tt:tt)*) => {
         $crate::debug_app!{
             @command ($builder.handler({
-                $($type_checker.assert_same_type::<$ty>(&$command_name, stringify!($name));)+
-                $($type_checker.assert_same_type::<$args_type>(&$command_name, stringify!($args_name));)?
-                |opts, args|{
+                $($type_checker.assert_same_type::<$crate::var_type!($ty)>(&$command_name, stringify!($name));)+
+                $($($type_checker.assert_same_type::<$crate::var_type!($arg_type)>(&$command_name, stringify!($arg_name));)+)?
+
+                |options, arguments|{
                     #[cfg(debug_assertions)]
-                    fn assert_non_duplicate_arguments($($name: $ty),+ $(,$args_name: $args_type)?){}
+                    fn assert_non_duplicate_arguments($($name: $ty),+ $(,$($arg_name: $arg_type),+)?){}
 
                     $(
-                        let $name = opts.get_arg(stringify!($name)).unwrap().convert::<$ty>()?;
+                        let $name = $crate::declare_option_var!(options, $name: $ty);
                     )+
                     $(
-                        let $args_name = match $crate::try_parse_values::<$args_type>(args.get_raw_args()){
-                            Err(error) => { Err(error) },
-                            Ok(x) if x.len() == 1 => { Ok(x[0]) },
-                            Ok(x) => {
-                                Err($crate::Error::new(
-                                        $crate::ErrorKind::InvalidArgumentCount,
-                                    format!("`{}` expect 1 value but was {}", stringify!($args_name), x.len())
-                                    )
-                                )
-                            },
-                        }?;
+                        $(
+                            let $arg_name = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
+                        )+
                     )?
-
                     $block
                     Ok(())
                 }
@@ -783,7 +633,7 @@ pub mod type_checker {
     use std::collections::HashMap;
     use std::any::{TypeId, type_name};
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug)]
     pub struct CommandArgumentTypeChecker {
         map: HashMap<String, HashMap<String, Type>>,
     }

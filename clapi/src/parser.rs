@@ -94,7 +94,6 @@ where S: Borrow<str>,
                                 // We add the last option
                                 let mut options = command_options.clone();
                                 options.add(option.clone());
-
                                 Err(Error::new_parse_error(
                                     error,
                                     ParseResult::new(

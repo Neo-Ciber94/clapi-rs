@@ -352,4 +352,25 @@ mod tests{
         assert!(matches!(err_kind("data get 0"), ErrorKind::InvalidArgumentCount));
         assert!(matches!(err_kind("data set \"Hello World\" Bye"), ErrorKind::InvalidArgumentCount));
     }
+
+    #[test]
+    fn parse_result_option_bool_flag(){
+        let command = Command::new("My App")
+            .option(CommandOption::new("enable")
+                .arg(Argument::new("enable")
+                    .arg_count(0..=1)
+                    .validator(parse_validator::<bool>())));
+
+        let res1 = parse_with("--enable true", command.clone()).unwrap();
+        assert_eq!(res1.get_option("enable").unwrap().get_arg().unwrap().get_values()[0], "true".to_owned());
+
+        let res2 = parse_with("--enable false", command.clone()).unwrap();
+        assert_eq!(res2.get_option("enable").unwrap().get_arg().unwrap().get_values()[0], "false".to_owned());
+
+        let res3 = parse_with("--enable", command.clone()).unwrap();
+        assert!(res3.contains_option("enable"));
+
+        let res4 = parse_with("", command.clone()).unwrap();
+        assert!(!res4.contains_option("enable"));
+    }
 }

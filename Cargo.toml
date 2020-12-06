@@ -1,2 +1,2 @@
 [workspace]
-members=["clapi", "clapi_macros", "example"]
+members=["clapi", "clapi_macros", "clapi_macros_utils", "example"]

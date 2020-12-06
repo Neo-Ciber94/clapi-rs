@@ -96,3 +96,32 @@ pub mod macros {
 
 #[cfg(feature="macros")]
 pub use macros::*;
+
+//pub extern crate clapi_macros_utils;
+pub mod macro_utils {
+    pub extern crate clapi_macros_utils;
+
+    #[macro_export]
+    macro_rules! declare_option_var {
+        ($options:ident, $name:ident: $ty:ty) => {
+            $crate::macro_utils::clapi_macros_utils::__declare_option_var!($options, $name: $ty)
+        };
+    }
+
+    #[macro_export]
+    macro_rules! declare_argument_var {
+        ($arguments:ident, $name:ident: $ty:ty) => {
+            $crate::macro_utils::clapi_macros_utils::__declare_argument_var!($arguments, $name: $ty)
+        };
+    }
+
+    #[macro_export]
+    macro_rules! var_type {
+        ($ty:ty) => {
+            $crate::macro_utils::clapi_macros_utils::__var_type!($ty)
+        };
+    }
+}
+
+#[doc(hidden)]
+pub use macro_utils::*;

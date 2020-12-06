@@ -71,16 +71,22 @@ impl ArgCount {
         self.max
     }
 
-    /// Returns `true` if this accept the provided number of arguments.
+    /// Returns `true` if this takes the provided number of arguments.
     #[inline]
-    pub fn contains(&self, value: usize) -> bool {
-        (self.min..=self.max).contains(&value)
+    pub const fn takes(&self, count: usize) -> bool {
+        count >= self.min && count <= self.max
     }
 
     /// Returns `true` if this takes arguments.
     #[inline]
     pub const fn takes_args(&self) -> bool {
         self.max != 0
+    }
+
+    /// Returns `true` if this takes no arguments.
+    #[inline]
+    pub const fn takes_no_args(&self) -> bool {
+        self.min == 0 && self.max == 0
     }
 
     /// Returns `true` if this takes an exact number of arguments.
@@ -91,8 +97,8 @@ impl ArgCount {
 
     /// Returns `true` if this takes exactly the specified number of arguments.
     #[inline]
-    pub fn takes_exactly(&self, arg_count: usize) -> bool {
-        self.min == arg_count && self.max == arg_count
+    pub const fn takes_exactly(&self, count: usize) -> bool {
+        self.min == count && self.max == count
     }
 }
 
@@ -127,10 +133,6 @@ impl Into<ArgCount> for RangeFull {
         ArgCount::any()
     }
 }
-
-// 0..0 -> ArgCount { 0, 0 }
-// 0..1 -> ArgCount { 0, 0 }
-// 1..0 -> ArgCount { 1, -1 } Error
 
 macro_rules! impl_into_for_unsigned_int {
     ($($target:ident),*) => {
@@ -249,10 +251,10 @@ mod tests {
         assert_eq!(arg_count.min(), 2);
         assert_eq!(arg_count.max(), 5);
         assert!(arg_count.takes_args());
-        assert!(arg_count.contains(2));
-        assert!(arg_count.contains(3));
-        assert!(arg_count.contains(4));
-        assert!(arg_count.contains(5));
+        assert!(arg_count.takes(2));
+        assert!(arg_count.takes(3));
+        assert!(arg_count.takes(4));
+        assert!(arg_count.takes(5));
 
     }
 
@@ -348,10 +350,10 @@ mod tests {
     #[test]
     fn contains_test() {
         let arg_count = ArgCount::new(0, 3);
-        assert!(arg_count.contains(0));
-        assert!(arg_count.contains(1));
-        assert!(arg_count.contains(2));
-        assert!(arg_count.contains(3));
+        assert!(arg_count.takes(0));
+        assert!(arg_count.takes(1));
+        assert!(arg_count.takes(2));
+        assert!(arg_count.takes(3));
     }
 
     #[test]
