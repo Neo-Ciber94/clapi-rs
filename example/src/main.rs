@@ -17,30 +17,8 @@ use clapi::*;
 //     }
 // }
 
-// #[command(version=1.0)]
-// #[option(value, description="The value", default="Hello World")]
-// fn main(value: String) -> clapi::Result<()> {
-//     println!("{:?}", value);
-//     Ok(())
-// }
-
-
-fn main(){
-    let mut cli = debug_app! { =>
-        (@arg from)
-        (@arg to)
-        (@option times =>
-            (@arg times =>
-                (count => 1..)
-                (type => i64)
-            )
-        )
-        (@option enable =>
-            (@arg enable)
-        )
-        (handler (times: Option<i64>, ...from: String, to: String) => {
-            println!("{:?}, from: {}, to: {}", times, from, to);
-        })
-    };
-    cli.run().unwrap();
+#[command(version=1.0)]
+fn main(enable: bool) -> clapi::Result<()> {
+    println!("enable: {:?}", enable);
+    Ok(())
 }

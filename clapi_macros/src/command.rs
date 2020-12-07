@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::fmt::Display;
 use syn::export::{Formatter, ToTokens};
-use syn::{Attribute, AttributeArgs, ItemFn, ReturnType, Stmt, Item, Type};
+use syn::{Attribute, AttributeArgs, ItemFn, ReturnType, Stmt, Item, Type, PatType};
 
 use macro_attribute::NameValueAttribute;
 
@@ -308,6 +308,14 @@ impl ToTokens for CommandData {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct FnArgData {
+    pub arg_name: String,
+    pub pat_type: PatType,
+    pub attribute: Option<NameValueAttribute>,
+    pub is_option: bool,
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct FnName {
     path: Option<String>,
@@ -356,6 +364,17 @@ pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {
     item_fn
 }
 
+pub fn is_option_bool_flag(fn_arg: &FnArgData) -> bool {
+    if let Some(attr) = &fn_arg.attribute {
+        fn_arg.pat_type.ty.is_bool()
+            && !(attr.contains_name(attr::MIN)
+            || attr.contains_name(attr::MAX)
+            || attr.contains_name(attr::DEFAULT))
+    } else {
+        fn_arg.pat_type.ty.is_bool()
+    }
+}
+
 mod cmd {
     use std::convert::TryFrom;
     use std::path::{Path, PathBuf};
@@ -366,20 +385,13 @@ mod cmd {
     use macro_attribute::{MacroAttribute, NameValueAttribute, Value, MetaItem};
 
     use crate::args::ArgData;
-    use crate::command::{drop_command_attributes, CommandData, FnName};
+    use crate::command::{drop_command_attributes, CommandData, FnName, FnArgData, is_option_bool_flag};
     use crate::option::OptionData;
     use crate::utils::{pat_type_to_string, path_to_string};
     use crate::var::{ArgLocalVar, VarSource};
     use crate::{attr, AttrQuery};
     use crate::TypeExtensions;
-
-    #[derive(Debug)]
-    struct CommandFnArg {
-        name: String,
-        pat_type: PatType,
-        attribute: Option<NameValueAttribute>,
-        is_option: bool,
-    }
+    use proc_macro2::Span;
 
     // Create a new command from an `ItemFn`
 
@@ -441,10 +453,10 @@ mod cmd {
         // Pass function arguments in order
         for fn_arg in &fn_args {
             if fn_arg.is_option {
-                let source = if is_implicit_bool_arg(fn_arg) {
+                let source = if is_option_bool_flag(fn_arg) {
                     VarSource::OptBool
                 } else {
-                    VarSource::Opts(fn_arg.name.clone())
+                    VarSource::Opts(fn_arg.arg_name.clone())
                 };
                 command.set_var(ArgLocalVar::new(fn_arg.pat_type.clone(), source));
             } else {
@@ -474,7 +486,7 @@ mod cmd {
 
                 command.set_var(ArgLocalVar::new(
                     fn_arg.pat_type.clone(),
-                    VarSource::Args(fn_arg.name.clone()),
+                    VarSource::Args(fn_arg.arg_name.clone()),
                 ));
             }
         }
@@ -483,9 +495,9 @@ mod cmd {
         if arg_count > 0 {
             for fn_arg in fn_args.iter().filter(|f| !f.is_option) {
                 let arg = if fn_arg.attribute.is_some() {
-                    ArgData::new(fn_arg.attribute.as_ref(), &fn_arg.pat_type)
+                    ArgData::new(fn_arg)
                 }  else {
-                    ArgData::with_name(fn_arg.name.clone())
+                    ArgData::with_name(fn_arg.arg_name.clone())
                 };
 
                 command.set_args(arg)
@@ -494,8 +506,8 @@ mod cmd {
 
         // Add options
         for fn_arg in fn_args.iter().filter(|n| n.is_option) {
-            let mut option = OptionData::new(fn_arg.name.clone());
-            let mut args = ArgData::new(None, &fn_arg.pat_type);
+            let mut option = OptionData::new(fn_arg.arg_name.clone());
+            let mut args = ArgData::new(fn_arg);
 
             if let Some(att) = &fn_arg.attribute {
                 for (key, value) in att {
@@ -548,14 +560,30 @@ mod cmd {
                 }
             }
 
-            // An argument is considered implicit bool if:
+            // A function argument is considered an option bool flag if:
             // - Is bool type
             // - Don't contains `min`, `max` or `default`
-            if !is_implicit_bool_arg(fn_arg) {
-                option.set_args(args);
+            if is_option_bool_flag(fn_arg) {
+                use syn::Lit;
+                use syn::LitBool;
+
+                // An option bool behaves like the follow:
+                // --flag=true      (true)
+                // --flag=false     (false)
+                // --flag           (true)
+                // [no option]      (false)
+
+                // Is needed to set `false` as default value
+                // to allow the option to be marked as no `required`
+                let lit = LitBool { value: false, span: Span::call_site() };
+                args.set_default_values(vec![Lit::Bool(lit)]);
+                args.set_min(0);
+                args.set_max(1);
             }
 
+            option.set_args(args);
             command.set_option(option);
+
         }
 
         // Add children
@@ -611,7 +639,7 @@ mod cmd {
         ret
     }
 
-    fn get_fn_args(item_fn: &ItemFn) -> Vec<CommandFnArg> {
+    fn get_fn_args(item_fn: &ItemFn) -> Vec<FnArgData> {
         fn get_fn_arg_ident_name(fn_arg: &FnArg) -> (String, PatType) {
             if let FnArg::Typed(pat_type) = &fn_arg {
                 if let syn::Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
@@ -652,7 +680,7 @@ mod cmd {
                 .map(|value| value.as_string_literal().expect("`name` is expected to be a string literal"))
                 .unwrap_or(arg_name);
 
-            ret.push(CommandFnArg { name, pat_type, attribute, is_option });
+            ret.push(FnArgData { arg_name: name, pat_type, attribute, is_option });
         }
 
         ret
@@ -673,17 +701,6 @@ mod cmd {
         };
 
         (name, name_value_attribute)
-    }
-
-    fn is_implicit_bool_arg(fn_arg: &CommandFnArg) -> bool {
-        if let Some(attr) = &fn_arg.attribute {
-            fn_arg.pat_type.ty.is_bool()
-                && !(attr.contains_name(attr::MIN)
-                    || attr.contains_name(attr::MAX)
-                    || attr.contains_name(attr::DEFAULT))
-        } else {
-            fn_arg.pat_type.ty.is_bool()
-        }
     }
 
     fn assert_is_non_vec_or_slice(ty: &Type, pat_type: &PatType) {

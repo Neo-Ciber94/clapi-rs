@@ -20,7 +20,6 @@ pub struct CommandLine<P> {
     parser: P,
     help: Option<Box<dyn HelpProvider>>,
     suggestions: Option<Box<dyn SuggestionProvider>>,
-    show_help_when_not_handler: bool,
 }
 
 impl CommandLine<DefaultParser>{
@@ -37,13 +36,13 @@ impl CommandLine<DefaultParser>{
 }
 
 impl<P> CommandLine<P> {
+    /// Constructs a new `CommandLine` with the given `parser`.
     pub fn with_parser(context: Context, parser: P) -> Self {
         CommandLine {
             context,
             parser,
             help: None,
             suggestions: None,
-            show_help_when_not_handler: true,
         }
     }
 
@@ -65,12 +64,6 @@ impl<P> CommandLine<P> {
     /// Returns the `HelpProvider` used by this command-line or `None` if not set.
     pub fn help(&self) -> Option<&Box<dyn HelpProvider>> {
         self.help.as_ref()
-    }
-
-    /// Returns `true` if this command-line will call the `HelpCommand` if the handler
-    /// of the called command is not specified.
-    pub fn show_help_when_not_handler(&self) -> bool {
-        self.show_help_when_not_handler
     }
 
     /// Returns the `SuggestionProvider` used by this command-line.
@@ -107,13 +100,6 @@ impl<P> CommandLine<P> {
             }
         }
         self.help = Some(Box::new(help));
-        self
-    }
-
-    /// Specify if this command-line will call the `HelpCommand` when the called command
-    /// handler is not specified.
-    pub fn set_show_help_when_no_handler(mut self, show_help: bool) -> Self {
-        self.show_help_when_not_handler = show_help;
         self
     }
 
@@ -178,15 +164,8 @@ impl<P> CommandLine<P> {
             // Calls the handler and pass the arguments
             (*handler)(options, args)
         } else {
-            if self.show_help_when_not_handler {
-                self.display_help(None)
-            } else {
-                // todo: panics instead of return error?
-                Err(Error::new(
-                    ErrorKind::Other,
-                    format!("No handler specified for `{}`", command.get_name()),
-                ))
-            }
+            // Shows a help message if there is no handler
+            self.display_help(None)
         }
     }
 
@@ -359,8 +338,23 @@ impl<P> CommandLine<P> {
     }
 }
 
+impl<P: Debug> Debug for CommandLine<P> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CommandLine")
+            .field("context", &self.context)
+            .field("parser", &self.parser)
+            .field("help", &debug_option(&self.help, "HelpProvider"))
+            .field("suggestions", &debug_option(&self.suggestions, "SuggestionProvider"))
+            .finish()
+    }
+}
+
+/// Type of the suggestion message of the `CommandLine`.
 enum MessageKind{
-    Help, Usage
+    /// A help message.
+    Help,
+    /// A usage message.
+    Usage
 }
 
 fn prefix_option(context: &Context, options: &crate::option::OptionList, name: String) -> String {
@@ -375,17 +369,6 @@ fn prefix_option(context: &Context, options: &crate::option::OptionList, name: S
     }
 
     name
-}
-
-impl<P: Debug> Debug for CommandLine<P> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CommandLine")
-            .field("context", &self.context)
-            .field("parser", &self.parser)
-            .field("help", &debug_option(&self.help, "HelpProvider"))
-            .field("suggestions", &debug_option(&self.suggestions, "SuggestionProvider"))
-            .finish()
-    }
 }
 
 /// Split the given value `&str` into command-line args.

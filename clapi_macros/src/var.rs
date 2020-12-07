@@ -1,14 +1,14 @@
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::{ToTokens, Formatter};
-use syn::{GenericArgument, Pat, PatType, Type, PathArguments};
+use syn::{GenericArgument, Pat, PatType, Type};
 use syn::spanned::Spanned;
-use crate::{IteratorExt, TypeExtensions};
+use crate::TypeExtensions;
 use syn::export::fmt::Display;
 
 #[derive(Debug, Clone)]
 pub struct ArgLocalVar{
-    name: String,
+    var_name: String,
     is_mut: bool,
     source: VarSource,
     ty: ArgumentType
@@ -20,7 +20,7 @@ impl ArgLocalVar {
     }
 
     pub fn name(&self) -> &str {
-        self.name.as_str()
+        self.var_name.as_str()
     }
 
     pub fn arg_type(&self) -> &ArgumentType {
@@ -28,15 +28,26 @@ impl ArgLocalVar {
     }
 
     pub fn expand(&self) -> TokenStream {
-        let var_name = self.name.parse::<TokenStream>().unwrap();
+        let var_name = self.var_name.parse::<TokenStream>().unwrap();
         let is_mut = if self.is_mut { quote! { mut }} else { quote! {} };
         let source = match &self.source {
             VarSource::Args(arg_name) => self.get_args_source(arg_name),
             VarSource::Opts(arg_name) => self.get_opts_source(arg_name),
             VarSource::OptBool => {
-                // todo: This only check flags, also need accepts bool values
-                let opt_name = quote_expr!(self.name);
-                quote! { opts.contains(#opt_name) }
+                // Handles an option `bool` flag, which returns `true`
+                // if the option exists or if the passed value is `true` otherwise `false`.
+                let option_name = quote_expr!(self.var_name);
+                quote! {
+                    match opts.get(#option_name) {
+                        Some(option) => {
+                            match option.get_arg() {
+                                Some(arg) if arg.get_values().len() > 0 => arg.convert::<bool>()?,
+                                Some(_) | None => true,
+                            }
+                        },
+                        None => false
+                    }
+                }
             }
         };
 
@@ -64,7 +75,7 @@ impl ArgLocalVar {
     }
 
     fn get_opts_source(&self, arg_name: &str) -> TokenStream {
-        let option_name = quote_expr!(self.name);
+        let option_name = quote_expr!(self.var_name);
         let arg_name = quote_expr!(arg_name);
 
         match &self.ty {
@@ -75,7 +86,7 @@ impl ArgLocalVar {
                 quote! { opts.get(#option_name).unwrap().get_args().get(#arg_name).unwrap().convert_all::<#ty>()? }
             }
             ArgumentType::Option(ty) => {
-                let option_arg = format_ident!("{}_arg", self.name);
+                let option_arg = format_ident!("{}_arg", self.var_name);
                 quote! {
                     {
                         let #option_arg = opts.get_args(#option_name).unwrap().get(#arg_name).unwrap();
@@ -102,7 +113,7 @@ impl ArgLocalVar {
                 quote! { args.get(#arg_name).unwrap().convert_all::<#ty>()? }
             }
             ArgumentType::Option(ty) => {
-                let arg_temp = format_ident!("{}_temp", self.name);
+                let arg_temp = format_ident!("{}_temp", self.var_name);
                 quote! {
                     {
                         let #arg_temp = args.get(#arg_name).unwrap();
@@ -192,7 +203,7 @@ fn new_arg_local_var(pat_type: PatType, source: VarSource) -> ArgLocalVar {
         _ => false,
     };
 
-    ArgLocalVar { name, is_mut, source, ty, }
+    ArgLocalVar { var_name: name, is_mut, source, ty, }
 }
 
 fn get_argument_type(pat_type: &PatType) -> ArgumentType {
@@ -223,24 +234,31 @@ fn get_argument_type(pat_type: &PatType) -> ArgumentType {
 }
 
 fn generic_type(pat_type: &PatType) -> Box<Type> {
-    if let Type::Path(type_path) = pat_type.ty.as_ref() {
-        let segment = type_path.path.segments
-            .last()
-            .unwrap_or_else(|| panic_invalid_argument_type(pat_type));
+    let mut generic_arguments = pat_type.ty.generic_arguments();
+    assert_eq!(generic_arguments.len(), 1, "multiple generics defined: `{}`", pat_type.to_token_stream().to_string());
 
-        if let PathArguments::AngleBracketed(angle_bracketed_generics) = &segment.arguments {
-            let generic = angle_bracketed_generics.args
-                .iter()
-                .single()
-                .unwrap_or_else(|| panic!("multiple generics defined: `{}`", pat_type.to_token_stream().to_string()));
-
-            if let GenericArgument::Type(ty) = generic {
-                return Box::new(ty.clone())
-            }
-        }
+    if let GenericArgument::Type(ty) = generic_arguments.pop().unwrap() {
+        return Box::new(ty.clone())
+    } else {
+        panic_invalid_argument_type(pat_type)
     }
 
-    panic_invalid_argument_type(pat_type)
+    // if let Type::Path(type_path) = pat_type.ty.as_ref() {
+    //     let segment = type_path.path.segments
+    //         .last()
+    //         .unwrap_or_else(|| panic_invalid_argument_type(pat_type));
+    //
+    //     if let PathArguments::AngleBracketed(angle_bracketed_generics) = &segment.arguments {
+    //         let generic = angle_bracketed_generics.args
+    //             .iter()
+    //             .single()
+    //             .unwrap_or_else(|| panic!("multiple generics defined: `{}`", pat_type.to_token_stream().to_string()));
+    //
+    //         if let GenericArgument::Type(ty) = generic {
+    //             return Box::new(ty.clone())
+    //         }
+    //     }
+    // }
 }
 
 fn panic_invalid_argument_type(pat_type: &PatType) -> !{

@@ -62,7 +62,7 @@ macro_rules! app {
         $crate::app!{
             @command ($builder.handler(|options, arguments|{
                 $(
-                    let $arg_name = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
+                    let $arg_name : $arg_type = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
                 )+
                 $block
                 Ok(())
@@ -77,11 +77,11 @@ macro_rules! app {
                 fn assert_non_duplicate_arguments($($name: $ty),+ $(,$($arg_name: $arg_type),+)?){}
 
                 $(
-                    let $name = $crate::declare_option_var!(options, $name: $ty);
+                    let $name : $ty = $crate::declare_option_var!(options, $name: $ty);
                 )+
                 $(
                     $(
-                        let $arg_name = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
+                        let $arg_name : $arg_type = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
                     )+
                 )?
                 $block
@@ -382,7 +382,7 @@ macro_rules! debug_app {
 
                 |options, arguments|{
                     $(
-                        let $arg_name = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
+                        let $arg_name : $arg_type = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
                     )+
                     $block
                     Ok(())
@@ -402,11 +402,11 @@ macro_rules! debug_app {
                     fn assert_non_duplicate_arguments($($name: $ty),+ $(,$($arg_name: $arg_type),+)?){}
 
                     $(
-                        let $name = $crate::declare_option_var!(options, $name: $ty);
+                        let $name : $ty = $crate::declare_option_var!(options, $name: $ty);
                     )+
                     $(
                         $(
-                            let $arg_name = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
+                            let $arg_name : $arg_type = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
                         )+
                     )?
                     $block

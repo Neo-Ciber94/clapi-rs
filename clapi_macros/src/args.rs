@@ -1,10 +1,11 @@
-use crate::utils::pat_type_to_string;
-use crate::var::ArgumentType;
-use crate::{LitExtensions, TypeExtensions, attr};
-use macro_attribute::{literal_to_string, NameValueAttribute, Value};
 use proc_macro2::TokenStream;
 use quote::*;
-use syn::{Lit, PatType};
+use syn::Lit;
+use macro_attribute::{literal_to_string, Value};
+use crate::{attr, LitExtensions, TypeExtensions};
+use crate::command::{FnArgData, is_option_bool_flag};
+use crate::utils::pat_type_to_string;
+use crate::var::ArgumentType;
 
 /// Tokens for:
 ///
@@ -21,7 +22,7 @@ pub struct ArgData {
     name: String,
     min: Option<usize>,
     max: Option<usize>,
-    fn_arg: Option<NamedFnArg>,
+    fn_arg: Option<(FnArgData, ArgumentType)>,
     default_values: Vec<Lit>,
 }
 
@@ -36,8 +37,8 @@ impl ArgData {
         }
     }
 
-    pub fn new(attribute: Option<&NameValueAttribute>, pat_type: &PatType) -> ArgData {
-        new_arg_data(attribute, pat_type)
+    pub fn new(arg: &FnArgData) -> ArgData {
+        new_arg_data(arg)
     }
 
     pub fn has_default_values(&self) -> bool {
@@ -57,8 +58,8 @@ impl ArgData {
     }
 
     pub fn set_default_values(&mut self, default_values: Vec<Lit>) {
-        if let Some(arg) = self.fn_arg.as_ref() {
-            assert_same_type_default_values(&arg.name, default_values.as_slice());
+        if let Some((arg, _)) = self.fn_arg.as_ref() {
+            assert_same_type_default_values(&arg.arg_name, default_values.as_slice());
         }
         self.default_values = default_values;
     }
@@ -104,7 +105,16 @@ impl ArgData {
     }
 
     fn arg_count(&self) -> (usize, usize) {
-        let arg = if let Some(named_arg) = self.fn_arg.as_ref() {
+        fn max_arg_count_for_type(arg_type: &ArgumentType) -> usize {
+            match arg_type {
+                ArgumentType::Type(_) | ArgumentType::Option(_) => 1,
+                ArgumentType::Vec(_) | ArgumentType::Slice(_) | ArgumentType::MutSlice(_) => {
+                    usize::max_value()
+                }
+            }
+        }
+
+        let (arg, arg_type) = if let Some(named_arg) = self.fn_arg.as_ref() {
           named_arg
         } else {
             let min = self.min.expect("`min` argument count is not defined");
@@ -115,9 +125,9 @@ impl ArgData {
 
         let (min, max) = match (self.min, self.max) {
             (Some(min), Some(max)) => (min, max),
-            (Some(min), None) => (min, usize::max_value()),
+            (Some(min), None) => (min, max_arg_count_for_type(arg_type)),
             (None, Some(max)) => (0, max),
-            (None, None) => match arg.ty {
+            (None, None) => match arg_type {
                 ArgumentType::Type(_) => (1, 1),
                 ArgumentType::Option(_) => (0, 1),
                 ArgumentType::Vec(_) | ArgumentType::Slice(_) | ArgumentType::MutSlice(_) => {
@@ -128,17 +138,34 @@ impl ArgData {
 
         assert!(min <= max, "invalid arguments range `min` cannot be greater than `max`");
 
-        match arg.ty {
+        match arg_type {
             ArgumentType::Type(_) => {
-                if min != 1 || max != 1 {
-                    panic!("invalid number of arguments for `{}` expected 1", pat_type_to_string(&arg.pat_type));
+                // bool flag don't need check because are handler internally in `command`
+                if !is_option_bool_flag(arg) {
+                    if min != 1 {
+                        panic!("invalid `min` number of arguments for `{}` expected 1 but was {}",
+                               pat_type_to_string(&arg.pat_type), min);
+                    }
+
+                    if max != 1 {
+                        panic!("invalid `max` number of arguments for `{}` expected 1 but was {}",
+                               pat_type_to_string(&arg.pat_type), max);
+                    }
                 }
+
                 (min, max)
             }
             ArgumentType::Option(_) => {
-                if min != 0 || max != 1{
-                    panic!("invalid number of arguments for `{}` expected 0 or 1", pat_type_to_string(&arg.pat_type));
+                if min != 0 {
+                    panic!("invalid `min` number of arguments for `{}` expected 0 but was {}",
+                           pat_type_to_string(&arg.pat_type), min);
                 }
+
+                if max != 1{
+                    panic!("invalid `max` number of arguments for `{}` expected 1 but was {}",
+                           pat_type_to_string(&arg.pat_type), max);
+                }
+
                 (min, max)
             }
             ArgumentType::Vec(_) | ArgumentType::Slice(_) | ArgumentType::MutSlice(_) => (min, max),
@@ -152,41 +179,18 @@ impl ToTokens for ArgData {
     }
 }
 
-#[derive(Debug)]
-struct NamedFnArg {
-    name: String,
-    pat_type: PatType,
-    ty: ArgumentType,
-}
-
-impl NamedFnArg {
-    pub fn new(pat_type: &PatType) -> Self {
-        let name = if let syn::Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
-            pat_ident.ident.to_string()
-        } else {
-            unreachable!()
-        };
-
-        NamedFnArg {
-            name,
-            pat_type: pat_type.clone(),
-            ty: ArgumentType::new(pat_type),
-        }
-    }
-}
-
-fn new_arg_data(attribute: Option<&NameValueAttribute>, pat_type: &PatType) -> ArgData {
-    let fn_arg = NamedFnArg::new(pat_type);
+fn new_arg_data(arg: &FnArgData) -> ArgData {
+    let fn_arg = (arg.clone(), ArgumentType::new(&arg.pat_type));
 
     let mut args = ArgData{
-        name: fn_arg.name.clone(),
+        name: arg.arg_name.clone(),
         fn_arg: Some(fn_arg),
         min: None,
         max: None,
         default_values: vec![]
     };
 
-    if let Some(attribute) = attribute {
+    if let Some(attribute) = &arg.attribute {
         for (key, value) in attribute {
             match key.as_str() {
                 attr::ARG => {
@@ -315,14 +319,10 @@ fn assert_same_type_default_values(arg_name: &str, default_values: &[Lit]) {
     }
 }
 
-fn assert_arg_and_default_values_same_type(arg: &NamedFnArg, default_values: &[Lit]) {
-    let ty = arg.ty.get_type();
-
-    if cfg!(debug_assertions) {
-        assert_same_type_default_values(&arg.name, default_values);
-    }
-
+fn assert_arg_and_default_values_same_type((arg, ty): &(FnArgData, ArgumentType), default_values: &[Lit]) {
+    let arg_type = ty.get_type();
     let lit = &default_values[0];
+
     let lit_str = if default_values.len() > 1 {
         let s = default_values
             .iter()
@@ -335,39 +335,39 @@ fn assert_arg_and_default_values_same_type(arg: &NamedFnArg, default_values: &[L
         literal_to_string(&default_values[0])
     };
 
-    if ty.is_bool() {
+    if arg_type.is_bool() {
         assert!(
             lit.is_bool_literal(),
             "expected bool default value for `{}` but was `{}`",
-            arg.name,
+            arg.arg_name,
             lit_str
         );
-    } else if ty.is_char() {
+    } else if arg_type.is_char() {
         assert!(
             lit.is_char_literal(),
             "expected char default value for `{}` but was `{}`",
-            arg.name,
+            arg.arg_name,
             lit_str
         );
-    } else if ty.is_string() {
+    } else if arg_type.is_string() {
         assert!(
             lit.is_string(),
             "expected string default value for `{}` but was `{}`",
-            arg.name,
+            arg.arg_name,
             lit_str
         );
-    } else if ty.is_integer() {
+    } else if arg_type.is_integer() {
         assert!(
             lit.is_integer_literal(),
             "expected integer default value for `{}` but was `{}`",
-            arg.name,
+            arg.arg_name,
             lit_str
         )
-    } else if ty.is_float() {
+    } else if arg_type.is_float() {
         assert!(
             lit.is_integer_literal(),
             "expected float default value for `{}` but was `{}`",
-            arg.name,
+            arg.arg_name,
             lit_str
         )
     }

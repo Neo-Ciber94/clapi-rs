@@ -56,7 +56,7 @@ impl DeclareVar {
                         .convert::<#ty>()?
                 }
             }
-            VarType::Vec(ty) | VarType::Slice(ty) | VarType::MutSlice(ty) => {
+            VarType::Vec(ty) => {
                 quote! {
                     #source.get(#option_name)
                         .unwrap()
@@ -72,6 +72,13 @@ impl DeclareVar {
                     }
                 }
             }
+            VarType::Slice(ty) | VarType::MutSlice(ty) => {
+                if matches!(self.ty, VarType::Slice(_)) {
+                    panic!("slices are no supported, used `Vec<{0}>` instead: &[{0}]", ty.to_token_stream().to_string())
+                } else {
+                    panic!("slices are no supported, used `Vec<{0}>` instead: &mut [{0}]", ty.to_token_stream().to_string())
+                }
+            }
         }
     }
 
@@ -81,13 +88,21 @@ impl DeclareVar {
 
         match &self.ty {
             VarType::Type(ty) => {
+                let type_name = ty.to_token_stream().to_string();
+                let msg = format!("multiple arguments defined, expected `Vec<{0}>` but was `{0}`", type_name);
                 quote! {
-                    #source.get(#arg_name).unwrap().convert::<#ty>()?
+                    {
+                        if #source.len() == 1 {
+                            #source.get_raw_args_as_type::<#ty>()?.pop().unwrap()
+                        } else {
+                            panic!(#msg)
+                        }
+                    }
                 }
             }
-            VarType::Vec(ty) | VarType::Slice(ty) | VarType::MutSlice(ty) => {
+            VarType::Vec(ty) => {
                 quote! {
-                    #source.get(#arg_name).unwrap().convert_all::<#ty>()?
+                    #source.get_raw_args_as_type::<#ty>()?
                 }
             }
             VarType::Option(ty) => {
@@ -96,6 +111,13 @@ impl DeclareVar {
                         Some(arg) => Some(arg.convert::<#ty>()?),
                         None => None,
                     }
+                }
+            }
+            VarType::Slice(ty) | VarType::MutSlice(ty) => {
+                if matches!(self.ty, VarType::Slice(_)) {
+                    panic!("slices are not supported, use `Vec<{0}>` instead of `&[{0}]`", ty.to_token_stream().to_string())
+                } else {
+                    panic!("slices are not supported, use `Vec<{0}>` instead of `&mut [{0}]`", ty.to_token_stream().to_string())
                 }
             }
         }
