@@ -5,9 +5,12 @@ extern crate proc_macro;
 
 use crate::command::CommandData;
 pub(crate) use ext::*;
+
 use proc_macro::TokenStream;
 use syn::export::ToTokens;
 use syn::{AttributeArgs, ItemFn};
+
+mod macro_attribute;
 
 #[macro_use]
 mod utils;
@@ -29,7 +32,7 @@ mod var;
 /// - `version`: Version of the command-line app.
 ///
 /// # Example:
-/// ```no_run
+/// ```ignore no_run
 /// use clapi::macros::*;
 ///
 /// #[command(description="A sample app", version=1.0)]
@@ -58,7 +61,7 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - `version`: Version of the command-line app.
 ///
 /// # Example:
-/// ```no_run
+/// ```text
 /// use clapi::macros::*;
 ///
 /// #[command(description="A sample app", version=1.0)]
@@ -92,7 +95,7 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - `version`: Version of the subcommand.
 ///
 /// # Example:
-/// ```no_run
+/// ```text
 /// use clapi::macros::*;
 ///
 /// #[command]
@@ -145,7 +148,7 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
 /// - `Option<T>` where `T` implements `FromStr`.
 ///
 /// # Example:
-/// ```no_run
+/// ```text
 /// use clapi::macros::*;
 ///
 /// #[command]
@@ -187,7 +190,7 @@ pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
 /// - `Option<T>` where `T` implements `FromStr`.
 ///
 /// # Examples:
-/// ```no_run
+/// ```text
 /// use clapi::macros::*;
 ///
 /// #[command]

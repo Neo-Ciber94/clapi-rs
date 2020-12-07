@@ -8,7 +8,10 @@ edition = "2018"
 proc-macro = true
 
 [dependencies]
-macro_attribute = { path = "macro_attribute" }
 proc-macro2 = { version="1.0.24", features=["span-locations"] }
 syn = { version="1.0.45", features=["full", "extra-traits", "parsing", "visit"] }
 quote = "1.0.7"
+linked-hash-map = "0.5.3"
+
+[dev-dependencies]
+test_suite = { path="test_suite" }

@@ -4,10 +4,9 @@ use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::fmt::Display;
 use syn::export::{Formatter, ToTokens};
-use syn::{Attribute, AttributeArgs, ItemFn, ReturnType, Stmt, Item, Type, PatType};
+use syn::{Attribute, AttributeArgs, ItemFn, ReturnType, Stmt, Item, Type, PatType, AttrStyle};
 
-use macro_attribute::NameValueAttribute;
-
+use crate::macro_attribute::NameValueAttribute;
 use crate::args::ArgData;
 use crate::attr;
 use crate::option::OptionData;
@@ -54,7 +53,7 @@ impl CommandData {
 
     pub fn from_fn(args: AttributeArgs, func: ItemFn) -> Self {
         let name = func.sig.ident.to_string();
-        let attr_data = NameValueAttribute::from_attribute_args(name.as_str(), args).unwrap();
+        let attr_data = NameValueAttribute::from_attribute_args(name.as_str(), args, AttrStyle::Outer).unwrap();
         cmd::new_command(attr_data, func, false, true)
     }
 
@@ -169,16 +168,10 @@ impl CommandData {
         let show_version = self.version
             .as_ref()
             .map(|s| {
-                let ret = match &self.item_fn.as_ref().unwrap().sig.output{
-                    ReturnType::Default => quote! { return; },
-                    ReturnType::Type(_, ty) if is_result_type(ty) => quote! { return Ok(()) },
-                    _ => panic!("invalid return type for `{}`, expected `()` or `Result`", self.fn_name.name)
-                };
-
                 quote!{
                     if opts.contains("version"){
                         println!("{} {}", clapi::current_filename(), #s);
-                        #ret
+                        return Ok(());
                     }
                 }
             }).unwrap_or_else(|| quote!{});
@@ -316,6 +309,13 @@ pub struct FnArgData {
     pub is_option: bool,
 }
 
+impl FnArgData {
+    pub fn drop_attribute(mut self) -> Self {
+        self.attribute = None;
+        self
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct FnName {
     path: Option<String>,
@@ -380,10 +380,9 @@ mod cmd {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use syn::{Attribute, AttributeArgs, File, FnArg, Item, ItemFn, ItemMod, PatType, Stmt, Type};
+    use syn::{Attribute, AttributeArgs, AttrStyle, File, FnArg, Item, ItemFn, ItemMod, PatType, Stmt, Type};
 
-    use macro_attribute::{MacroAttribute, NameValueAttribute, Value, MetaItem};
-
+    use crate::macro_attribute::{MacroAttribute, NameValueAttribute, Value, MetaItem};
     use crate::args::ArgData;
     use crate::command::{drop_command_attributes, CommandData, FnName, FnArgData, is_option_bool_flag};
     use crate::option::OptionData;
@@ -443,7 +442,7 @@ mod cmd {
                     );
                     command.set_version(value.parse_literal::<String>().unwrap());
                 }
-                _ => panic!("invalid {} key `{}`", name_value_attr.path(), key),
+                _ => panic!("invalid `{}` key `{}`", name_value_attr.path(), key),
             }
         }
 
@@ -495,7 +494,7 @@ mod cmd {
         if arg_count > 0 {
             for fn_arg in fn_args.iter().filter(|f| !f.is_option) {
                 let arg = if fn_arg.attribute.is_some() {
-                    ArgData::new(fn_arg)
+                    ArgData::from_arg(fn_arg.clone())
                 }  else {
                     ArgData::with_name(fn_arg.arg_name.clone())
                 };
@@ -507,7 +506,7 @@ mod cmd {
         // Add options
         for fn_arg in fn_args.iter().filter(|n| n.is_option) {
             let mut option = OptionData::new(fn_arg.arg_name.clone());
-            let mut args = ArgData::new(fn_arg);
+            let mut args = ArgData::from_arg(fn_arg.clone().drop_attribute());
 
             if let Some(att) = &fn_arg.attribute {
                 for (key, value) in att {
@@ -555,7 +554,7 @@ mod cmd {
                             Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
                             Value::Array(array) => args.set_default_values(array.clone()),
                         },
-                        _ => panic!("invalid {} key `{}`", att.path(), key),
+                        _ => panic!("invalid `{}` key `{}`", att.path(), key),
                     }
                 }
             }
@@ -689,15 +688,15 @@ mod cmd {
     fn split_attr_path_and_name_values(attr: &MacroAttribute) -> (String, NameValueAttribute){
         let name = attr.get(0)
             .cloned()
-            .expect("function argument name must be the first element in `#[arg()]` but was empty")
+            .unwrap_or_else(|| panic!("the first element in `#[{}()]` must be the argument name, but was empty", attr.path()))
             .into_path()
             .expect("first element in `#[arg(...)]` must be a path like: `#[arg(name)]` where `argument` is the name of the function argument");
 
         let name_value_attribute = if attr.len() == 1 {
-          NameValueAttribute::empty(attr.path().to_owned())
+          NameValueAttribute::empty(attr.path().to_owned(), AttrStyle::Outer)
         } else {
             let meta_items = attr[1..].iter().cloned().collect::<Vec<MetaItem>>();
-            NameValueAttribute::new(attr.path(), meta_items).unwrap()
+            NameValueAttribute::new(attr.path(), meta_items, AttrStyle::Outer).unwrap()
         };
 
         (name, name_value_attribute)
@@ -739,7 +738,7 @@ mod cmd {
         // root `command` must be a top function
         crate::assertions::is_top_function(&item_fn, &root_file);
 
-        let attr = NameValueAttribute::from_attribute_args(attr::COMMAND, args).unwrap();
+        let attr = NameValueAttribute::from_attribute_args(attr::COMMAND, args, AttrStyle::Outer).unwrap();
         let mut command = new_command(attr, item_fn.clone(), false, true);
 
         for (path, attr, item_fn, file) in find_subcommands(&root_path, &root_file) {

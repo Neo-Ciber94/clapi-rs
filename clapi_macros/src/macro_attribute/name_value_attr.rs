@@ -2,9 +2,9 @@ use std::fmt::{Debug, Formatter};
 use std::ops::Index;
 use std::str::FromStr;
 
-use syn::{Lit, AttributeArgs, Attribute};
+use syn::{Lit, AttributeArgs, Attribute, AttrStyle};
 
-use crate::{literal_to_string, meta_item_to_string, MetaItem, MacroAttribute};
+use crate::macro_attribute::{literal_to_string, meta_item_to_string, MetaItem, MacroAttribute};
 use std::convert::TryFrom;
 
 type Map<K, V> = linked_hash_map::LinkedHashMap<K, V>;
@@ -15,17 +15,19 @@ type IntoIter<K, V> = linked_hash_map::IntoIter<K, V>;
 pub struct NameValueAttribute {
     path: String,
     args: Map<String, Value>,
+    style: AttrStyle
 }
 
 impl NameValueAttribute {
-    pub fn empty(path: String) -> Self {
+    pub fn empty(path: String, style: AttrStyle) -> Self {
         NameValueAttribute {
             path,
-            args: Default::default()
+            args: Default::default(),
+            style
         }
     }
 
-    pub fn new(path: &str, meta_items: Vec<MetaItem>) -> Result<Self, NameValueError> {
+    pub fn new(path: &str, meta_items: Vec<MetaItem>, style: AttrStyle) -> Result<Self, NameValueError> {
         let mut args = Map::new();
 
         for meta_item in meta_items.into_iter() {
@@ -41,16 +43,22 @@ impl NameValueAttribute {
             }
         }
 
-        Ok(NameValueAttribute { path: path.to_string(), args })
+        let mut name_value_attribute = NameValueAttribute::empty(path.to_string(), style);
+        name_value_attribute.args = args;
+        Ok(name_value_attribute)
     }
 
-    pub fn from_attribute_args(path: &str, attribute_args: AttributeArgs) -> Result<Self, NameValueError>{
-        MacroAttribute::from_attribute_args(path, attribute_args)
+    pub fn from_attribute_args(path: &str, attribute_args: AttributeArgs, style: AttrStyle) -> Result<Self, NameValueError>{
+        MacroAttribute::from_attribute_args(path, attribute_args, style)
             .into_name_values()
     }
 
     pub fn path(&self) -> &str {
         self.path.as_str()
+    }
+
+    pub fn style(&self) -> &AttrStyle {
+        &self.style
     }
 
     pub fn names(&self) -> impl Iterator<Item = &String> {
@@ -294,7 +302,7 @@ mod tests {
     use quote::*;
     use syn::Attribute;
     use syn::parse_quote::ParseQuote;
-    use crate::MacroAttribute;
+    use crate::macro_attribute::MacroAttribute;
 
     fn parse_attr(tokens: TokenStream) -> Attribute {
         syn::parse::Parser::parse2(Attribute::parse, tokens).expect("invalid attribute")

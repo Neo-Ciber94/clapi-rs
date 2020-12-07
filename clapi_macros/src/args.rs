@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::Lit;
-use macro_attribute::{literal_to_string, Value};
+use crate::macro_attribute::{literal_to_string, Value};
 use crate::{attr, LitExtensions, TypeExtensions};
 use crate::command::{FnArgData, is_option_bool_flag};
 use crate::utils::pat_type_to_string;
@@ -22,6 +22,7 @@ pub struct ArgData {
     name: String,
     min: Option<usize>,
     max: Option<usize>,
+    description: Option<String>,
     fn_arg: Option<(FnArgData, ArgumentType)>,
     default_values: Vec<Lit>,
 }
@@ -32,12 +33,13 @@ impl ArgData {
             name,
             min: None,
             max: None,
+            description: None,
             fn_arg: None,
             default_values: vec![],
         }
     }
 
-    pub fn new(arg: &FnArgData) -> ArgData {
+    pub fn from_arg(arg: FnArgData) -> Self {
         new_arg_data(arg)
     }
 
@@ -55,6 +57,10 @@ impl ArgData {
 
     pub fn set_max(&mut self, max: usize) {
         self.max = Some(max);
+    }
+
+    pub fn set_description(&mut self, description: String){
+        self.description = Some(description)
     }
 
     pub fn set_default_values(&mut self, default_values: Vec<Lit>) {
@@ -95,11 +101,16 @@ impl ArgData {
             quote! { .defaults(&[#(#tokens),*]) }
         };
 
+        let description = self.description.as_ref()
+            .map(|s| quote! { .description(#s)} )
+            .unwrap_or_else(|| quote!{});
+
         let name = quote_expr!(self.name);
 
         quote! {
             clapi::Argument::new(#name)
             #arg_count
+            #description
             #default_values
         }
     }
@@ -179,18 +190,11 @@ impl ToTokens for ArgData {
     }
 }
 
-fn new_arg_data(arg: &FnArgData) -> ArgData {
-    let fn_arg = (arg.clone(), ArgumentType::new(&arg.pat_type));
+fn new_arg_data(fn_arg: FnArgData) -> ArgData {
+    let arg_type = ArgumentType::new(&fn_arg.pat_type);
+    let mut args = ArgData::with_name(fn_arg.arg_name.clone());
 
-    let mut args = ArgData{
-        name: arg.arg_name.clone(),
-        fn_arg: Some(fn_arg),
-        min: None,
-        max: None,
-        default_values: vec![]
-    };
-
-    if let Some(attribute) = &arg.attribute {
+    if let Some(attribute) = &fn_arg.attribute {
         for (key, value) in attribute {
             match key.as_str() {
                 attr::ARG => {
@@ -216,16 +220,25 @@ fn new_arg_data(arg: &FnArgData) -> ArgData {
                         .expect("option `max` is expected to be an integer literal");
 
                     args.set_max(max);
+                },
+                attr::DESCRIPTION => {
+                    let description = value
+                        .clone()
+                        .as_string_literal()
+                        .expect("option `description` is expected to be a string literal");
+
+                    args.set_description(description);
                 }
                 attr::DEFAULT => match value {
                     Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
                     Value::Array(array) => args.set_default_values(array.clone()),
                 },
-                _ => panic!("invalid {} key `{}`", attribute.path(), key),
+                _ => panic!("invalid `{}` key `{}`", attribute.path(), key),
             }
         }
     }
 
+    args.fn_arg = Some((fn_arg, arg_type));
     args
 }
 

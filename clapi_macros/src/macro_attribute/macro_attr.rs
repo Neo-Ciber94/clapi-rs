@@ -1,8 +1,9 @@
-use crate::{NameValue, NameValueAttribute, NameValueError, Value};
+use crate::macro_attribute::{NameValue, NameValueAttribute, NameValueError, Value};
 use std::iter::Peekable;
 use std::ops::Index;
-use syn::{Attribute, AttributeArgs, Lit, Meta, MetaList, MetaNameValue, NestedMeta, Path};
+use syn::{Attribute, AttributeArgs, Lit, Meta, MetaList, MetaNameValue, NestedMeta, Path, AttrStyle};
 use std::slice::SliceIndex;
+
 
 /// Represents a macro attribute and its arguments like:
 ///
@@ -11,6 +12,7 @@ use std::slice::SliceIndex;
 pub struct MacroAttribute {
     path: String,
     args: Vec<MetaItem>,
+    style: Option<AttrStyle>,
 }
 
 impl MacroAttribute {
@@ -18,23 +20,30 @@ impl MacroAttribute {
         let path = join_path_to_string(&attribute.path);
         let attr_args = get_attribute_args(&attribute).expect("invalid attribute");
         let args = AttributeArgsVisitor::visit(attr_args);
+        let style = Some(attribute.style);
 
         MacroAttribute {
             path: path.to_string(),
-            args
+            args,
+            style
         }
     }
 
-    pub fn from_attribute_args(path: &str, attribute_args: AttributeArgs) -> Self {
+    pub fn from_attribute_args(path: &str, attribute_args: AttributeArgs, style: AttrStyle) -> Self {
         let args = AttributeArgsVisitor::visit(attribute_args);
         MacroAttribute {
             path: path.to_string(),
-            args
+            args,
+            style: Some(style)
         }
     }
 
     pub fn path(&self) -> &str {
         self.path.as_str()
+    }
+
+    pub fn style(&self) -> Option<&AttrStyle> {
+        self.style.as_ref()
     }
 
     pub fn args(&self) -> &[MetaItem] {
@@ -54,7 +63,7 @@ impl MacroAttribute {
     }
 
     pub fn into_name_values(self) -> Result<NameValueAttribute, NameValueError> {
-        NameValueAttribute::new(self.path.as_str(), self.args)
+        NameValueAttribute::new(self.path.as_str(), self.args, self.style.unwrap())
     }
 
     pub fn into_inner(self) -> Vec<MetaItem> {
@@ -114,7 +123,7 @@ impl MetaItem {
         matches!(self, MetaItem::NameValue(_))
     }
 
-    pub fn is_nested(self) -> bool {
+    pub fn is_nested(&self) -> bool {
         matches!(self, MetaItem::Nested(_))
     }
 
@@ -233,6 +242,7 @@ impl AttributeArgsVisitor {
         ret.push(MetaItem::Nested(Box::new(MacroAttribute {
             path,
             args: values,
+            style: None
         })));
     }
 

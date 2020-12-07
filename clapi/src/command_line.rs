@@ -208,7 +208,6 @@ impl<P> CommandLine<P> {
         }
 
         if self.suggestions.is_some() {
-            // todo: Error is produce here due to trying to read a unrecognized command
             let parse_error = error.try_into_parse_error()?;
             if self.is_help(parse_error.parse_result()) {
                 let args = parse_error.parse_result().arg();
