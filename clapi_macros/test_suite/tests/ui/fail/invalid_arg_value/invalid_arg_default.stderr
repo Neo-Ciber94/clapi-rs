@@ -1,0 +1,7 @@
+error: custom attribute panicked
+ --> $DIR/invalid_arg_default.rs:3:1
+  |
+3 | #[command]
+  | ^^^^^^^^^^
+  |
+  = help: message: expected integer default value for `x` but was `10`

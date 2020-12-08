@@ -1,0 +1,7 @@
+error: custom attribute panicked
+ --> $DIR/invalid_subcommand_version.rs:3:1
+  |
+3 | #[command]
+  | ^^^^^^^^^^
+  |
+  = help: message: `version` must be an integer, float or string literal

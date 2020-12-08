@@ -1,0 +1,7 @@
+error: custom attribute panicked
+ --> $DIR/invalid_command_key.rs:3:1
+  |
+3 | #[command(abc="hello")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: message: invalid `command` key `abc`

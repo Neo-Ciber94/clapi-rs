@@ -1,0 +1,7 @@
+error: custom attribute panicked
+ --> $DIR/invalid_option_key.rs:3:1
+  |
+3 | #[command]
+  | ^^^^^^^^^^
+  |
+  = help: message: invalid `option` key `abc`
