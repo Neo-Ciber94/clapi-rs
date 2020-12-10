@@ -1,12 +1,18 @@
-use crate::args::ArgData;
-use proc_macro2::TokenStream;
+use crate::args::ArgAttrData;
+use proc_macro2::{TokenStream, Span};
 use quote::*;
+use crate::command::{FnArgData, is_option_bool_flag};
+use crate::attr;
+use crate::macro_attribute::Value;
+
+// CommandAttrData -> CommandFnData
+// OptionAttrData -> CommandOptionData
+// ArgAttrData -> CommandArgData
 
 /// Tokens for:
 ///
 /// ```text
-/// #[option(
-///     name="value",
+/// #[option(value,
 ///     alias="v",
 ///     description="A description",
 ///     min=0,
@@ -15,21 +21,98 @@ use quote::*;
 /// )]
 /// ```
 #[derive(Debug)]
-pub struct OptionData {
+pub struct OptionAttrData {
     name: String,
     alias: Option<String>,
     description: Option<String>,
-    args: Option<ArgData>,
+    args: Option<ArgAttrData>,
 }
 
-impl OptionData {
+impl OptionAttrData {
     pub fn new(name: String) -> Self {
-        OptionData {
+        OptionAttrData {
             name,
             alias: None,
             description: None,
             args: None,
         }
+    }
+
+    pub fn from_arg_data(arg_data: FnArgData) -> Self {
+        let mut option = OptionAttrData::new(arg_data.arg_name.clone());
+        let mut args = ArgAttrData::from_arg_data(arg_data.clone().drop_attribute());
+
+        if let Some(att) = &arg_data.attribute {
+            for (key, value) in att {
+                match key.as_str() {
+                    attr::ARG => {
+                        let arg_name = value
+                            .clone()
+                            .to_string_literal()
+                            .expect("option `arg` is expected to be string literal");
+
+                        args.set_name(arg_name);
+                    }
+                    attr::ALIAS => {
+                        let alias = value
+                            .clone()
+                            .to_string_literal()
+                            .expect("option `alias` is expected to be string literal");
+
+                        option.set_alias(alias);
+                    }
+                    attr::DESCRIPTION => {
+                        let description = value
+                            .clone()
+                            .to_string_literal()
+                            .expect("option `description` is expected to be string literal");
+                        option.set_description(description);
+                    }
+                    attr::MIN => {
+                        let min = value
+                            .clone()
+                            .to_integer_literal::<usize>()
+                            .expect("option `min` is expected to be an integer literal");
+
+                        args.set_min(min);
+                    }
+                    attr::MAX => {
+                        let max = value
+                            .clone()
+                            .to_integer_literal::<usize>()
+                            .expect("option `max` is expected to be an integer literal");
+
+                        args.set_max(max);
+                    }
+                    attr::DEFAULT => match value {
+                        Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
+                        Value::Array(array) => args.set_default_values(array.clone()),
+                    },
+                    _ => panic!("invalid `{}` key `{}`", att.path(), key),
+                }
+            }
+        }
+
+        // A function argument is considered an option bool flag if:
+        // - Is bool type
+        // - Don't contains `min`, `max` or `default`
+        if is_option_bool_flag(&arg_data) {
+            // An option bool behaves like the follow:
+            // --flag=true      (true)
+            // --flag=false     (false)
+            // --flag           (true)
+            // [no option]      (false)
+
+            // Is needed to set `false` as default value
+            // to allow the option to be marked as no `required`
+            let lit = syn::LitBool { value: false, span: Span::call_site() };
+            args.set_default_values(vec![syn::Lit::Bool(lit)]);
+            args.set_min(0);
+            args.set_max(1);
+        }
+
+        option.set_args(args);
+        option
     }
 
     pub fn set_alias(&mut self, alias: String){
@@ -40,7 +123,7 @@ impl OptionData {
         self.description = Some(description);
     }
 
-    pub fn set_args(&mut self, args: ArgData){
+    pub fn set_args(&mut self, args: ArgAttrData){
         self.args = Some(args);
     }
 
@@ -87,7 +170,7 @@ impl OptionData {
     }
 }
 
-impl ToTokens for OptionData {
+impl ToTokens for OptionAttrData {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append_all(self.expand().into_iter())
     }

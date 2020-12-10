@@ -1,10 +1,10 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Formatter, Display, Write};
 use std::ops::Index;
 use std::str::FromStr;
 
 use syn::{Lit, AttributeArgs, Attribute, AttrStyle};
 
-use crate::macro_attribute::{literal_to_string, meta_item_to_string, MetaItem, MacroAttribute};
+use crate::macro_attribute::{lit_to_string, meta_item_to_string, MetaItem, MacroAttribute, display_lit};
 use std::convert::TryFrom;
 
 type Map<K, V> = linked_hash_map::LinkedHashMap<K, V>;
@@ -120,6 +120,30 @@ impl TryFrom<Attribute> for NameValueAttribute {
     }
 }
 
+impl Display for NameValueAttribute {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let style = if matches!(self.style, AttrStyle::Outer){
+            "#".to_owned()
+        } else {
+            "#!".to_owned()
+        };
+
+        let meta = self.args.values()
+            .map(|value| {
+                let mut s = String::new();
+                value.display(&mut s, false).unwrap();
+                s
+            })
+            .collect::<Vec<String>>();
+
+        if meta.is_empty() {
+            write!(f, "{}[{}]", style, self.path())
+        } else {
+            write!(f, "{}[{}({})]", style, self.path(), meta.join(", "))
+        }
+    }
+}
+
 pub enum NameValueError {
     InvalidValue(MetaItem),
     DuplicatedKey(String),
@@ -140,6 +164,12 @@ impl Debug for NameValueError {
 pub struct NameValue {
     pub name: String,
     pub value: Value,
+}
+
+impl Display for NameValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}={}", self.name, self.value)
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -211,7 +241,7 @@ impl Value {
         self.is_integer() || self.is_float()
     }
 
-    pub fn as_string_literal(&self) -> Option<String> {
+    pub fn to_string_literal(&self) -> Option<String> {
         if let Value::Literal(lit) = self {
             return match lit {
                 Lit::Str(x) => Some(x.value()),
@@ -223,7 +253,7 @@ impl Value {
         None
     }
 
-    pub fn as_char_literal(&self) -> Option<char> {
+    pub fn to_char_literal(&self) -> Option<char> {
         if let Value::Literal(lit) = self {
             return match lit {
                 Lit::Char(x) => Some(x.value()),
@@ -234,7 +264,7 @@ impl Value {
         None
     }
 
-    pub fn as_bool_literal(&self) -> Option<bool> {
+    pub fn to_bool_literal(&self) -> Option<bool> {
         if let Value::Literal(lit) = self {
             return match lit {
                 Lit::Bool(x) => Some(x.value),
@@ -245,7 +275,7 @@ impl Value {
         None
     }
 
-    pub fn as_byte_literal(&self) -> Option<u8> {
+    pub fn to_byte_literal(&self) -> Option<u8> {
         if let Value::Literal(lit) = self {
             return match lit {
                 Lit::Byte(x) => Some(x.value()),
@@ -254,6 +284,38 @@ impl Value {
         }
 
         None
+    }
+
+    pub fn to_integer_literal<N>(&self) -> Option<N>
+        where N: FromStr,
+              N::Err : Display {
+        match self {
+            Value::Literal(lit) => {
+                match lit {
+                    Lit::Byte(n) => unsafe {
+                        let s = [n.value()];
+                        N::from_str(std::str::from_utf8_unchecked(&s)).ok()
+                    }
+                    Lit::Int(n) => n.base10_parse().ok(),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    pub fn to_float_literal<N>(&self) -> Option<N>
+        where N: FromStr,
+              N::Err : Display {
+        match self {
+            Value::Literal(lit) => {
+                match lit {
+                    Lit::Float(n) => n.base10_parse().ok(),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
     }
 
     pub fn as_literal(&self) -> Option<&Lit> {
@@ -273,7 +335,7 @@ impl Value {
     pub fn parse_literal<T: FromStr>(&self) -> Option<T> {
         match self {
             Value::Literal(x) => {
-                let value = literal_to_string(x);
+                let value = lit_to_string(x);
                 T::from_str(&value).ok()
             }
             _ => None,
@@ -285,7 +347,7 @@ impl Value {
             Value::Array(array) => {
                 let mut ret = Vec::new();
                 for arg in array {
-                    let value = literal_to_string(arg);
+                    let value = lit_to_string(arg);
                     let n = T::from_str(&value).ok()?;
                     ret.push(n);
                 }
@@ -293,6 +355,29 @@ impl Value {
             }
             _ => None,
         }
+    }
+
+    pub fn display<W: Write>(&self, formatter: &mut W, use_array_brackets: bool) -> std::fmt::Result {
+        match self {
+            Value::Literal(lit) => display_lit(formatter, lit),
+            Value::Array(array) => {
+                let result = array.iter()
+                    .map(|s| lit_to_string(s))
+                    .collect::<Vec<String>>();
+
+                if use_array_brackets {
+                    write!(formatter, "[{}]", result.join(", "))
+                } else {
+                    write!(formatter, "{}", result.join(", "))
+                }
+            }
+        }
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.display(f, true)
     }
 }
 
@@ -302,32 +387,30 @@ mod tests {
     use quote::*;
     use syn::Attribute;
     use syn::parse_quote::ParseQuote;
-    use crate::macro_attribute::MacroAttribute;
+    use crate::macro_attribute::{MacroAttribute, NameValueAttribute};
 
     fn parse_attr(tokens: TokenStream) -> Attribute {
         syn::parse::Parser::parse2(Attribute::parse, tokens).expect("invalid attribute")
     }
 
     #[test]
-    fn into_name_values_test1() {
+    fn into_name_value_test() {
         let tokens = quote! { #[person(name="Kaori", age=20)] };
         let raw_attr = MacroAttribute::new(parse_attr(tokens));
         assert!(raw_attr.into_name_values().is_ok());
     }
 
     #[test]
-    fn into_name_values_test2() {
+    fn into_name_value_error_test() {
         let tokens = quote! { #[person(name="Kaori", age=20, job(salary=200.0))] };
         let raw_attr = MacroAttribute::new(parse_attr(tokens));
-        println!("{:?}", raw_attr);
         assert!(raw_attr.into_name_values().is_err());
     }
 
     #[test]
-    fn into_name_values_test3() {
+    fn into_name_value_duplicate_name_test() {
         let tokens = quote! { #[person(name="Kaori", age=20, age=21)] };
         let raw_attr = MacroAttribute::new(parse_attr(tokens));
-        println!("{:?}", raw_attr);
         assert!(raw_attr.into_name_values().is_err());
     }
 
@@ -344,7 +427,7 @@ mod tests {
         assert!(attr["age"].is_integer());
         assert!(attr["fav_numbers"].is_array());
 
-        assert_eq!(attr["name"].as_string_literal(), Some("Kaori".to_owned()));
+        assert_eq!(attr["name"].to_string_literal(), Some("Kaori".to_owned()));
         assert_eq!(attr["age"].parse_literal::<u32>(), Some(20));
         assert_eq!(attr["fav_numbers"].parse_array(), Some(vec!(2,4,7)));
     }
@@ -366,7 +449,7 @@ mod tests {
         let raw_attr = MacroAttribute::new(parse_attr(tokens));
         let attr = raw_attr.into_name_values().unwrap();
 
-        assert_eq!(attr.get("name").unwrap().as_string_literal(), Some("Kaori".to_owned()));
+        assert_eq!(attr.get("name").unwrap().to_string_literal(), Some("Kaori".to_owned()));
         assert_eq!(attr.get("age").unwrap().parse_literal::<u32>(), Some(20));
         assert_eq!(attr.get("fav_numbers").unwrap().parse_array(), Some(vec!(2,4,7)));
     }
@@ -420,11 +503,11 @@ mod tests {
         assert!(attr["str"].as_literal().is_some());
         assert!(attr["array"].as_array().is_some());
 
-        assert_eq!(attr["str"].as_string_literal(), Some("hello".to_string()));
-        assert_eq!(attr["bytestr"].as_string_literal(), Some("world".to_string()));
-        assert_eq!(attr["byte"].as_byte_literal(), Some(b'a'));
-        assert_eq!(attr["boolean"].as_bool_literal(), Some(true));
-        assert_eq!(attr["character"].as_char_literal(), Some('z'));
+        assert_eq!(attr["str"].to_string_literal(), Some("hello".to_string()));
+        assert_eq!(attr["bytestr"].to_string_literal(), Some("world".to_string()));
+        assert_eq!(attr["byte"].to_byte_literal(), Some(b'a'));
+        assert_eq!(attr["boolean"].to_bool_literal(), Some(true));
+        assert_eq!(attr["character"].to_char_literal(), Some('z'));
     }
 
     #[test]
@@ -453,5 +536,11 @@ mod tests {
         assert_eq!(attr["boolean"].parse_literal::<bool>(), Some(true));
         assert_eq!(attr["character"].parse_literal::<char>(), Some('z'));
         assert_eq!(attr["array"].parse_array::<usize>(), Some(vec!(1,2,3)));
+    }
+
+    #[test]
+    fn to_string_test(){
+        let tokens = quote! { #[person(name="Kaori", age=20, fav_numbers=2,4,7)] };
+        let raw_attr = MacroAttribute::new(parse_attr(tokens));
     }
 }

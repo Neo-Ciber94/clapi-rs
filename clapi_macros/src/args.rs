@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::Lit;
-use crate::macro_attribute::{literal_to_string, Value};
+use crate::macro_attribute::{lit_to_string, Value};
 use crate::{attr, LitExtensions, TypeExtensions};
 use crate::command::{FnArgData, is_option_bool_flag};
 use crate::utils::pat_type_to_string;
@@ -10,15 +10,14 @@ use crate::var::ArgumentType;
 /// Tokens for:
 ///
 /// ```text
-/// #[args(
-///     name="args",
+/// #[args(arg,
 ///     min=0,
 ///     max=100,
 ///     default=1,2,3
 /// )]
 /// ```
 #[derive(Debug)]
-pub struct ArgData {
+pub struct ArgAttrData {
     name: String,
     min: Option<usize>,
     max: Option<usize>,
@@ -27,9 +26,9 @@ pub struct ArgData {
     default_values: Vec<Lit>,
 }
 
-impl ArgData {
+impl ArgAttrData {
     pub fn with_name(name: String) -> Self {
-        ArgData {
+        ArgAttrData {
             name,
             min: None,
             max: None,
@@ -39,8 +38,56 @@ impl ArgData {
         }
     }
 
-    pub fn from_arg(arg: FnArgData) -> Self {
-        new_arg_data(arg)
+    pub fn from_arg_data(arg_data: FnArgData) -> Self {
+        let arg_type = ArgumentType::new(&arg_data.pat_type);
+        let mut args = ArgAttrData::with_name(arg_data.arg_name.clone());
+
+        if let Some(attribute) = &arg_data.attribute {
+            for (key, value) in attribute {
+                match key.as_str() {
+                    attr::ARG => {
+                        let name = value
+                            .clone()
+                            .to_string_literal()
+                            .expect("arg `arg` is expected to be a string literal");
+
+                        args.set_name(name);
+                    }
+                    attr::MIN => {
+                        let min = value
+                            .clone()
+                            .to_integer_literal::<usize>()
+                            .expect("arg `min` is expected to be an integer literal");
+
+                        args.set_min(min);
+                    }
+                    attr::MAX => {
+                        let max = value
+                            .clone()
+                            .to_integer_literal::<usize>()
+                            .expect("arg `max` is expected to be an integer literal");
+
+                        args.set_max(max);
+                    },
+                    attr::DESCRIPTION => {
+                        let description = value
+                            .clone()
+                            .to_string_literal()
+                            .expect("arg `description` is expected to be a string literal");
+
+                        args.set_description(description);
+                    }
+                    attr::DEFAULT => match value {
+                        Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
+                        Value::Array(array) => args.set_default_values(array.clone()),
+                    },
+                    _ => panic!("invalid `{}` key `{}`", attribute.path(), key),
+                }
+            }
+        }
+
+        args.fn_arg = Some((arg_data, arg_type));
+        args
     }
 
     pub fn has_default_values(&self) -> bool {
@@ -64,8 +111,14 @@ impl ArgData {
     }
 
     pub fn set_default_values(&mut self, default_values: Vec<Lit>) {
-        if let Some((arg, _)) = self.fn_arg.as_ref() {
-            assert_same_type_default_values(&arg.arg_name, default_values.as_slice());
+        assert!(default_values.len() > 0, "default values is empty");
+        if let Err(diff) = check_same_type(&default_values[0], default_values.as_slice()) {
+            panic!("invalid default value for arg `{}`, expected `{}` but was `{}`.\
+                Default values must be of the same type",
+                   self.name,
+                   lit_variant_to_string(&default_values[0]),
+                   lit_variant_to_string(diff)
+            )
         }
         self.default_values = default_values;
     }
@@ -184,151 +237,9 @@ impl ArgData {
     }
 }
 
-impl ToTokens for ArgData {
+impl ToTokens for ArgAttrData {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append_all(self.expand().into_iter())
-    }
-}
-
-fn new_arg_data(fn_arg: FnArgData) -> ArgData {
-    let arg_type = ArgumentType::new(&fn_arg.pat_type);
-    let mut args = ArgData::with_name(fn_arg.arg_name.clone());
-
-    if let Some(attribute) = &fn_arg.attribute {
-        for (key, value) in attribute {
-            match key.as_str() {
-                attr::ARG => {
-                    let name = value
-                        .clone()
-                        .as_string_literal()
-                        .expect("arg `arg` is expected to be a string literal");
-
-                    args.set_name(name);
-                }
-                attr::MIN => {
-                    let min = value
-                        .clone()
-                        .parse_literal::<usize>()
-                        .expect("option `min` is expected to be an integer literal");
-
-                    args.set_min(min);
-                }
-                attr::MAX => {
-                    let max = value
-                        .clone()
-                        .parse_literal::<usize>()
-                        .expect("option `max` is expected to be an integer literal");
-
-                    args.set_max(max);
-                },
-                attr::DESCRIPTION => {
-                    let description = value
-                        .clone()
-                        .as_string_literal()
-                        .expect("option `description` is expected to be a string literal");
-
-                    args.set_description(description);
-                }
-                attr::DEFAULT => match value {
-                    Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
-                    Value::Array(array) => args.set_default_values(array.clone()),
-                },
-                _ => panic!("invalid `{}` key `{}`", attribute.path(), key),
-            }
-        }
-    }
-
-    args.fn_arg = Some((fn_arg, arg_type));
-    args
-}
-
-fn assert_same_type_default_values(arg_name: &str, default_values: &[Lit]) {
-    fn panic_different_types_with_name(arg_name: &str, left: &Lit, right: &Lit) {
-        fn lit_type_to_string(lit: &Lit) -> &'static str {
-            match lit {
-                Lit::Str(_) => "string",
-                Lit::ByteStr(_) => "string",
-                Lit::Byte(_) => "byte",
-                Lit::Char(_) => "char",
-                Lit::Int(_) => "integer",
-                Lit::Float(_) => "float",
-                Lit::Bool(_) => "bool",
-                Lit::Verbatim(_) => "verbatim",
-            }
-        }
-
-        panic!(
-            "invalid default value for argument `{}`, expected {} but was {}",
-            arg_name,
-            lit_type_to_string(left),
-            lit_type_to_string(right)
-        );
-    }
-
-    let panic_different_types =
-        |left: &Lit, right: &Lit| panic_different_types_with_name(arg_name, left, right);
-
-    assert!(default_values.len() > 0, "`default` is empty");
-
-    let lit = &default_values[0];
-
-    match lit {
-        Lit::Str(_) => {
-            for x in default_values.iter().skip(1) {
-                if !matches!(x, Lit::Str(_)) {
-                    panic_different_types(lit, x);
-                }
-            }
-        }
-        Lit::ByteStr(_) => {
-            for x in default_values.iter().skip(1) {
-                if !matches!(x, Lit::ByteStr(_)) {
-                    panic_different_types(lit, x);
-                }
-            }
-        }
-        Lit::Byte(_) => {
-            for x in default_values.iter().skip(1) {
-                if !matches!(x, Lit::Byte(_)) {
-                    panic_different_types(lit, x);
-                }
-            }
-        }
-        Lit::Char(_) => {
-            for x in default_values.iter().skip(1) {
-                if !matches!(x, Lit::Char(_)) {
-                    panic_different_types(lit, x);
-                }
-            }
-        }
-        Lit::Int(_) => {
-            for x in default_values.iter().skip(1) {
-                if !matches!(x, Lit::Int(_)) {
-                    panic_different_types(lit, x);
-                }
-            }
-        }
-        Lit::Float(_) => {
-            for x in default_values.iter().skip(1) {
-                if !matches!(x, Lit::Float(_)) {
-                    panic_different_types(lit, x);
-                }
-            }
-        }
-        Lit::Bool(_) => {
-            for x in default_values.iter().skip(1) {
-                if !matches!(x, Lit::Bool(_)) {
-                    panic_different_types(lit, x);
-                }
-            }
-        }
-        Lit::Verbatim(_) => {
-            for x in default_values.iter().skip(1) {
-                if !matches!(x, Lit::Verbatim(_)) {
-                    panic_different_types(lit, x);
-                }
-            }
-        }
     }
 }
 
@@ -339,13 +250,13 @@ fn assert_arg_and_default_values_same_type((arg, ty): &(FnArgData, ArgumentType)
     let lit_str = if default_values.len() > 1 {
         let s = default_values
             .iter()
-            .map(literal_to_string)
+            .map(lit_to_string)
             .collect::<Vec<String>>()
             .join(", ");
 
         format!("[{}]", s)
     } else {
-        literal_to_string(&default_values[0])
+        lit_to_string(&default_values[0])
     };
 
     if arg_type.is_bool() {
@@ -383,5 +294,32 @@ fn assert_arg_and_default_values_same_type((arg, ty): &(FnArgData, ArgumentType)
             arg.arg_name,
             lit_str
         )
+    }
+}
+
+fn lit_variant_to_string(lit: &Lit) -> &'static str {
+    match lit {
+        Lit::Str(_) => "string",
+        Lit::ByteStr(_) => "string",
+        Lit::Byte(_) => "byte",
+        Lit::Char(_) => "char",
+        Lit::Int(_) => "integer",
+        Lit::Float(_) => "float",
+        Lit::Bool(_) => "bool",
+        Lit::Verbatim(_) => "verbatim",
+    }
+}
+
+fn check_same_type<'a>(left: &'a Lit, right: &'a [Lit]) -> Result<(), &'a Lit> {
+    if right.len() <= 1 {
+        Ok(())
+    } else {
+        for value in right {
+            if std::mem::discriminant(left) != std::mem::discriminant(value) {
+                return Err(value);
+            }
+        }
+
+        Ok(())
     }
 }

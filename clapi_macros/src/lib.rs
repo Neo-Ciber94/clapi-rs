@@ -3,14 +3,13 @@
 #![allow(dead_code)]
 extern crate proc_macro;
 
-use crate::command::CommandData;
-pub(crate) use ext::*;
-
 use proc_macro::TokenStream;
 use syn::export::ToTokens;
 use syn::{AttributeArgs, ItemFn};
+use crate::command::CommandAttrData;
 
-mod macro_attribute;
+mod ext;
+pub(crate) use ext::*;
 
 #[macro_use]
 mod utils;
@@ -18,9 +17,9 @@ mod args;
 mod assertions;
 mod attr;
 mod command;
-mod ext;
 mod option;
 mod var;
+mod macro_attribute;
 
 /// Marks a function as a `command`.
 ///
@@ -48,7 +47,9 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = syn::parse_macro_input!(attr as AttributeArgs);
     let func = syn::parse_macro_input!(item as ItemFn);
 
-    CommandData::from_fn(args, func).expand().into()
+    CommandAttrData::from_fn(args, func)
+        .expand()
+        .into()
 }
 
 /// Marks a function as a `command`.
@@ -76,9 +77,11 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = syn::parse_macro_input!(attr as AttributeArgs);
     let func = syn::parse_macro_input!(item as ItemFn);
-
     let path = call_site::path();
-    CommandData::from_path(args, func, path).expand().into()
+
+    CommandAttrData::from_path(args, func, path)
+        .expand()
+        .into()
 }
 
 /// Marks a function as a `subcommand`.

@@ -4,4 +4,4 @@ error: custom attribute panicked
 3 | #[command]
   | ^^^^^^^^^^
   |
-  = help: message: option `description` is expected to be a string literal
+  = help: message: arg `description` is expected to be a string literal

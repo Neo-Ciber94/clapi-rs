@@ -4,4 +4,4 @@ error: custom attribute panicked
 3 | #[command]
   | ^^^^^^^^^^
   |
-  = help: message: option `min` is expected to be an integer literal
+  = help: message: arg `min` is expected to be an integer literal

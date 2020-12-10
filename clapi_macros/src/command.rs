@@ -7,9 +7,9 @@ use syn::export::{Formatter, ToTokens};
 use syn::{Attribute, AttributeArgs, ItemFn, ReturnType, Stmt, Item, Type, PatType, AttrStyle};
 
 use crate::macro_attribute::NameValueAttribute;
-use crate::args::ArgData;
+use crate::args::ArgAttrData;
 use crate::attr;
-use crate::option::OptionData;
+use crate::option::OptionAttrData;
 use crate::var::{ArgLocalVar, ArgumentType};
 use crate::TypeExtensions;
 
@@ -22,22 +22,22 @@ use crate::TypeExtensions;
 /// )]
 /// ```
 #[derive(Debug)]
-pub struct CommandData {
+pub struct CommandAttrData {
     fn_name: FnName,
     is_child: bool,
     version: Option<String>,
     description: Option<String>,
     about: Option<String>,
     item_fn: Option<ItemFn>,
-    children: Vec<CommandData>,
-    options: Vec<OptionData>,
-    args: Option<ArgData>,
+    children: Vec<CommandAttrData>,
+    options: Vec<OptionAttrData>,
+    args: Option<ArgAttrData>,
     vars: Vec<ArgLocalVar>,
 }
 
-impl CommandData {
+impl CommandAttrData {
     fn new(name: FnName, is_child: bool) -> Self {
-        CommandData {
+        CommandAttrData {
             fn_name: name,
             is_child,
             version: None,
@@ -74,16 +74,16 @@ impl CommandData {
         self.about = Some(about);
     }
 
-    pub fn set_child(&mut self, command: CommandData) {
+    pub fn set_child(&mut self, command: CommandAttrData) {
         assert!(command.is_child);
         self.children.push(command)
     }
 
-    pub fn set_option(&mut self, option: OptionData) {
+    pub fn set_option(&mut self, option: OptionAttrData) {
         self.options.push(option);
     }
 
-    pub fn set_args(&mut self, args: ArgData) {
+    pub fn set_args(&mut self, args: ArgAttrData) {
         self.args = Some(args);
     }
 
@@ -199,7 +199,7 @@ impl CommandData {
             let attrs = &self.item_fn.as_ref().unwrap().attrs;
             let outer = self.outer_body();
             let error_handling = match ret {
-                ReturnType::Type(_, ty) if is_result_type(ty) => quote! {},
+                ReturnType::Type(_, ty) if is_clapi_result_type(ty) => quote! {},
                 _ => quote! { .expect("an error occurred"); },
             };
 
@@ -223,7 +223,7 @@ impl CommandData {
     fn get_body(&self, vars: &[TokenStream]) -> TokenStream {
         let ret = &self.item_fn.as_ref().unwrap().sig.output;
         let error_handling = match ret {
-            ReturnType::Type(_, ty) if is_result_type(ty) => quote! {},
+            ReturnType::Type(_, ty) if is_clapi_result_type(ty) => quote! {},
             // If return type is not `Result` we need return `fn_name(args) ; Ok(())`
             _ => quote! { ; Ok(()) },
         };
@@ -295,7 +295,7 @@ impl CommandData {
     }
 }
 
-impl ToTokens for CommandData {
+impl ToTokens for CommandAttrData {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append_all(self.expand().into_iter())
     }
@@ -346,8 +346,15 @@ impl Display for FnName {
     }
 }
 
-fn is_result_type(ty: &Type) -> bool {
-    ty.is_result() || ty.path().unwrap() == "clapi::Result"
+fn is_clapi_result_type(ty: &Type) -> bool {
+    if ty.is_result(){
+        return true;
+    }
+
+    match ty.path().unwrap().as_str() {
+        "clapi::Result" | "clapi::error::Result" => true,
+        _ => false
+    }
 }
 
 pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {
@@ -382,15 +389,14 @@ mod cmd {
 
     use syn::{Attribute, AttributeArgs, AttrStyle, File, FnArg, Item, ItemFn, ItemMod, PatType, Stmt, Type};
 
-    use crate::macro_attribute::{MacroAttribute, NameValueAttribute, Value, MetaItem};
-    use crate::args::ArgData;
-    use crate::command::{drop_command_attributes, CommandData, FnName, FnArgData, is_option_bool_flag};
-    use crate::option::OptionData;
+    use crate::macro_attribute::{MacroAttribute, NameValueAttribute, MetaItem};
+    use crate::args::ArgAttrData;
+    use crate::command::{drop_command_attributes, CommandAttrData, FnName, FnArgData, is_option_bool_flag};
+    use crate::option::OptionAttrData;
     use crate::utils::{pat_type_to_string, path_to_string};
     use crate::var::{ArgLocalVar, VarSource};
     use crate::{attr, AttrQuery};
     use crate::TypeExtensions;
-    use proc_macro2::Span;
 
     // Create a new command from an `ItemFn`
 
@@ -399,7 +405,7 @@ mod cmd {
         item_fn: ItemFn,
         is_child: bool,
         get_subcommands: bool,
-    ) -> CommandData {
+    ) -> CommandAttrData {
         let name = item_fn.sig.ident.to_string();
         new_command_with_name(
             name_value_attr,
@@ -416,22 +422,22 @@ mod cmd {
         name: FnName,
         is_child: bool,
         get_subcommands: bool,
-    ) -> CommandData {
-        let mut command = CommandData::new(name, is_child);
+    ) -> CommandAttrData {
+        let mut command = CommandAttrData::new(name, is_child);
 
         for (key, value) in &name_value_attr {
             match key.as_str() {
                 attr::DESCRIPTION => {
                     let description = value
                         .clone()
-                        .as_string_literal()
+                        .to_string_literal()
                         .expect("`description` is expected to be string literal");
                     command.set_description(description);
                 }
                 attr::ABOUT => {
                     let help = value
                         .clone()
-                        .as_string_literal()
+                        .to_string_literal()
                         .expect("`about` is expected to be string literal");
                     command.set_description(help);
                 }
@@ -494,9 +500,9 @@ mod cmd {
         if arg_count > 0 {
             for fn_arg in fn_args.iter().filter(|f| !f.is_option) {
                 let arg = if fn_arg.attribute.is_some() {
-                    ArgData::from_arg(fn_arg.clone())
+                    ArgAttrData::from_arg_data(fn_arg.clone())
                 }  else {
-                    ArgData::with_name(fn_arg.arg_name.clone())
+                    ArgAttrData::with_name(fn_arg.arg_name.clone())
                 };
 
                 command.set_args(arg)
@@ -504,91 +510,16 @@ mod cmd {
         }
 
         // Add options
-        for fn_arg in fn_args.iter().filter(|n| n.is_option) {
-            let mut option = OptionData::new(fn_arg.arg_name.clone());
-            let mut args = ArgData::from_arg(fn_arg.clone().drop_attribute());
-
-            if let Some(att) = &fn_arg.attribute {
-                for (key, value) in att {
-                    match key.as_str() {
-                        attr::ARG => {
-                            let arg_name = value
-                                .clone()
-                                .as_string_literal()
-                                .expect("option `arg` is expected to be string literal");
-
-                            args.set_name(arg_name);
-                        }
-                        attr::ALIAS => {
-                            let alias = value
-                                .clone()
-                                .as_string_literal()
-                                .expect("option `alias` is expected to be string literal");
-
-                            option.set_alias(alias);
-                        }
-                        attr::DESCRIPTION => {
-                            let description = value
-                                .clone()
-                                .as_string_literal()
-                                .expect("option `description` is expected to be string literal");
-                            option.set_description(description);
-                        }
-                        attr::MIN => {
-                            let min = value
-                                .clone()
-                                .parse_literal::<usize>()
-                                .expect("option `min` is expected to be an integer literal");
-
-                            args.set_min(min);
-                        }
-                        attr::MAX => {
-                            let max = value
-                                .clone()
-                                .parse_literal::<usize>()
-                                .expect("option `max` is expected to be an integer literal");
-
-                            args.set_max(max);
-                        }
-                        attr::DEFAULT => match value {
-                            Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
-                            Value::Array(array) => args.set_default_values(array.clone()),
-                        },
-                        _ => panic!("invalid `{}` key `{}`", att.path(), key),
-                    }
-                }
-            }
-
-            // A function argument is considered an option bool flag if:
-            // - Is bool type
-            // - Don't contains `min`, `max` or `default`
-            if is_option_bool_flag(fn_arg) {
-                use syn::Lit;
-                use syn::LitBool;
-
-                // An option bool behaves like the follow:
-                // --flag=true      (true)
-                // --flag=false     (false)
-                // --flag           (true)
-                // [no option]      (false)
-
-                // Is needed to set `false` as default value
-                // to allow the option to be marked as no `required`
-                let lit = LitBool { value: false, span: Span::call_site() };
-                args.set_default_values(vec![Lit::Bool(lit)]);
-                args.set_min(0);
-                args.set_max(1);
-            }
-
-            option.set_args(args);
+        for fn_arg in fn_args.into_iter().filter(|n| n.is_option) {
+            let option = OptionAttrData::from_arg_data(fn_arg);
             command.set_option(option);
-
         }
 
         // Add children
         if get_subcommands {
             for (name_value, item_fn) in get_subcommands_from_fn(&item_fn) {
-                command.set_child(new_command(name_value, item_fn, true, true));
+                let subcommand = new_command(name_value, item_fn, true, true);
+                command.set_child(subcommand);
             }
         }
 
@@ -676,7 +607,7 @@ mod cmd {
                 .as_ref()
                 .map(|att| att.get(attr::NAME))
                 .flatten()
-                .map(|value| value.as_string_literal().expect("`name` is expected to be a string literal"))
+                .map(|value| value.to_string_literal().expect("`name` is expected to be a string literal"))
                 .unwrap_or(arg_name);
 
             ret.push(FnArgData { arg_name: name, pat_type, attribute, is_option });
@@ -718,7 +649,7 @@ mod cmd {
         args: AttributeArgs,
         item_fn: ItemFn,
         root_path: PathBuf,
-    ) -> CommandData {
+    ) -> CommandAttrData {
         static IS_DEFINED: AtomicBool = AtomicBool::new(false);
 
         if IS_DEFINED.load(Ordering::Relaxed) {

@@ -1,9 +1,12 @@
 use crate::macro_attribute::{NameValue, NameValueAttribute, NameValueError, Value};
+use std::fmt::{Display, Write};
 use std::iter::Peekable;
 use std::ops::Index;
-use syn::{Attribute, AttributeArgs, Lit, Meta, MetaList, MetaNameValue, NestedMeta, Path, AttrStyle};
 use std::slice::SliceIndex;
-
+use syn::export::Formatter;
+use syn::{
+    AttrStyle, Attribute, AttributeArgs, Lit, Meta, MetaList, MetaNameValue, NestedMeta, Path,
+};
 
 /// Represents a macro attribute and its arguments like:
 ///
@@ -25,16 +28,20 @@ impl MacroAttribute {
         MacroAttribute {
             path: path.to_string(),
             args,
-            style
+            style,
         }
     }
 
-    pub fn from_attribute_args(path: &str, attribute_args: AttributeArgs, style: AttrStyle) -> Self {
+    pub fn from_attribute_args(
+        path: &str,
+        attribute_args: AttributeArgs,
+        style: AttrStyle,
+    ) -> Self {
         let args = AttributeArgsVisitor::visit(attribute_args);
         MacroAttribute {
             path: path.to_string(),
             args,
-            style: Some(style)
+            style: Some(style),
         }
     }
 
@@ -54,7 +61,7 @@ impl MacroAttribute {
         self.args.len()
     }
 
-    pub fn get(&self, index: usize) -> Option<&MetaItem>{
+    pub fn get(&self, index: usize) -> Option<&MetaItem> {
         self.args.get(index)
     }
 
@@ -94,6 +101,12 @@ impl IntoIterator for MacroAttribute {
 
     fn into_iter(self) -> Self::IntoIter {
         self.args.into_iter()
+    }
+}
+
+impl Display for MacroAttribute {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", attribute_to_string(self.style.as_ref(), self.path(), self.args.as_slice()))
     }
 }
 
@@ -184,6 +197,20 @@ impl MetaItem {
     }
 }
 
+impl Display for MetaItem {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MetaItem::Path(s) => write!(f, "{}", s),
+            MetaItem::Literal(lit) => display_lit(f, lit),
+            MetaItem::NameValue(name_value) => write!(f, "{}", name_value),
+            MetaItem::Nested(nested) => {
+                assert!(nested.style.is_none(), "Nested macro attributes cannot have an style");
+                write!(f, "{}", attribute_to_string(None, nested.path(), nested.args.as_slice()))
+            }
+        }
+    }
+}
+
 struct AttributeArgsVisitor;
 
 impl AttributeArgsVisitor {
@@ -242,7 +269,7 @@ impl AttributeArgsVisitor {
         ret.push(MetaItem::Nested(Box::new(MacroAttribute {
             path,
             args: values,
-            style: None
+            style: None,
         })));
     }
 
@@ -298,11 +325,11 @@ fn join_path_to_string(path: &Path) -> String {
 pub fn meta_item_to_string(data: &MetaItem) -> String {
     match data {
         MetaItem::Path(path) => path.to_owned(),
-        MetaItem::Literal(lit) => literal_to_string(lit),
+        MetaItem::Literal(lit) => lit_to_string(lit),
         MetaItem::NameValue(data) => match &data.value {
-            Value::Literal(x) => format!("{} = {}", data.name, literal_to_string(x)),
+            Value::Literal(x) => format!("{} = {}", data.name, lit_to_string(x)),
             Value::Array(x) => {
-                let s = x.iter().map(literal_to_string).collect::<Vec<String>>();
+                let s = x.iter().map(lit_to_string).collect::<Vec<String>>();
 
                 format!("{} = {:?}", data.name, s)
             }
@@ -317,7 +344,7 @@ pub fn meta_item_to_string(data: &MetaItem) -> String {
     }
 }
 
-pub fn literal_to_string(lit: &Lit) -> String {
+pub fn lit_to_string(lit: &Lit) -> String {
     match lit {
         Lit::Str(s) => s.value(),
         Lit::ByteStr(s) => unsafe { String::from_utf8_unchecked(s.value()) },
@@ -327,6 +354,48 @@ pub fn literal_to_string(lit: &Lit) -> String {
         Lit::Float(s) => s.to_string(),
         Lit::Bool(s) => s.value.to_string(),
         Lit::Verbatim(s) => s.to_string(),
+    }
+}
+
+pub fn display_lit<W: Write>(f: &mut W, lit: &Lit) -> std::fmt::Result {
+    match lit {
+        Lit::Str(s) => write!(f, "{:?}{}", s.value(), s.suffix()),
+        Lit::ByteStr(s) => write!(f, "b{:?}{}", unsafe { String::from_utf8_unchecked(s.value()) }, s.suffix()),
+        Lit::Byte(s) => write!(f, "b{:?}{}", std::char::from_u32(s.value() as u32).unwrap(), s.suffix()),
+        Lit::Char(s) =>  write!(f, "{:?}{}", s.value(), s.suffix()),
+        Lit::Int(s) => write!(f, "{}{}", s.base10_digits(), s.suffix()),
+        Lit::Float(s) => write!(f, "{}{}", s.base10_digits(), s.suffix()),
+        Lit::Bool(s) => write!(f, "{}", s.value),
+        Lit::Verbatim(s) => write!(f, "{}", s),
+    }
+}
+
+pub fn attribute_to_string<'a, I>(
+    style: Option<&AttrStyle>,
+    path: &str,
+    meta_items: I,
+) -> String
+where
+    I: IntoIterator<Item = &'a MetaItem>,
+{
+    let meta = meta_items.into_iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<String>>();
+
+    if let Some(style) = style {
+        let style = if matches!(style, AttrStyle::Outer) {
+            "#".to_owned()
+        } else {
+            "#!".to_owned()
+        };
+
+        if meta.is_empty() {
+            format!("{}[{}]", style, path)
+        } else {
+            format!("{}[{}({})]", style, path, meta.join(", "))
+        }
+    } else {
+        format!("{}({})", path, meta.join(", "))
     }
 }
 
@@ -352,5 +421,50 @@ mod tests {
         assert!(attr[1].is_name_value());
         assert!(attr[2].is_nested());
     }
-}
 
+    #[test]
+    fn path_and_nested_test() {
+        let tokens = quote! { #[attribute(path, nested())] };
+        let attr = MacroAttribute::new(parse_attr(tokens));
+
+        assert_eq!(attr.path, "attribute".to_owned());
+        assert_eq!(attr.len(), 2);
+        assert!(attr[0].is_path());
+        assert!(attr[1].is_nested());
+    }
+
+    #[test]
+    fn to_string_test(){
+        let tokens = quote! {
+            #[attribute(
+                path,
+                nested(name="Alan"),
+                empty(),
+                string="string",
+                byte_str= b"byte_string",
+                int=100usize,
+                float=0.5,
+                byte=b'a',
+                boolean=true,
+                character='z',
+            )]
+        };
+        let attr = MacroAttribute::new(parse_attr(tokens));
+
+        assert_eq!(
+            attr.to_string().as_str(),
+            "#[attribute(\
+                path, \
+                nested(name=\"Alan\"), \
+                empty(), \
+                string=\"string\", \
+                byte_str=b\"byte_string\", \
+                int=100usize, \
+                float=0.5, \
+                byte=b'a', \
+                boolean=true, \
+                character='z'\
+            )]"
+        )
+    }
+}
