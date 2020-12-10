@@ -4,4 +4,4 @@ error: custom attribute panicked
 3 | #[command]
   | ^^^^^^^^^^
   |
-  = help: message: option `alias` is expected to be string literal
+  = help: message: option `alias` must be a string literal

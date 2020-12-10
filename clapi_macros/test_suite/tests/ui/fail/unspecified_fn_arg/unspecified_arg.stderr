@@ -4,4 +4,4 @@ error: custom attribute panicked
 3 | #[command]
   | ^^^^^^^^^^
   |
-  = help: message: first element in `#[arg(...)]` must be a path like: `#[arg(name)]` where `argument` is the name of the function argument
+  = help: message: first element in `#[arg(default=1)]` must be a path like: `#[arg(value, ...)]` where `value` is the name of the function argument

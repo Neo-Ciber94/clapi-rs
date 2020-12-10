@@ -4,4 +4,4 @@ error: custom attribute panicked
 3 | #[command]
   | ^^^^^^^^^^
   |
-  = help: message: option `max` is expected to be an integer literal
+  = help: message: option `max` must be an integer literal

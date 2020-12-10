@@ -13,7 +13,7 @@ pub(crate) use ext::*;
 
 #[macro_use]
 mod utils;
-mod args;
+mod arg;
 mod assertions;
 mod attr;
 mod command;

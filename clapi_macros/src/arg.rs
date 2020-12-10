@@ -7,14 +7,14 @@ use crate::command::{FnArgData, is_option_bool_flag};
 use crate::utils::pat_type_to_string;
 use crate::var::ArgumentType;
 
-/// Tokens for:
+/// Tokens for an `arg` attribute.
 ///
 /// ```text
-/// #[args(arg,
-///     min=0,
-///     max=100,
-///     default=1,2,3
-/// )]
+/// #[command]
+/// #[arg(numbers, description="Numbers to sum", min=0, max=100, default=0)]
+/// fn sum(numbers: Vec<i64>){
+///     println!("Total: {}", numbers.iter().sum::<i64>());
+/// }
 /// ```
 #[derive(Debug)]
 pub struct ArgAttrData {
@@ -49,7 +49,7 @@ impl ArgAttrData {
                         let name = value
                             .clone()
                             .to_string_literal()
-                            .expect("arg `arg` is expected to be a string literal");
+                            .expect("arg `arg` must be a string literal");
 
                         args.set_name(name);
                     }
@@ -57,7 +57,7 @@ impl ArgAttrData {
                         let min = value
                             .clone()
                             .to_integer_literal::<usize>()
-                            .expect("arg `min` is expected to be an integer literal");
+                            .expect("arg `min` must be an integer literal");
 
                         args.set_min(min);
                     }
@@ -65,7 +65,7 @@ impl ArgAttrData {
                         let max = value
                             .clone()
                             .to_integer_literal::<usize>()
-                            .expect("arg `max` is expected to be an integer literal");
+                            .expect("arg `max` must be an integer literal");
 
                         args.set_max(max);
                     },

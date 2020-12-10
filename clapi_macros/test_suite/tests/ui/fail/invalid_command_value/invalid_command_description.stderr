@@ -4,4 +4,4 @@ error: custom attribute panicked
 3 | #[command(description=123)]
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
   |
-  = help: message: `description` is expected to be string literal
+  = help: message: `description` must be a string literal

@@ -7,19 +7,28 @@ use syn::export::{Formatter, ToTokens};
 use syn::{Attribute, AttributeArgs, ItemFn, ReturnType, Stmt, Item, Type, PatType, AttrStyle};
 
 use crate::macro_attribute::NameValueAttribute;
-use crate::args::ArgAttrData;
+use crate::arg::ArgAttrData;
 use crate::attr;
 use crate::option::OptionAttrData;
 use crate::var::{ArgLocalVar, ArgumentType};
 use crate::TypeExtensions;
 
-/// Tokens for:
+/// Tokens for either `command` or `subcommand` attribute.
 ///
 /// ```text
 /// #[command(
-///     description="A description",
-///     help="Help text",
+/// description="Prints system time",
+/// about="Gets the current system time in milliseconds",
+/// version=0.1
 /// )]
+/// fn system_time(){
+///     #[subcommand(description="Prints the current operative system", version="1.0.2")]
+///     fn os(){
+///         println!("{}", std::env::consts::OS);
+///     }
+///
+///     println!("{}", std::time::SystemTime::now().elapsed().unwrap().as_millis());
+/// }
 /// ```
 #[derive(Debug)]
 pub struct CommandAttrData {
@@ -390,7 +399,7 @@ mod cmd {
     use syn::{Attribute, AttributeArgs, AttrStyle, File, FnArg, Item, ItemFn, ItemMod, PatType, Stmt, Type};
 
     use crate::macro_attribute::{MacroAttribute, NameValueAttribute, MetaItem};
-    use crate::args::ArgAttrData;
+    use crate::arg::ArgAttrData;
     use crate::command::{drop_command_attributes, CommandAttrData, FnName, FnArgData, is_option_bool_flag};
     use crate::option::OptionAttrData;
     use crate::utils::{pat_type_to_string, path_to_string};
@@ -431,14 +440,14 @@ mod cmd {
                     let description = value
                         .clone()
                         .to_string_literal()
-                        .expect("`description` is expected to be string literal");
+                        .expect("`description` must be a string literal");
                     command.set_description(description);
                 }
                 attr::ABOUT => {
                     let help = value
                         .clone()
                         .to_string_literal()
-                        .expect("`about` is expected to be string literal");
+                        .expect("`about` must be a string literal");
                     command.set_description(help);
                 }
                 attr::VERSION => {
@@ -542,8 +551,7 @@ mod cmd {
 
                     if subcommands.len() > 0 {
                         assert_eq!(
-                            subcommands.len(),
-                            1,
+                            subcommands.len(), 1,
                             "multiples `subcommand` attributes defined in `{}`",
                             item_fn.sig.ident.to_string()
                         );
@@ -603,14 +611,7 @@ mod cmd {
                 .map(|att| attr::is_option(att.path()))
                 .unwrap_or(true);
 
-            let name = attribute
-                .as_ref()
-                .map(|att| att.get(attr::NAME))
-                .flatten()
-                .map(|value| value.to_string_literal().expect("`name` is expected to be a string literal"))
-                .unwrap_or(arg_name);
-
-            ret.push(FnArgData { arg_name: name, pat_type, attribute, is_option });
+            ret.push(FnArgData { arg_name, pat_type, attribute, is_option });
         }
 
         ret
@@ -619,9 +620,11 @@ mod cmd {
     fn split_attr_path_and_name_values(attr: &MacroAttribute) -> (String, NameValueAttribute){
         let name = attr.get(0)
             .cloned()
-            .unwrap_or_else(|| panic!("the first element in `#[{}()]` must be the argument name, but was empty", attr.path()))
+            .unwrap_or_else(|| panic!("the first element in `{}` must be the argument name, but was empty", attr))
             .into_path()
-            .expect("first element in `#[arg(...)]` must be a path like: `#[arg(name)]` where `argument` is the name of the function argument");
+            .unwrap_or_else(|| {
+                panic!("first element in `{}` must be a path like: `#[{}(value, ...)]` where `value` is the name of the function argument", attr, attr.path())
+            });
 
         let name_value_attribute = if attr.len() == 1 {
           NameValueAttribute::empty(attr.path().to_owned(), AttrStyle::Outer)

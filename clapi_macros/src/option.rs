@@ -1,24 +1,18 @@
-use crate::args::ArgAttrData;
+use crate::arg::ArgAttrData;
 use proc_macro2::{TokenStream, Span};
 use quote::*;
 use crate::command::{FnArgData, is_option_bool_flag};
 use crate::attr;
 use crate::macro_attribute::Value;
 
-// CommandAttrData -> CommandFnData
-// OptionAttrData -> CommandOptionData
-// ArgAttrData -> CommandArgData
-
-/// Tokens for:
+/// Tokens for an `option` attribute.
 ///
 /// ```text
-/// #[option(value,
-///     alias="v",
-///     description="A description",
-///     min=0,
-///     max=100,
-///     default="Hello World"
-/// )]
+/// #[command]
+/// #[option(numbers, alias="n", description="Average", min=1, max=100, default=0)]
+/// fn avg(numbers: Vec<i64>){
+///     println!("{}", numbers.iter().sum::<i64>() / numbers.len() as i64);
+/// }
 /// ```
 #[derive(Debug)]
 pub struct OptionAttrData {
@@ -49,7 +43,7 @@ impl OptionAttrData {
                         let arg_name = value
                             .clone()
                             .to_string_literal()
-                            .expect("option `arg` is expected to be string literal");
+                            .expect("option `arg` must be a string literal");
 
                         args.set_name(arg_name);
                     }
@@ -57,7 +51,7 @@ impl OptionAttrData {
                         let alias = value
                             .clone()
                             .to_string_literal()
-                            .expect("option `alias` is expected to be string literal");
+                            .expect("option `alias` must be a string literal");
 
                         option.set_alias(alias);
                     }
@@ -65,14 +59,14 @@ impl OptionAttrData {
                         let description = value
                             .clone()
                             .to_string_literal()
-                            .expect("option `description` is expected to be string literal");
+                            .expect("option `description` must be a string literal");
                         option.set_description(description);
                     }
                     attr::MIN => {
                         let min = value
                             .clone()
                             .to_integer_literal::<usize>()
-                            .expect("option `min` is expected to be an integer literal");
+                            .expect("option `min` must be an integer literal");
 
                         args.set_min(min);
                     }
@@ -80,7 +74,7 @@ impl OptionAttrData {
                         let max = value
                             .clone()
                             .to_integer_literal::<usize>()
-                            .expect("option `max` is expected to be an integer literal");
+                            .expect("option `max` must be an integer literal");
 
                         args.set_max(max);
                     }
