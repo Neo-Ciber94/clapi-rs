@@ -222,26 +222,67 @@ impl OptionList {
     }
 
     /// Returns an `ExactSizeIterator` over the `CommandOption` of this collection.
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = &'_ CommandOption> + Debug {
-        self.inner.iter()
+    pub fn iter(&self) -> Iter<'_> {
+        Iter { iter: self.inner.iter() }
+    }
+}
+
+/// An iterator over the `CommandOption`s of an option list.
+#[derive(Debug, Clone)]
+pub struct Iter<'a>{
+    iter: linked_hash_set::Iter<'a, CommandOption>
+}
+
+/// An owning iterator over the `CommandOption`s of an option list.
+pub struct IntoIter {
+    iter: linked_hash_set::IntoIter<CommandOption>
+}
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = &'a CommandOption;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+impl Iterator for IntoIter {
+    type Item = CommandOption;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+impl<'a> ExactSizeIterator for Iter<'a> {
+    fn len(&self) -> usize {
+        self.iter.len()
+    }
+}
+
+impl ExactSizeIterator for IntoIter {
+    fn len(&self) -> usize {
+        self.iter.len()
     }
 }
 
 impl<'a> IntoIterator for &'a OptionList {
     type Item = &'a CommandOption;
-    type IntoIter = linked_hash_set::Iter<'a, CommandOption>;
+    type IntoIter = Iter<'a>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.inner.iter()
+        self.iter()
     }
 }
 
 impl IntoIterator for OptionList {
     type Item = CommandOption;
-    type IntoIter = linked_hash_set::IntoIter<CommandOption>;
+    type IntoIter = IntoIter;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.inner.into_iter()
+        IntoIter { iter: self.inner.into_iter() }
     }
 }
 

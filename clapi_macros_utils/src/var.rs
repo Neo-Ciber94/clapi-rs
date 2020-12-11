@@ -4,6 +4,7 @@ use syn::{GenericArgument, Ident, Type};
 use syn::parse::{Parse, ParseStream};
 use crate::ext::TypeExtensions;
 
+/// Provides the tokens to construct a variable in `clapi::app!` macro handler.
 pub struct DeclareVar{
     input: VarInput,
     source: VarSource,
@@ -124,9 +125,10 @@ impl DeclareVar {
     }
 }
 
+/// Represents the declaration of a variable in `clapi::app!` macro like:
+/// `(source, mut name : i64)`
 #[derive(Debug)]
 pub struct VarInput {
-    // ($source, mut? $name : $ty)
     source: Ident,
     comma: syn::Token![,],
     mutability: Option<syn::Token![mut]>,

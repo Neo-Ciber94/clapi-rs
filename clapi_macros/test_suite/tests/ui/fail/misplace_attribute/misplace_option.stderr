@@ -1,0 +1,7 @@
+error: custom attribute panicked
+ --> $DIR/misplace_option.rs:3:1
+  |
+3 | #[option(name, alias="n")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: message: `option` should be placed after a `command` or `subcommand` attribute

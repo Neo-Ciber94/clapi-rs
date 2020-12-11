@@ -172,7 +172,7 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
     // This just act as a marker
-    panic!("option should be placed after a `command` or `subcommand` attribute")
+    panic!("`option` should be placed after a `command` or `subcommand` attribute")
 }
 
 /// Declares a command argument.
@@ -207,7 +207,7 @@ pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn arg(_: TokenStream, _: TokenStream) -> TokenStream {
     // This just act as a marker
-    panic!("arg should be placed after a `command` or `subcommand` attribute")
+    panic!("`arg` should be placed after a `command` or `subcommand` attribute")
 }
 
 #[cfg(nightly)]

@@ -521,8 +521,8 @@ impl ArgumentList {
     }
 
     /// Returns an `Iterator` over the arguments.
-    pub fn iter(&self) -> impl ExactSizeIterator<Item=&Argument>{
-        self.inner.iter()
+    pub fn iter(&self) -> Iter<'_> {
+        Iter { iter: self.inner.iter() }
     }
 
     fn assert_no_default_args(&self){
@@ -530,6 +530,63 @@ impl ArgumentList {
             let arg = self.inner.iter().nth(index).unwrap();
             panic!("multiple arguments with default values is not allowed: `{}` contains default values", arg.name);
         }
+    }
+}
+
+/// An iterator over the `Argument`s of a argument list.
+#[derive(Debug, Clone)]
+pub struct Iter<'a>{
+    iter: linked_hash_set::Iter<'a, Argument>
+}
+
+/// An owning iterator over the `Argument`s of a argument list.
+pub struct IntoIter {
+    iter: linked_hash_set::IntoIter<Argument>
+}
+
+impl<'a> Iterator for Iter<'a>{
+    type Item = &'a Argument;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+impl Iterator for IntoIter {
+    type Item = Argument;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+impl<'a> ExactSizeIterator for Iter<'a>{
+    fn len(&self) -> usize {
+        self.iter.len()
+    }
+}
+
+impl ExactSizeIterator for IntoIter {
+    fn len(&self) -> usize {
+        self.iter.len()
+    }
+}
+
+impl<'a> IntoIterator for &'a ArgumentList{
+    type Item = &'a Argument;
+    type IntoIter = Iter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl IntoIterator for ArgumentList {
+    type Item = Argument;
+    type IntoIter = IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter { iter: self.inner.into_iter() }
     }
 }
 
@@ -558,24 +615,6 @@ impl Index<String> for ArgumentList{
     #[inline]
     fn index(&self, arg_name: String) -> &Self::Output {
         self.index(arg_name.as_str())
-    }
-}
-
-impl IntoIterator for ArgumentList{
-    type Item = Argument;
-    type IntoIter = linked_hash_set::IntoIter<Argument>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.inner.into_iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a ArgumentList{
-    type Item = &'a Argument;
-    type IntoIter = linked_hash_set::Iter<'a, Argument>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.inner.iter()
     }
 }
 

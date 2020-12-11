@@ -68,8 +68,8 @@ impl Command {
     }
 
     /// Returns an `ExactSizeIterator` over the children of this command.
-    pub fn get_children(&self) -> impl ExactSizeIterator<Item = &'_ Command> + Debug {
-        self.children.iter()
+    pub fn get_children(&self) -> Iter<'_>{
+        Iter { iter: self.children.iter() }
     }
 
     /// Returns the `Options` of this command.
@@ -251,12 +251,34 @@ impl Debug for Command {
     }
 }
 
+/// An iterator over the children of a `Command`.
+#[derive(Debug, Clone)]
+pub struct Iter<'a> {
+    iter: linked_hash_set::Iter<'a, Command>
+}
+
+impl<'a> Iterator for Iter<'a>{
+    type Item = &'a Command;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+impl<'a> ExactSizeIterator for Iter<'a>{
+    #[inline]
+    fn len(&self) -> usize {
+        self.iter.len()
+    }
+}
+
 impl<'a> IntoIterator for &'a Command {
     type Item = &'a Command;
-    type IntoIter = linked_hash_set::Iter<'a, Command>;
+    type IntoIter = Iter<'a>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.children.iter()
+        self.get_children()
     }
 }
 
