@@ -355,7 +355,7 @@ impl Argument {
         Ok(ret)
     }
 
-    // Checks if the type `T` is valid for the validator.
+    /// Checks if the type `T` is valid for the validator.
     fn assert_valid_type<T: 'static>(&self) -> Result<()> {
         if let Some(validator) = &self.validator {
             // If the validator returns `None`, we can convert type `T` to any valid type
@@ -730,11 +730,13 @@ pub mod validator {
         /// Returns `Ok()` if is valid otherwise `Err(error)`.
         fn validate(&self, value: &str) -> Result<()>;
 
-        /// Returns the `Type` that is valid for this `Validator`,
-        /// or `None` if is valid for different types, by default returns `None`.
+        /// Returns the `Type` that is valid for this `Validator`, by default returns `None`.
         ///
-        /// The validator use the returned `Type` ensure is the only type that a `str`
-        /// can be converted to.
+        /// When `None` is returned differents types are valid for the validator,
+        /// for example `"1"` can be valid for types like `i32`, `u64`, `f32`, ...
+        /// to ensure the validator is only valid for `u64` the implementor must return: `Some(Type::of::<u64>())`.
+        ///
+        /// The returned `Type` is used by `Argument::convert` to ensure if safe to convert a type `T`.
         fn valid_type(&self) -> Option<Type> {
             None
         }
@@ -818,7 +820,17 @@ pub mod validator {
     }
 
     /// Represents a type.
-    #[derive(Debug, Clone)]
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::validator::Type;
+    /// use std::any::TypeId;
+    ///
+    /// let r#type = Type::of::<i64>();
+    /// assert_eq!(r#type.name(), "i64");
+    /// assert_eq!(r#type.id(), &TypeId::of::<i64>());
+    /// ```
+    #[derive(Debug, Clone, Copy)]
     pub struct Type {
         type_name: &'static str,
         type_id: TypeId,
