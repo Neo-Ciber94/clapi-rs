@@ -25,6 +25,9 @@ pub struct Command {
 
 impl Command {
     /// Constructs a new `Command`.
+    ///
+    /// # Panics
+    /// Panics if the command `name` is blank or empty.
     #[inline]
     pub fn new<S: Into<String>>(name: S) -> Self {
         Command::with_options(name, OptionList::new())
@@ -37,6 +40,9 @@ impl Command {
     }
 
     /// Constructs a new `Command` with the specified `Options`.
+    ///
+    /// # Panics
+    /// Panics if the command `name` is blank or empty.
     pub fn with_options<S: Into<String>>(name: S, options: OptionList) -> Self {
         let name = assert_not_blank!(name.into(), "`name` cannot be blank or empty");
 
@@ -112,37 +118,27 @@ impl Command {
     }
 
     /// Sets a short description of this command.
+    ///
+    /// # Panics:
+    /// Panics if the `description` is blank or empty.
     pub fn description<S: Into<String>>(mut self, description: S) -> Self {
         self.description = Some(assert_not_blank!(description.into(), "`description` cannot be blank or empty"));
         self
     }
 
     /// Sets additional information about this command like authors, usage, examples, etc...
+    ///
+    /// # Panics:
+    /// Panics if the `about` is blank or empty.
     pub fn about<S: Into<String>>(mut self, help: S) -> Self {
         self.about = Some(assert_not_blank!(help.into(), "`help` cannot be blank or empty"));
         self
     }
 
     /// Adds an `CommandOption` to this command.
-    #[cfg(debug_assertions)]
-    pub fn option(mut self, option: CommandOption) -> Self {
-        if self.options.contains(option.get_name()){
-            panic!("`{}` already contains an option named `{}`", self.name, option.get_name())
-        }
-
-        for alias in option.get_aliases() {
-            if let Some(option) = self.options.get(alias){
-                panic!("`{}` contains an option `{}` with alias `{}` that conflicts with new option: `{}`",
-                self.name, option.get_name(), alias, option.get_name())
-            }
-        }
-
-        assert!(self.options.add(option));
-        self
-    }
-
-    /// Adds an `CommandOption` to this command.
-    #[cfg(not(debug_assertions))]
+    ///
+    /// # Panics:
+    /// Panics it the command contains an `CommandOption` with the same name or alias.
     pub fn option(mut self, option: CommandOption) -> Self {
         self.add_option(option);
         self
@@ -155,21 +151,13 @@ impl Command {
     }
 
     /// Adds a new `Argument` to this command.
-    #[cfg(debug_assertions)]
+    ///
+    /// # Panics:
+    /// Panic if the command contains an `Argument` with the same name.
     pub fn arg(mut self, arg: Argument) -> Self {
-        let arg_name = arg.get_name().to_string();
-        assert!(
-            self.args.add(arg),
-            "`{}` already contains an `Argument` named: `{}`",
-            self.name, arg_name,
-        );
-        self
-    }
-
-    /// Adds a new `Argument` to this command.
-    #[cfg(not(debug_assertions))]
-    pub fn arg(mut self, arg: Argument) -> Self {
-        self.args.add(arg);
+        if let Err(duplicated) = self.args.add(arg) {
+            panic!("`{}` already contains an argument named: `{}`", self.name, duplicated.get_name());
+        }
         self
     }
 
@@ -205,21 +193,29 @@ impl Command {
         self
     }
 
-    #[inline]
     pub(crate) fn add_command(&mut self, mut command: Command) -> bool {
-        debug_assert!(
-            !self.children.contains(&command),
-            "`{}` already contains a command named: `{}`",
-            command.name,
-            self.name
-        );
+        if self.children.contains(&command) {
+            panic!("`{}` already contains a subcommand named: `{}`", self.name, command.get_name());
+        }
+
         command.parent = Some(Symbol::Cmd(self.name.clone()));
         self.children.insert(command)
     }
 
-    #[inline]
-    pub(crate) fn add_option(&mut self, option: CommandOption) -> bool {
-        self.options.add(option)
+    pub(crate) fn add_option(&mut self, option: CommandOption) {
+        if let Err(duplicated) = self.options.add(option) {
+            if self.options.contains(duplicated.get_name()) {
+                panic!("`{}` already contains an option named: `{}`", self.name, duplicated.get_name());
+            } else {
+                for alias in duplicated.get_aliases() {
+                   if self.options.contains(alias) {
+                       panic!("`{}` already contains an option with alias: `{}`", self.name, alias);
+                   }
+                }
+
+                unreachable!()
+            }
+        }
     }
 }
 

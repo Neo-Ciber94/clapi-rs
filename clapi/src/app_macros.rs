@@ -74,6 +74,7 @@ macro_rules! app {
         $crate::app!{
             @command ($builder.handler(|options, arguments|{
                 #[cfg(debug_assertions)]
+                #[allow(unused_variables)]
                 fn assert_non_duplicate_arguments($($name: $ty),+ $(,$($arg_name: $arg_type),+)?){}
 
                 $(
@@ -85,6 +86,24 @@ macro_rules! app {
                     )+
                 )?
                 $block
+                Ok(())
+            })) $($tt)*
+        }
+    };
+
+    (@command ($builder:expr) (handler () => $block:block ) $($tt:tt)*) => {
+        $crate::app!{
+            @command ($builder.handler(|_options, _arguments|{
+                $block
+                Ok(())
+            })) $($tt)*
+        }
+    };
+
+    (@command ($builder:expr) (handler () => $expr:expr ) $($tt:tt)*) => {
+        $crate::app!{
+            @command ($builder.handler(|_options, _arguments|{
+                $expr;
                 Ok(())
             })) $($tt)*
         }
@@ -306,382 +325,33 @@ macro_rules! crate_version {
     };
 }
 
-#[macro_export]
-macro_rules! debug_app {
-    // Here start
-    (=> $($rest:tt)+) => {{
-        let mut type_checker = $crate::type_checker::CommandArgumentTypeChecker::new();
-
-        $crate::CommandLine::new({
-            let mut command = $crate::Command::root();
-            let command_name = command.get_name().to_owned();
-            command = $crate::debug_app!{ @command (command, command_name, type_checker) $($rest)+ };
-            command
-        })
-        .use_default_help()
-        .use_default_suggestions()
-    }};
-
-    ($command_name:ident => $($rest:tt)+) => {{
-        let mut type_checker = $crate::type_checker::CommandArgumentTypeChecker::new();
-
-        $crate::CommandLine::new({
-            let mut command = $crate::Command::new(stringify!($command_name));
-            let command_name = command.get_name().to_owned();
-            command = $crate::debug_app!{ @command (command, command_name, type_checker) $($rest)+ };
-            command
-        })
-        .use_default_help()
-        .use_default_suggestions()
-    }};
-
-    ($command_name:expr => $($rest:tt)+) => {{
-        let mut type_checker = $crate::type_checker::CommandArgumentTypeChecker::new();
-
-        $crate::CommandLine::new({
-            let mut command = $crate::Command::new($command_name);
-            let command_name = command.get_name().to_owned();
-            command = $crate::debug_app!{ @command (command, command_name, type_checker) $($rest)+ };
-            command
-        })
-        .use_default_help()
-        .use_default_suggestions()
-    }};
-
-    // Command
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident)) => { $builder };
-
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (description => $description:literal) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @command ($builder.description($description), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (about => $about:literal) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @command ($builder.about($about), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    // Handler
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (handler ($options:ident, $arguments:ident) => $block:block ) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @command ($builder.handler({
-                |$options, $arguments|{
-                    $block
-                    Ok(())
-                }
-            }), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (handler (...$($arg_name:ident: $arg_type:ty),+) => $block:block ) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @command ($builder.handler({
-                $($type_checker.assert_same_type::<$crate::var_type!($arg_type)>(&$command_name, stringify!($arg_name));)+
-
-                |options, arguments|{
-                    $(
-                        let $arg_name : $arg_type = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
-                    )+
-                    $block
-                    Ok(())
-                }
-            }), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (handler ($($name:ident : $ty:ty)+ $(,...$($arg_name:ident: $arg_type:ty),+)?) => $block:block ) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @command ($builder.handler({
-                $($type_checker.assert_same_type::<$crate::var_type!($ty)>(&$command_name, stringify!($name));)+
-                $($($type_checker.assert_same_type::<$crate::var_type!($arg_type)>(&$command_name, stringify!($arg_name));)+)?
-
-                |options, arguments|{
-                    #[cfg(debug_assertions)]
-                    fn assert_non_duplicate_arguments($($name: $ty),+ $(,$($arg_name: $arg_type),+)?){}
-
-                    $(
-                        let $name : $ty = $crate::declare_option_var!(options, $name: $ty);
-                    )+
-                    $(
-                        $(
-                            let $arg_name : $arg_type = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
-                        )+
-                    )?
-                    $block
-                    Ok(())
-                }
-            }), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    // Subcommand
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (@subcommand $command:ident $(=> $($rest:tt)+)?) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @command
-            ($builder.subcommand({
-                let mut command = $crate::Command::new(stringify!($command));
-                let command_name = command.get_name().to_owned();
-                command = $crate::debug_app!{ @command (command, $command_name, $type_checker) $($($rest)+)? };
-                command
-            }), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    // Option
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (@option $option_name:ident $(=> $($rest:tt)+)?) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @command
-            ($builder.option(
-                $crate::debug_app!{ @option ($crate::CommandOption::new(stringify!($option_name)), $command_name, $type_checker) $($($rest)+)? }
-            ), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (@option $option_name:expr $(=> $($rest:tt)+)?) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @command
-            ($builder.option(
-                $crate::debug_app!{ @option ($crate::CommandOption::new($option_name), $command_name, $type_checker) $($($rest)+)? }
-            ), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@option ($option_builder:expr, $command_name:ident, $type_checker:ident)) => { $option_builder };
-
-    (@option ($option_builder:expr, $command_name:ident, $type_checker:ident) (@arg $arg_name:ident $(=> $($rest:tt)+)?) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @option
-            ($option_builder.arg({
-                let mut arg = $crate::Argument::new(stringify!($arg_name));
-                let arg_name = arg.get_name().to_owned();
-                arg = $crate::debug_app!{ @arg (arg, $command_name, arg_name, $type_checker) $($($rest)+)? };
-                arg
-            }), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@option ($option_builder:expr, $command_name:ident, $type_checker:ident) (@arg $arg_name:expr $(=> $($rest:tt)+)?) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @option
-            ($option_builder.arg({
-                let mut arg = $crate::Argument::new($arg_name);
-                let arg_name = arg.get_name().to_owned();
-                arg = $crate::debug_app!{ @arg (arg, $command_name, arg_name, $type_checker) $($($rest)+)? };
-                arg
-            }), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@option ($option_builder:expr, $command_name:ident, $type_checker:ident) (description => $description:literal) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @option ($option_builder.description($description), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@option ($option_builder:expr, $command_name:ident, $type_checker:ident) (required => true) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @option ($option_builder.required(true), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@option ($option_builder:expr, $command_name:ident, $type_checker:ident) (required => false) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @option ($option_builder.required(false), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@option ($option_builder:expr, $command_name:ident, $type_checker:ident) (alias => $($alias:literal),+) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @option
-            ($option_builder$(.alias($alias))+, $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    // Argument
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (@arg $arg_name:ident $(=> $($rest:tt)+)?) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @command
-            ($builder.arg({
-                let mut arg = $crate::Argument::new(stringify!($arg_name));
-                let arg_name = arg.get_name().to_owned();
-                arg = $crate::debug_app!{ @arg (arg, $command_name, arg_name, $type_checker) $($($rest)+)? };
-                arg
-            }), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@command ($builder:expr, $command_name:ident, $type_checker:ident) (@arg $arg_name:expr $(=> $($rest:tt)+)?) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @command
-            ($builder.arg({
-                let mut arg = $crate::Argument::new($arg_name:expr);
-                let arg_name = arg.get_name().to_owned();
-                arg = $crate::debug_app!{ @arg (arg, $command_name, arg_name, $type_checker) $($($rest)+)? };
-                arg
-            }), $command_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@arg ($arg_builder:expr, $command_name:ident, $arg_name:ident, $type_checker:ident)) => { $arg_builder };
-
-    (@arg ($arg_builder:expr, $command_name:ident, $arg_name:ident, $type_checker:ident) (count => $count:expr) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @arg ($arg_builder.arg_count($count), $command_name, $arg_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@arg ($arg_builder:expr, $command_name:ident, $arg_name:ident, $type_checker:ident) (description => $description:literal) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @arg ($arg_builder.description($description), $command_name, $arg_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@arg ($arg_builder:expr, $command_name:ident, $arg_name:ident, $type_checker:ident) (values => $($valid_values:expr),+) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @arg ($arg_builder.valid_values(&[$($valid_values),+]), $command_name, $arg_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@arg ($arg_builder:expr, $command_name:ident, $arg_name:ident, $type_checker:ident) (default => $($default_values:expr),+) $($tt:tt)*) => {
-        $crate::debug_app!{
-            @arg ($arg_builder.defaults(&[$($default_values),+]), $command_name, $arg_name, $type_checker) $($tt)*
-        }
-    };
-
-    (@arg ($arg_builder:expr, $command_name:ident, $arg_name:ident, $type_checker:ident) (type => $ty:ty) $($tt:tt)*) => {{
-        $crate::debug_app!{
-            @arg ($arg_builder.validator({
-                let validator = $crate::validator::parse_validator::<$ty>();
-                $type_checker.add_argument::<$ty>($command_name.clone(), $arg_name.clone());
-                validator
-            }), $command_name, $arg_name, $type_checker) $($tt)*
-        }
-    }};
-}
-
-#[macro_export]
-macro_rules! debug_run_app {
-    ( => $($rest:tt)+) => {
-        $crate::debug_run_app!( => $($rest)+).run()
-    };
-
-    ($name:ident => $($rest:tt)+) => {
-        $crate::debug_run_app!($name => $($rest)+).run()
-    };
-
-    ($name:expr => $($rest:tt)+) => {
-        $crate::debug_run_app!($name => $($rest)+).run()
-    };
-
-    ($name:literal => $($rest:tt)+) => {
-        $crate::debug_run_app!($name => $($rest)+).run()
-    };
-}
-
-#[macro_export]
-macro_rules! debug_crate_app {
-    ($($rest:tt)*) => {{
-        $crate::CommandLine::new(
-            $crate::debug_app!{
-                @command
-                (
-                    $crate::Command::new($crate::package_name!())
-                        .description($crate::package_description!())
-                        .subcommand(Command::new("version")
-                            .handler(|_, _| {
-                                println!("{}", $crate::package_version!());
-                                Ok(())
-                            })
-                        )
-                ) $($rest)*
-            }
-        )
-        .use_default_help()
-        .use_default_suggestions()
-    }};
-}
-
-#[macro_export]
-macro_rules! debug_run_crate_app {
-    ($($rest:tt)*) => {{
-        $crate::CommandLine::new(
-            $crate::debug_app!{
-                @command
-                (
-                    $crate::Command::new($crate::package_name!())
-                        .description($crate::package_description!())
-                        .subcommand(Command::new("version")
-                            .handler(|_, _| {
-                                println!("{}", $crate::package_version!());
-                                Ok(())
-                            })
-                        )
-                ) $($rest)*
-            }
-        )
-        .use_default_help()
-        .use_default_suggestions()
-        .run()
-    }};
-}
-
-// No public API
-#[doc(hidden)]
-pub mod type_checker {
-    use std::collections::HashMap;
-    use std::any::{TypeId, type_name};
-
-    #[derive(Debug)]
-    pub struct CommandArgumentTypeChecker {
-        map: HashMap<String, HashMap<String, Type>>,
-    }
-
-    impl CommandArgumentTypeChecker {
-        pub fn new() -> Self {
-            CommandArgumentTypeChecker {
-                map: Default::default()
-            }
-        }
-
-        pub fn add_argument<T: 'static>(&mut self, command_name: String, arg_name: String) {
-            if let Some(map) = self.map.get_mut(&command_name) {
-                map.insert(arg_name, Type::of::<T>());
-            } else {
-                let mut inner = HashMap::new();
-                inner.insert(arg_name, Type::of::<T>());
-                self.map.insert(command_name, inner);
-            }
-        }
-
-        pub fn assert_same_type<T: 'static>(&self, command_name: &str, arg_name: &str) {
-            if let Some(map) = self.map.get(command_name) {
-                if let Some(r#type) = map.get(arg_name) {
-                    let expected = r#type;
-                    let current = &Type::of::<T>();
-                    if expected != current {
-                        panic!("invalid argument type for `{}`, expected `{}` but was `{}`",
-                               arg_name,
-                               expected.type_name,
-                               current.type_name);
-                    }
-                }
-            }
-        }
-    }
-
-    #[derive(Debug, Clone, Eq, PartialEq)]
-    struct Type {
-        type_name: String,
-        type_id: TypeId,
-    }
-
-    impl Type {
-        pub fn of<T: 'static>() -> Type {
-            let type_name = type_name::<T>().to_owned();
-            let type_id = TypeId::of::<T>();
-            Type { type_name, type_id }
-        }
-    }
-}
+// #[test]
+// mod tests {
+//     #[test]
+//     fn app_test() {
+//         let app = app! { MyApp =>
+//             (description => "Sum the values")
+//             (about => "This is an app to sum values")
+//             (@arg numbers =>
+//                 (type => i64)
+//                 (description => "the values to sum")
+//                 (count => 1..)
+//             )
+//             (@option times =>
+//                 (description => "Number of times to sum the values")
+//                 (@arg times =>
+//                     (type => u64)
+//                     (default => 1)
+//                 )
+//             )
+//             (handler (times: u64, ...numbers: Vec<i64>) => {
+//                 let times = times as i64;
+//                 println!("{}", times * numbers.iter().sum::<i64>());
+//             })
+//             (@subcommand version =>
+//                 (description => "Shows the version of the app")
+//                 (handler () =>  println!("version 1.0"))
+//             )
+//         };
+//     }
+// }

@@ -292,9 +292,9 @@ impl Value {
         match self {
             Value::Literal(lit) => {
                 match lit {
-                    Lit::Byte(n) => unsafe {
-                        let s = [n.value()];
-                        N::from_str(std::str::from_utf8_unchecked(&s)).ok()
+                    Lit::Byte(n) => {
+                        let s = n.value().to_string();
+                        N::from_str(s.as_str()).ok()
                     }
                     Lit::Int(n) => n.base10_parse().ok(),
                     _ => None,
@@ -387,7 +387,7 @@ mod tests {
     use quote::*;
     use syn::Attribute;
     use syn::parse_quote::ParseQuote;
-    use crate::macro_attribute::{MacroAttribute, NameValueAttribute};
+    use crate::macro_attribute::MacroAttribute;
 
     fn parse_attr(tokens: TokenStream) -> Attribute {
         syn::parse::Parser::parse2(Attribute::parse, tokens).expect("invalid attribute")
@@ -539,8 +539,39 @@ mod tests {
     }
 
     #[test]
-    fn to_string_test(){
-        let tokens = quote! { #[person(name="Kaori", age=20, fav_numbers=2,4,7)] };
+    fn to_type_test(){
+        let tokens = quote! {
+            #[values(
+                str="hello",
+                bytestr=b"world",
+                byte=b'a',
+                number=20,
+                float=0.5,
+                boolean=true,
+                character='z',
+                array=1,2,3
+            )]
+        };
+
         let raw_attr = MacroAttribute::new(parse_attr(tokens));
+        let attr = raw_attr.into_name_values().unwrap();
+
+        assert_eq!(attr["str"].to_string_literal(), Some("hello".to_string()));
+        assert_eq!(attr["bytestr"].to_string_literal(), Some("world".to_string()));
+        assert_eq!(attr["byte"].to_byte_literal(), Some(b'a'));
+        assert_eq!(attr["number"].to_integer_literal::<u32>(), Some(20));
+        assert_eq!(attr["byte"].to_integer_literal::<u32>(), Some(b'a' as u32));
+        assert_eq!(attr["float"].to_float_literal::<f64>(), Some(0.5));
+        assert_eq!(attr["boolean"].to_bool_literal(), Some(true));
+        assert_eq!(attr["character"].to_char_literal(), Some('z'));
+
+        assert_eq!(attr["str"].to_char_literal(), None);
+        assert_eq!(attr["bytestr"].to_char_literal(), None);
+        assert_eq!(attr["byte"].to_string_literal(), None);
+        assert_eq!(attr["number"].to_char_literal(), None);
+        assert_eq!(attr["byte"].to_bool_literal(), None);
+        assert_eq!(attr["float"].to_integer_literal::<u32>(), None);
+        assert_eq!(attr["boolean"].to_float_literal::<f64>(), None);
+        assert_eq!(attr["character"].to_bool_literal(), None);
     }
 }

@@ -11,7 +11,7 @@ pub fn is_top_function(item_fn: &ItemFn, file: &File) {
     if !found {
         panic!(
             "`{}` is not a top function.\
-                \nCommand functions must be free functions and be declared outside a module.",
+                \n`command`s must be free functions and be declared outside a module.",
             item_fn.sig.ident
         )
     }

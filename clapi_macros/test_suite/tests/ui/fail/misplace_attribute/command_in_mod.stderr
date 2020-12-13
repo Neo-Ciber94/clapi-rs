@@ -1,0 +1,8 @@
+error: custom attribute panicked
+ --> $DIR/command_in_mod.rs:4:5
+  |
+4 |     #[command]
+  |     ^^^^^^^^^^
+  |
+  = help: message: `app` is not a top function.
+          `command`s must be free functions and be declared outside a module.

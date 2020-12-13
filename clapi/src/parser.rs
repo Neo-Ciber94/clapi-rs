@@ -93,7 +93,7 @@ where S: Borrow<str>,
                             .or_else(|error| {
                                 // We add the last option
                                 let mut options = command_options.clone();
-                                options.add(option.clone());
+                                options.add(option.clone()).unwrap();
                                 Err(Error::new_parse_error(
                                     error,
                                     ParseResult::new(
@@ -104,14 +104,14 @@ where S: Borrow<str>,
                                 ))
                             })?;
 
-                        option_args.add(arg);
+                        option_args.add(arg).unwrap();
                     }
 
                     // Sets the option arguments
-                    command_options.add(option.clone().args(option_args));
+                    command_options.add(option.clone().args(option_args)).unwrap();
                 } else {
                     // Adds the option
-                    command_options.add(option.clone());
+                    command_options.add(option.clone()).unwrap();
                 }
             } else {
                 return Err(Error::new_parse_error(
@@ -165,7 +165,7 @@ where S: Borrow<str>,
         // Sets the options that takes default arguments
         for opt in default_options {
             if !command_options.contains(opt.get_name()) {
-                command_options.add(opt.clone());
+                command_options.add(opt.clone()).unwrap();
             }
         }
 
@@ -204,10 +204,9 @@ where S: Borrow<str>,
             if values.len() > 0 || (values.is_empty() && !arg.has_default_values()) {
                 arg.set_values(values)
                     .or_else(|error| {
-                        // We add the last add
-                        #[allow(unused_mut)]
+                        // We add the last arg
                         let mut args = command_args.clone();
-                        //args.add(arg.clone());
+                        args.add(arg.clone()).unwrap();
 
                         Err(Error::new_parse_error(
                             error,
@@ -220,7 +219,7 @@ where S: Borrow<str>,
                     })?;
             }
 
-            command_args.add(arg);
+            command_args.add(arg).unwrap();
         }
 
         // If there is more values which weren't consume, so the current command takes not args

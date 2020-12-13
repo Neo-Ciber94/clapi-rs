@@ -97,7 +97,7 @@ pub mod macros {
 #[cfg(feature="macros")]
 pub use macros::*;
 
-//pub extern crate clapi_macros_utils;
+#[doc(hidden)]
 pub mod macro_utils {
     pub extern crate clapi_macros_utils;
 

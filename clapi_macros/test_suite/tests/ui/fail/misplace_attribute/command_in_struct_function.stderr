@@ -1,0 +1,8 @@
+error: custom attribute panicked
+ --> $DIR/command_in_struct_function.rs:6:5
+  |
+6 |     #[command]
+  |     ^^^^^^^^^^
+  |
+  = help: message: `app` is not a top function.
+          `command`s must be free functions and be declared outside a module.

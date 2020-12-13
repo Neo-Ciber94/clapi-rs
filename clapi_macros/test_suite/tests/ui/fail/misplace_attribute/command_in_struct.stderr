@@ -1,0 +1,5 @@
+error: expected `fn`
+ --> $DIR/command_in_struct.rs:4:1
+  |
+4 | struct MyStruct;
+  | ^^^^^^
