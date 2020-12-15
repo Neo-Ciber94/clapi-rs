@@ -1,11 +1,11 @@
 use std::borrow::Borrow;
 use std::env::Args;
 use std::fmt::{Debug, Formatter};
-use crate::{Argument, CommandOption, DefaultTokenizer, HelpKind, ParseResult, Tokenizer};
+use crate::{Argument, CommandOption, DefaultTokenizer, ParseResult, Tokenizer};
 use crate::command::Command;
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, ParseError, Result};
-use crate::help::{DefaultHelpProvider, HelpProvider};
+use crate::help::{DefaultHelpProvider, HelpProvider, HelpKind};
 use crate::parser::{DefaultParser, Parser};
 use crate::suggestion::{SingleSuggestionProvider, SuggestionProvider};
 use crate::utils::{debug_option, OptionExt};
@@ -73,7 +73,7 @@ impl<P> CommandLine<P> {
 
     /// Sets the default `HelpCommand`.
     pub fn use_default_help(self) -> Self {
-        self.set_help(DefaultHelpProvider(crate::HelpKind::Subcommand))
+        self.set_help(DefaultHelpProvider(HelpKind::Subcommand))
     }
 
     /// Sets the specified `HelpProvider`.

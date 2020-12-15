@@ -33,7 +33,7 @@ pub trait SuggestionProvider {
 /// # Example
 /// ```rust
 /// use std::string::ToString;
-/// use clapi::{DefaultSuggestionProvider, SuggestionProvider};
+/// use clapi::suggestion::{DefaultSuggestionProvider, SuggestionProvider};
 ///
 /// let source = vec!["apple", "banana", "mango", "strawberry"].iter()
 ///     .map(ToString::to_string)
@@ -104,7 +104,7 @@ impl SuggestionProvider for DefaultSuggestionProvider {
 /// # Example
 /// ```rust
 /// use std::string::ToString;
-/// use clapi::{SingleSuggestionProvider, SuggestionProvider};
+/// use clapi::suggestion::{SingleSuggestionProvider, SuggestionProvider};
 ///
 /// let source = vec!["apple", "banana", "mango", "strawberry"].iter()
 ///     .map(ToString::to_string)

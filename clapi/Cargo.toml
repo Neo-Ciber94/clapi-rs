@@ -13,3 +13,8 @@ macros = ["clapi_macros"]
 linked_hash_set = "0.1.4"
 clapi_macros = { optional=true, path="../clapi_macros" }
 clapi_macros_utils = { path="../clapi_macros_utils" }
+serde = { version="1.0.118", features=["derive"], optional=true }
+
+[dev-dependencies]
+serde_test = "1.0.118"
+serde_json = "1.0.60"

@@ -199,13 +199,12 @@ impl HelpProvider for DefaultHelpProvider {
 
 mod indented_writer {
     use std::borrow::Borrow;
-    use std::fmt::Write;
 
     /// A writer with indentation.
     ///
     /// # Example
     /// ```rust
-    /// use clapi::IndentedWriter;
+    /// use clapi::help::IndentedWriter;
     ///
     /// let mut writer = IndentedWriter::new();
     /// writer.writeln("Hello");
@@ -222,36 +221,32 @@ mod indented_writer {
     #[derive(Debug, Clone)]
     pub struct IndentedWriter {
         buffer: String,
-        indentation: u32,
-        spacing: String,
+        current_indent: u32,
+        indent: String,
     }
 
     impl IndentedWriter {
         /// Constructs a new `IndentedWriter`.
         #[inline]
         pub fn new() -> Self {
-            Self::new_indented_writer(0, " ".repeat(3))
+            Self::with_indent(" ".repeat(3))
         }
 
         /// Constructs a new `IndentedWriter` with the specified spacing.
         #[inline]
-        pub fn with_spacing(value: &str) -> Self {
-            Self::new_indented_writer(0, value.to_string())
-        }
-
-        fn new_indented_writer(indentation: u32, spacing: String) -> Self {
-            assert!(!spacing.is_empty(), "spacing cannot be empty");
+        pub fn with_indent(indent: String) -> Self {
+            assert!(!indent.is_empty(), "indent cannot be empty");
 
             IndentedWriter {
                 buffer: String::new(),
-                indentation,
-                spacing,
+                current_indent: 0,
+                indent
             }
         }
 
         /// Returns the indentation level of this writer.
-        pub fn indentation(&self) -> u32 {
-            self.indentation
+        pub fn current_indent(&self) -> u32 {
+            self.current_indent
         }
 
         /// Returns a reference to this writer buffer.
@@ -261,23 +256,23 @@ mod indented_writer {
 
         /// Increment the indentation level by 1.
         pub fn increment_indent(&mut self) {
-            self.indentation += 1;
+            self.current_indent += 1;
         }
 
         /// Decrement the indentation level by 1.
         pub fn decrement_indent(&mut self) {
-            self.indentation -= 1;
+            self.current_indent -= 1;
         }
 
         /// Writes the current value in the buffer.
         pub fn write<S: Borrow<str>>(&mut self, value: S) {
-            self.write_indentation();
+            self.write_indent();
             self.buffer.push_str(value.borrow());
         }
 
         /// Writes the current value in the buffer with a `newline`.
         pub fn writeln<S: Borrow<str>>(&mut self, value: S) {
-            self.write_indentation();
+            self.write_indent();
             self.buffer.push_str(value.borrow());
             self.buffer.push('\n');
         }
@@ -302,16 +297,16 @@ mod indented_writer {
         /// to allow writing with indentation.
         ///
         /// ```rust
-        /// use clapi::IndentedWriter;
+        /// use clapi::help::IndentedWriter;
         ///
         /// let mut writer = IndentedWriter::new();
         /// writer.indented(|w| w.write("Hello World"));
         /// assert_eq!("   Hello World", writer.into_string());
         /// ```
         pub fn indented<F: FnOnce(&mut Self)>(&mut self, f: F) {
-            self.indentation += 1;
+            self.current_indent += 1;
             f(self);
-            self.indentation -= 1;
+            self.current_indent -= 1;
         }
 
         /// Gets the resulting `String` of this writer.
@@ -320,9 +315,9 @@ mod indented_writer {
             self.buffer
         }
 
-        fn write_indentation(&mut self) {
-            for _ in 0..self.indentation {
-                self.buffer.write_str(self.spacing.as_str()).unwrap();
+        fn write_indent(&mut self) {
+            for _ in 0..self.current_indent {
+                self.buffer.push_str(self.indent.as_str());
             }
         }
     }
@@ -387,9 +382,9 @@ mod help_writer {
         }
 
         #[inline]
-        pub fn with_spacing(context: &'a Context, spacing: &str) -> Self {
+        pub fn with_spacing(context: &'a Context, indent: String) -> Self {
             HelpWriterBuilder::new()
-                .writer(IndentedWriter::with_spacing(spacing))
+                .writer(IndentedWriter::with_indent(indent))
                 .build(context)
         }
 

@@ -1,5 +1,5 @@
 
-/// Creates a new `CommandLine` app.
+/// Constructs a `CommandLine` app.
 #[macro_export]
 macro_rules! app {
     // Here start
@@ -58,6 +58,15 @@ macro_rules! app {
         }
     };
 
+    (@command ($builder:expr) (handler ($options:ident, $arguments:ident) => $expr:expr ) $($tt:tt)*) => {
+        $crate::app!{
+            @command ($builder.handler(|$options, $arguments|{
+                $expr;
+                Ok(())
+            })) $($tt)*
+        }
+    };
+
     (@command ($builder:expr) (handler (...$($arg_name:ident: $arg_type:ty),+) => $block:block ) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|options, arguments|{
@@ -65,6 +74,18 @@ macro_rules! app {
                     let $arg_name : $arg_type = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
                 )+
                 $block
+                Ok(())
+            })) $($tt)*
+        }
+    };
+
+    (@command ($builder:expr) (handler (...$($arg_name:ident: $arg_type:ty),+) => $expr:expr ) $($tt:tt)*) => {
+        $crate::app!{
+            @command ($builder.handler(|options, arguments|{
+                $(
+                    let $arg_name : $arg_type = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
+                )+
+                $expr;
                 Ok(())
             })) $($tt)*
         }
@@ -91,6 +112,27 @@ macro_rules! app {
         }
     };
 
+    (@command ($builder:expr) (handler ($($name:ident : $ty:ty)+ $(,...$($arg_name:ident: $arg_type:ty),+)?) => $expr:expr ) $($tt:tt)*) => {
+        $crate::app!{
+            @command ($builder.handler(|options, arguments|{
+                #[cfg(debug_assertions)]
+                #[allow(unused_variables)]
+                fn assert_non_duplicate_arguments($($name: $ty),+ $(,$($arg_name: $arg_type),+)?){}
+
+                $(
+                    let $name : $ty = $crate::declare_option_var!(options, $name: $ty);
+                )+
+                $(
+                    $(
+                        let $arg_name : $arg_type = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);
+                    )+
+                )?
+                $expr;
+                Ok(())
+            })) $($tt)*
+        }
+    };
+
     (@command ($builder:expr) (handler () => $block:block ) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|_options, _arguments|{
@@ -110,11 +152,20 @@ macro_rules! app {
     };
 
     // Subcommand
-    (@command ($builder:expr) (@subcommand $command:ident $(=> $($rest:tt)+)?) $($tt:tt)*) => {
+    (@command ($builder:expr) (@subcommand $command_name:ident $(=> $($rest:tt)+)?) $($tt:tt)*) => {
         $crate::app!{
             @command
             ($builder.subcommand(
-                $crate::app!{ @command ($crate::Command::new(stringify!($command))) $($($rest)+)? }
+                $crate::app!{ @command ($crate::Command::new(stringify!($command_name))) $($($rest)+)? }
+            )) $($tt)*
+        }
+    };
+
+    (@command ($builder:expr) (@subcommand $command_name:expr $(=> $($rest:tt)+)?) $($tt:tt)*) => {
+        $crate::app!{
+            @command
+            ($builder.subcommand(
+                $crate::app!{ @command ($crate::Command::new($command_name)) $($($rest)+)? }
             )) $($tt)*
         }
     };
@@ -228,6 +279,12 @@ macro_rules! app {
         }
     };
 
+    (@arg ($arg_builder:expr) (validator => $validator:expr) $($tt:tt)*) => {
+        $crate::app!{
+            @arg ($arg_builder.validator($validator)) $($tt)*
+        }
+    };
+
     (@arg ($arg_builder:expr) (type => $ty:ty) $($tt:tt)*) => {
         $crate::app!{
             @arg ($arg_builder.validator($crate::validator::parse_validator::<$ty>())) $($tt)*
@@ -235,6 +292,7 @@ macro_rules! app {
     };
 }
 
+/// Constructs and run a `CommandLine` app.
 #[macro_export]
 macro_rules! run_app {
     ( => $($rest:tt)+) => {
@@ -254,6 +312,7 @@ macro_rules! run_app {
     };
 }
 
+/// Constructs a `CommandLine` app using this crate `Cargo.toml` info.
 #[macro_export]
 macro_rules! crate_app {
     ($($rest:tt)*) => {{
@@ -277,6 +336,7 @@ macro_rules! crate_app {
     }};
 }
 
+/// Constructs and run a `CommandLine` app using this crate `Cargo.toml` info.
 #[macro_export]
 macro_rules! run_crate_app {
     ($($rest:tt)*) => {{
@@ -301,57 +361,38 @@ macro_rules! run_crate_app {
     }};
 }
 
+/// Returns this `crate` name.
+///
+/// # Panics
+/// Panics if package `name` is no defined.
 #[macro_export]
 macro_rules! crate_name {
     () => {
         option_env!("CARGO_PKG_NAME")
-            .expect("package name is not defined")
+            .expect("package `name` is not defined")
     };
 }
 
+/// Returns this `crate` description.
+///
+/// # Panics
+/// Panics if package `description` is no defined.
 #[macro_export]
 macro_rules! crate_description {
     () => {
         option_env!("CARGO_PKG_DESCRIPTION")
-            .expect("package description is not defined")
+            .expect("package `description` is not defined")
     };
 }
 
+/// Returns this `crate` version.
+///
+/// # Panics
+/// Panics if package `version` is no defined.
 #[macro_export]
 macro_rules! crate_version {
     () => {
         option_env!("CARGO_PKG_VERSION")
-            .expect("package version is not defined")
+            .expect("package `version` is not defined")
     };
 }
-
-// #[test]
-// mod tests {
-//     #[test]
-//     fn app_test() {
-//         let app = app! { MyApp =>
-//             (description => "Sum the values")
-//             (about => "This is an app to sum values")
-//             (@arg numbers =>
-//                 (type => i64)
-//                 (description => "the values to sum")
-//                 (count => 1..)
-//             )
-//             (@option times =>
-//                 (description => "Number of times to sum the values")
-//                 (@arg times =>
-//                     (type => u64)
-//                     (default => 1)
-//                 )
-//             )
-//             (handler (times: u64, ...numbers: Vec<i64>) => {
-//                 let times = times as i64;
-//                 println!("{}", times * numbers.iter().sum::<i64>());
-//             })
-//             (@subcommand version =>
-//                 (description => "Shows the version of the app")
-//                 (handler () =>  println!("version 1.0"))
-//             )
-//         };
-//     }
-// }

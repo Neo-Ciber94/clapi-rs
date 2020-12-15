@@ -79,8 +79,8 @@ impl Argument {
     }
 
     /// Returns the number of values this argument takes.
-    pub fn get_arg_count(&self) -> ArgCount {
-        self.arg_count
+    pub fn get_arg_count(&self) -> &ArgCount {
+        &self.arg_count
     }
 
     /// Returns the value `Validator` used by this argument.
@@ -134,7 +134,11 @@ impl Argument {
     /// If the value is exactly 0, an argument must take from 0 to 1 values.
     pub fn arg_count<A: Into<ArgCount>>(mut self, arg_count: A) -> Self {
         let arg_count = arg_count.into();
-        assert!(!arg_count.takes_exactly(0), "`{}` cannot takes 0 values", self.name);
+        assert!(
+            !arg_count.takes_exactly(0),
+            "`{}` cannot takes 0 values",
+            self.name
+        );
         self.arg_count = arg_count;
         self
     }
@@ -144,7 +148,10 @@ impl Argument {
     /// # Panics:
     /// Panics if the `description` is blank or empty.
     pub fn description<S: Into<String>>(mut self, description: S) -> Self {
-        self.description = Some(assert_not_blank!(description.into(), "`description` cannot be blank or empty"));
+        self.description = Some(assert_not_blank!(
+            description.into(),
+            "`description` cannot be blank or empty"
+        ));
         self
     }
 
@@ -156,9 +163,18 @@ impl Argument {
     /// - If there is values.
     pub fn validator<V: Validator + 'static>(mut self, validator: V) -> Self {
         assert!(self.validator.is_none(), "validator is already set");
-        assert!(self.default_values.is_empty(), "validator cannot be set if there is default values");
-        assert!(self.valid_values.is_empty(), "validator cannot be set if there is valid values");
-        assert!(self.values.is_empty(), "validator cannot be set if there is values");
+        assert!(
+            self.default_values.is_empty(),
+            "validator cannot be set if there is default values"
+        );
+        assert!(
+            self.valid_values.is_empty(),
+            "validator cannot be set if there is valid values"
+        );
+        assert!(
+            self.values.is_empty(),
+            "validator cannot be set if there is values"
+        );
         self.validator = Some(Rc::new(validator));
         self
     }
@@ -173,7 +189,10 @@ impl Argument {
         S: ToString,
         I: IntoIterator<Item = S>,
     {
-        assert!(self.default_values.is_empty(), "cannot set valid values when default values are already declared");
+        assert!(
+            self.default_values.is_empty(),
+            "cannot set valid values when default values are already declared"
+        );
 
         let values = values
             .into_iter()
@@ -217,7 +236,10 @@ impl Argument {
             .collect::<Vec<String>>();
 
         assert!(self.values.is_empty(), "already contains values");
-        assert!(self.default_values.is_empty(), "default values are already set");
+        assert!(
+            self.default_values.is_empty(),
+            "default values are already set"
+        );
         assert!(
             self.arg_count.takes(values.len()),
             "invalid value count expected {} but was {}",
@@ -360,16 +382,16 @@ impl Argument {
         if let Some(validator) = &self.validator {
             // If the validator returns `None`, we can convert type `T` to any valid type
             // no just the returned by `Validator::valid_type`.
-            if let Some(actual) = validator.valid_type() {
-                let expected = Type::of::<T>();
-                if expected != actual {
+            if let Some(expected) = validator.valid_type() {
+                let current = Type::of::<T>();
+                if expected != current {
                     return Err(Error::new(
                         ErrorKind::Other,
                         format!(
                             "invalid argument type for `{}`, `{}` was expected but was `{}`",
                             self.name,
                             expected.name(),
-                            actual.name()
+                            current.name()
                         ),
                     ));
                 }
@@ -897,26 +919,24 @@ mod tests {
 
         assert_eq!(arg.get_name(), "number");
         assert_eq!(arg.get_description(), Some("the values to use"));
-        assert_eq!(arg.get_arg_count(), ArgCount::more_than(1));
+        assert_eq!(arg.get_arg_count(), &ArgCount::more_than(1));
         assert!(arg.get_validator().is_some());
         assert_eq!(arg.get_default_values()[0].clone(), "1".to_owned());
     }
 
     #[test]
-    fn set_values_test(){
-        let mut number = Argument::one_or_more("number")
-            .validator(parse_validator::<f64>());
+    fn set_values_test() {
+        let mut number = Argument::one_or_more("number").validator(parse_validator::<f64>());
 
-        assert!(number.set_values(&[1,2,3]).is_ok());
+        assert!(number.set_values(&[1, 2, 3]).is_ok());
         assert!(number.set_values(&[0.2, 5.4]).is_ok());
         assert!(number.set_values(&["1", "0.25", "3"]).is_ok());
         assert!(number.set_values(&[true, false]).is_err());
     }
 
     #[test]
-    fn arg_convert(){
-        let mut number = Argument::new("number")
-            .validator(parse_validator::<i64>());
+    fn arg_convert() {
+        let mut number = Argument::new("number").validator(parse_validator::<i64>());
 
         number.set_values(&[42]).unwrap();
 
@@ -926,9 +946,8 @@ mod tests {
     }
 
     #[test]
-    fn arg_convert_all(){
-        let mut number = Argument::one_or_more("numbers")
-            .validator(parse_validator::<i64>());
+    fn arg_convert_all() {
+        let mut number = Argument::one_or_more("numbers").validator(parse_validator::<i64>());
 
         number.set_values(&[1, 2, 3]).unwrap();
 

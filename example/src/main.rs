@@ -1,34 +1,31 @@
 use clapi::*;
+use clapi::validator::parse_validator;
 
 // mod count;
 // mod utils;
 
-// #[command]
-// #[option(number, arg="n", default=1)]
-// fn main(number: i64){
-//     println!("{}", number);
-// }
-
-use serde::{Serialize, Deserialize};
-
-#[derive(Serialize, Deserialize)]
-struct Point {
-    x: i64,
-    y: i64
-}
-
 fn main(){
-    let mut app = app! { =>
-        (description => "Sum the numbers")
-        (@arg numbers =>
-            (type => i64)
-            (default => 0)
-            (count => 1..)
-        )
-        (handler (...numbers: Vec<f64>) => {
-            println!("{}", numbers.iter().sum::<f64>());
-        })
-    };
+    let command = Command::new("MyApp")
+        .description("An app to sum numbers")
+        .arg(Argument::one_or_more("numbers")
+            .description("Numbers to sum")
+            .validator(parse_validator::<i64>()))
+        .option(CommandOption::new("times")
+            .description("Times to sum the numbers")
+            .arg(Argument::new("times")
+                .validator(parse_validator::<u64>())))
+        .option(CommandOption::new("add")
+            .description("Number to add")
+            .arg(Argument::new("number")
+                .validator(parse_validator::<i64>())))
+        .option(CommandOption::new("sub")
+            .description("Number to sub")
+            .arg(Argument::new("number")
+                .validator(parse_validator::<i64>())))
+        .subcommand(Command::new("version")
+            .description("Shows the version of the command"));
 
-    app.run().unwrap();
+
+    //println!("{}", serde_json::to_string_pretty(&command).unwrap());
+    println!("{}", serde_yaml::to_string(&command).unwrap());
 }

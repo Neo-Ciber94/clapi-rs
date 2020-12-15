@@ -40,49 +40,43 @@
 //! }
 //! ```
 
-
-/// Utility methods and extensions intended for internal use.
+/// Utilities and extensions intended for internal use.
 #[macro_use]
 pub mod utils;
 
+#[cfg(feature="serde")]
+pub mod serde;
+
 mod command;
-pub use command::*;
-
 mod option;
-pub use option::*;
-
 mod args;
-pub use args::*;
-
 mod arg_count;
-pub use arg_count::*;
-
 mod command_line;
-pub use command_line::*;
-
 mod context;
-pub use context::*;
-
 mod error;
-pub use error::*;
-
 mod tokenizer;
-pub use tokenizer::*;
-
 mod parser;
-pub use parser::*;
-
 mod parse_result;
-pub use parse_result::*;
-
-mod suggestion;
-pub use suggestion::*;
-
-mod help;
-pub use help::*;
-
 mod symbol;
-pub use symbol::*;
+
+/// Utilities for provide suggestions.
+pub mod suggestion;
+
+/// Utilities for provide commands help information.
+pub mod help;
+
+// Re-exports
+pub use self::command::*;
+pub use self::option::*;
+pub use self::args::*;
+pub use self::arg_count::*;
+pub use self::command_line::*;
+pub use self::context::*;
+pub use self::error::*;
+pub use self::tokenizer::*;
+pub use self::parser::*;
+pub use self::parse_result::*;
+pub use self::symbol::*;
 
 #[macro_use]
 mod app_macros;
@@ -101,6 +95,7 @@ pub use macros::*;
 pub mod macro_utils {
     pub extern crate clapi_macros_utils;
 
+    #[doc(hidden)]
     #[macro_export]
     macro_rules! declare_option_var {
         ($options:ident, $name:ident: $ty:ty) => {
@@ -108,6 +103,7 @@ pub mod macro_utils {
         };
     }
 
+    #[doc(hidden)]
     #[macro_export]
     macro_rules! declare_argument_var {
         ($arguments:ident, $name:ident: $ty:ty) => {
@@ -115,6 +111,7 @@ pub mod macro_utils {
         };
     }
 
+    #[doc(hidden)]
     #[macro_export]
     macro_rules! var_type {
         ($ty:ty) => {
