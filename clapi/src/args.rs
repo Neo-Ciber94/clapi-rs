@@ -467,7 +467,7 @@ where
     Ok(ret)
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Eq, PartialEq)]
 pub struct ArgumentList {
     inner: LinkedHashSet<Argument>,
 }

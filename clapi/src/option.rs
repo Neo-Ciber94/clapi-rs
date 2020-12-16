@@ -3,7 +3,6 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use crate::args::{ArgumentList, Argument};
 
-
 /// Represents a command-line option.
 #[derive(Debug, Clone)]
 pub struct CommandOption {
@@ -149,7 +148,7 @@ impl<'a> ExactSizeIterator for Aliases<'a> {
 }
 
 /// Represents a collection of `CommandOption`s.
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Eq, PartialEq)]
 pub struct OptionList {
     inner: LinkedHashSet<CommandOption>,
 }

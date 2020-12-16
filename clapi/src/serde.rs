@@ -4,7 +4,7 @@ use serde::export::{Formatter, Result};
 use serde::ser::{SerializeSeq, SerializeStruct};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
-use crate::serde::utils::AnyToString;
+use crate::serde::internal::AnyToString;
 
 // ArgCount
 impl Serialize for ArgCount {
@@ -439,7 +439,7 @@ impl Serialize for CommandOption {
             &self.get_aliases().cloned().collect::<Vec<String>>(),
         )?;
         state.serialize_field("description", &self.get_description())?;
-        state.serialize_field("is_required", &self.is_required())?;
+        state.serialize_field("required", &self.is_required())?;
         state.serialize_field("args", self.get_args())?;
         state.end()
     }
@@ -451,13 +451,13 @@ impl<'de> Deserialize<'de> for CommandOption {
         D: Deserializer<'de>,
     {
         const FIELDS: &'static [&'static str] =
-            &["name", "aliases", "description", "is_required", "args"];
+            &["name", "aliases", "description", "required", "args"];
 
         enum Field {
             Name,
             Aliases,
             Description,
-            IsRequired,
+            Required,
             Args,
         }
 
@@ -472,7 +472,7 @@ impl<'de> Deserialize<'de> for CommandOption {
 
                     fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
                         formatter
-                            .write_str("`name`, `aliases`, `description`, `is_required` or `args`")
+                            .write_str("`name`, `aliases`, `description`, `required` or `args`")
                     }
 
                     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -483,7 +483,7 @@ impl<'de> Deserialize<'de> for CommandOption {
                             "name" => Ok(Field::Name),
                             "aliases" => Ok(Field::Aliases),
                             "description" => Ok(Field::Description),
-                            "is_required" => Ok(Field::IsRequired),
+                            "required" => Ok(Field::Required),
                             "args" => Ok(Field::Args),
                             _ => return Err(de::Error::unknown_field(v, FIELDS)),
                         }
@@ -497,7 +497,7 @@ impl<'de> Deserialize<'de> for CommandOption {
                             b"name" => Ok(Field::Name),
                             b"aliases" => Ok(Field::Aliases),
                             b"description" => Ok(Field::Description),
-                            b"is_required" => Ok(Field::IsRequired),
+                            b"required" => Ok(Field::Required),
                             b"args" => Ok(Field::Args),
                             _ => {
                                 let value = String::from_utf8_lossy(v);
@@ -565,7 +565,7 @@ impl<'de> Deserialize<'de> for CommandOption {
                 let mut name: Option<String> = None;
                 let mut aliases: Option<Vec<String>> = None;
                 let mut description: Option<Option<String>> = None;
-                let mut is_required: Option<bool> = None;
+                let mut required: Option<bool> = None;
                 let mut args: Option<ArgumentList> = None;
 
                 while let Some(key) = map.next_key()? {
@@ -591,12 +591,12 @@ impl<'de> Deserialize<'de> for CommandOption {
 
                             description = Some(map.next_value()?);
                         }
-                        Field::IsRequired => {
-                            if is_required.is_some() {
-                                return Err(de::Error::duplicate_field("is_required"));
+                        Field::Required => {
+                            if required.is_some() {
+                                return Err(de::Error::duplicate_field("required"));
                             }
 
-                            is_required = Some(map.next_value()?);
+                            required = Some(map.next_value()?);
                         }
                         Field::Args => {
                             if args.is_some() {
@@ -621,8 +621,8 @@ impl<'de> Deserialize<'de> for CommandOption {
                     option = option.description(description);
                 }
 
-                if let Some(is_required) = is_required {
-                    option = option.required(is_required);
+                if let Some(required) = required {
+                    option = option.required(required);
                 }
 
                 if let Some(args) = args {
@@ -898,7 +898,7 @@ impl<'de> Deserialize<'de> for Command {
     }
 }
 
-mod utils {
+mod internal {
     use serde::de::Visitor;
     use serde::export::{fmt, Formatter};
     use serde::{de, Deserialize, Deserializer};
@@ -966,159 +966,252 @@ mod utils {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_test::Token;
 
-    #[test]
-    fn arg_count_test() {
-        let arg_count = ArgCount::new(2, 10);
-        serde_test::assert_tokens(
-            &arg_count,
-            &[
-                Token::Struct {
-                    name: "ArgCount",
-                    len: 2,
-                },
-                Token::Str("min_count"),
-                Token::U64(2),
-                Token::Str("max_count"),
-                Token::U64(10),
-                Token::StructEnd,
-            ],
-        )
+    #[cfg(test)]
+    mod arg_count_tests {
+        use crate::ArgCount;
+        use serde_test::Token;
+
+        #[test]
+        fn arg_count_test() {
+            let arg_count = ArgCount::new(2, 10);
+            serde_test::assert_tokens(
+                &arg_count,
+                &[
+                    Token::Struct {
+                        name: "ArgCount",
+                        len: 2,
+                    },
+                    Token::Str("min_count"),
+                    Token::U64(2),
+                    Token::Str("max_count"),
+                    Token::U64(10),
+                    Token::StructEnd,
+                ],
+            )
+        }
     }
 
-    #[test]
-    fn argument_test() {
-        let arg1 = Argument::new("numbers")
-            .description("A set of numbers")
-            .arg_count(1..=10)
-            .valid_values(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-            .defaults(&[1, 2, 3]);
+    #[cfg(test)]
+    mod args_tests {
+        use super::*;
+        use serde_test::Token;
+        use crate::{Argument, ArgumentList};
 
-        serde_test::assert_tokens(
-            &arg1,
-            &[
-                Token::Struct {
-                    name: "Argument",
-                    len: 6,
-                },
-                Token::Str("name"),
-                Token::String("numbers"),
-                Token::Str("description"),
-                Token::Some,
-                Token::String("A set of numbers"),
-                Token::Str("min_count"),
-                Token::U64(1),
-                Token::Str("max_count"),
-                Token::U64(10),
-                Token::Str("valid_values"),
-                Token::Seq { len: Some(10) },
-                Token::Str("0"),
-                Token::Str("1"),
-                Token::Str("2"),
-                Token::Str("3"),
-                Token::Str("4"),
-                Token::Str("5"),
-                Token::Str("6"),
-                Token::Str("7"),
-                Token::Str("8"),
-                Token::Str("9"),
-                Token::SeqEnd,
-                Token::Str("default_values"),
-                Token::Seq { len: Some(3) },
-                Token::Str("1"),
-                Token::Str("2"),
-                Token::Str("3"),
-                Token::SeqEnd,
-                Token::StructEnd,
-            ],
-        );
-    }
+        #[test]
+        fn argument_test() {
+            let arg = Argument::new("numbers")
+                .description("A set of numbers")
+                .arg_count(1..=10)
+                .valid_values(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+                .defaults(&[1, 2, 3]);
 
-    #[test]
-    fn argument_missing_fields_test1() {
-        let arg1 = Argument::new("numbers");
+            serde_test::assert_tokens(
+                &arg,
+                &args_tokens(
+                    "numbers",
+                    Some("A set of numbers"),
+                    1, 10,
+                    vec!["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+                    vec!["1", "2", "3"]
+                )
+            );
+        }
 
-        serde_test::assert_tokens(
-            &arg1,
-            &[
-                Token::Struct {
-                    name: "Argument",
-                    len: 6,
-                },
-                Token::Str("name"),
-                Token::String("numbers"),
-                Token::Str("description"),
-                Token::None,
-                Token::Str("min_count"),
-                Token::U64(1),
-                Token::Str("max_count"),
-                Token::U64(1),
-                Token::Str("valid_values"),
-                Token::Seq { len: Some(0) },
-                Token::SeqEnd,
-                Token::Str("default_values"),
-                Token::Seq { len: Some(0) },
-                Token::SeqEnd,
-                Token::StructEnd,
-            ],
-        );
-    }
+        #[test]
+        fn argument_missing_fields_test1() {
+            let arg = Argument::new("numbers");
 
-    #[test]
-    fn argument_missing_fields_test2() {
-        let arg1 = Argument::new("numbers")
-            .valid_values(&[0, 1, 2, 3])
-            .default(0);
+            serde_test::assert_tokens(
+                &arg,
+                &args_tokens(
+                    "numbers",
+                    None,
+                    1, 1,
+                    vec![],
+                    vec![]
+                )
+            );
+        }
 
-        serde_test::assert_tokens(
-            &arg1,
-            &[
-                Token::Struct {
-                    name: "Argument",
-                    len: 6,
-                },
-                Token::Str("name"),
-                Token::String("numbers"),
-                Token::Str("description"),
-                Token::None,
-                Token::Str("min_count"),
-                Token::U64(1),
-                Token::Str("max_count"),
-                Token::U64(1),
-                Token::Str("valid_values"),
-                Token::Seq { len: Some(4) },
-                Token::Str("0"),
-                Token::Str("1"),
-                Token::Str("2"),
-                Token::Str("3"),
-                Token::SeqEnd,
-                Token::Str("default_values"),
-                Token::Seq { len: Some(1) },
-                Token::Str("0"),
-                Token::SeqEnd,
-                Token::StructEnd,
-            ],
-        );
-    }
+        #[test]
+        fn argument_missing_fields_test2() {
+            let arg = Argument::new("numbers")
+                .valid_values(&[0, 1, 2, 3])
+                .default(0);
 
-    #[test]
-    fn argument_from_json_test() {
-        let arg = serde_json::from_str::<Argument>(
-            r#"
+            serde_test::assert_tokens(
+                &arg,
+                &args_tokens(
+                    "numbers",
+                    None,
+                    1, 1,
+                    vec!["0", "1", "2", "3"],
+                    vec!["0"]
+                )
+            );
+        }
+
+        #[test]
+        fn argument_from_json_test() {
+            let arg = serde_json::from_str::<Argument>(
+                r#"
         {
             "name": "numbers",
             "valid_values": [1,2,3]
         }
-        "#,
-        )
-        .unwrap();
+        "#).unwrap();
 
-        assert_eq!(arg.get_name(), "numbers");
-        assert_eq!(
-            arg.get_valid_values(),
-            &["1".to_owned(), "2".to_owned(), "3".to_owned()]
-        );
+            assert_eq!(arg.get_name(), "numbers");
+            assert_eq!(
+                arg.get_valid_values(),
+                &["1".to_owned(), "2".to_owned(), "3".to_owned()]
+            );
+        }
+
+        #[test]
+        fn argument_list(){
+            let mut args = ArgumentList::new();
+            args.add(Argument::new("A").description("a")).unwrap();
+            args.add(Argument::new("B").arg_count(2)).unwrap();
+            args.add(Argument::new("C").valid_values(&['a','b', 'c'])).unwrap();
+
+            let mut tokens = Vec::new();
+            tokens.push(Token::Seq { len: Some(3) });
+            tokens.extend(args_tokens(
+                "A", Some("a"), 1, 1, vec![], vec![]
+            ));
+            tokens.extend(args_tokens(
+                "B", None, 2, 2, vec![], vec![]
+            ));
+            tokens.extend(args_tokens(
+                "C", None, 1, 1, vec!["a", "b", "c"], vec![]
+            ));
+            tokens.push(Token::SeqEnd);
+
+            serde_test::assert_tokens(&args, tokens.as_slice());
+        }
+    }
+
+    #[cfg(test)]
+    mod options_tests {
+        use crate::{CommandOption, Argument};
+        use crate::serde::tests::{args_tokens, option_tokens};
+
+        #[test]
+        fn option_test(){
+            let opt = CommandOption::new("time")
+                .alias("t")
+                .description("Number of times")
+                .required(false)
+                .arg(Argument::new("N"));
+
+            let mut args = Vec::new();
+            args.extend(args_tokens(
+                "N", None, 1, 1, vec![], vec![])
+            );
+
+            serde_test::assert_tokens(
+                &opt,
+                &option_tokens(
+                    "time",
+                    vec!["t"],
+                    Some("Number of times"),
+                    false,
+                    (1, args)
+                )
+            );
+        }
+    }
+
+    #[cfg(tests)]
+    mod command_tests {
+
+    }
+
+    // Utilities
+    fn args_tokens(
+        name: &'static str,
+        description: Option<&'static str>,
+        min_count: u64,
+        max_count: u64,
+        valid_values: Vec<&'static str>,
+        default_values: Vec<&'static str>) -> Vec<Token>{
+        let mut tokens = Vec::new();
+        tokens.push(Token::Struct { name: "Argument", len: 6 });
+
+        tokens.push(Token::Str("name"));
+        tokens.push(Token::String(name));
+
+        tokens.push(Token::Str("description"));
+        if let Some(description) = description {
+            tokens.push(Token::Some);
+            tokens.push(Token::String(description));
+        } else {
+            tokens.push(Token::None);
+        }
+
+        tokens.push(Token::Str("min_count"));
+        tokens.push(Token::U64(min_count));
+
+        tokens.push(Token::Str("max_count"));
+        tokens.push(Token::U64(max_count));
+
+        tokens.push(Token::Str("valid_values"));
+        tokens.push(Token::Seq { len: Some(valid_values.len())});
+        for value in valid_values {
+            tokens.push(Token::Str(value));
+        }
+        tokens.push(Token::SeqEnd);
+
+        tokens.push(Token::Str("default_values"));
+        tokens.push(Token::Seq { len: Some(default_values.len())});
+        for value in default_values {
+            tokens.push(Token::Str(value));
+        }
+        tokens.push(Token::SeqEnd);
+
+        tokens.push(Token::StructEnd);
+        tokens
+    }
+
+    fn option_tokens(
+        name: &'static str,
+        aliases: Vec<&'static str>,
+        description: Option<&'static str>,
+        required: bool,
+        args: (usize, Vec<Token>)) -> Vec<Token>{
+        let mut tokens = Vec::new();
+        tokens.push(Token::Struct { name: "CommandOption", len: 5 });
+
+        tokens.push(Token::Str("name"));
+        tokens.push(Token::String(name));
+
+        tokens.push(Token::Str("aliases"));
+        tokens.push(Token::Seq { len: Some(aliases.len())});
+        for value in aliases {
+            tokens.push(Token::Str(value));
+        }
+        tokens.push(Token::SeqEnd);
+
+        tokens.push(Token::Str("description"));
+        if let Some(description) = description {
+            tokens.push(Token::Some);
+            tokens.push(Token::String(description));
+        } else {
+            tokens.push(Token::None);
+        }
+
+        tokens.push(Token::Str("required"));
+        tokens.push(Token::Bool(required));
+
+        tokens.push(Token::Str("args"));
+        tokens.push(Token::Seq { len: Some(args.0)});
+        tokens.extend(args.1);
+        tokens.push(Token::SeqEnd);
+
+        tokens.push(Token::StructEnd);
+        tokens
     }
 }

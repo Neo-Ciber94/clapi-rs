@@ -80,6 +80,7 @@ pub use self::symbol::*;
 
 #[macro_use]
 mod app_macros;
+
 pub use app_macros::*;
 
 #[cfg(feature="macros")]
