@@ -942,6 +942,7 @@ mod tests {
 
         assert!(number.convert::<i64>().is_ok());
         assert!(number.convert::<i128>().is_err());
+        assert!(number.convert::<bool>().is_err());
         assert_eq!(number.convert::<i64>().ok(), Some(42));
     }
 
@@ -952,7 +953,8 @@ mod tests {
         number.set_values(&[1, 2, 3]).unwrap();
 
         assert!(number.convert_all::<i64>().is_ok());
-        assert!(number.convert_all::<i128>().is_err());
+        assert!(number.convert::<i8>().is_err());
+        assert!(number.convert_all::<bool>().is_err());
         assert_eq!(number.convert_all::<i64>().ok(), Some(vec![1, 2, 3]));
     }
 

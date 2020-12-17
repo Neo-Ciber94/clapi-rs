@@ -20,7 +20,7 @@ fn main(){
         )
         (@subcommand version =>
             (description => "Shows the version of the app")
-            (handler () => println!("echo 1.0"))
+            (handler => println!("echo 1.0"))
         )
         (handler (times: u64, ...values: Vec<i64>) => {
             let times = times as i64;

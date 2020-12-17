@@ -48,7 +48,7 @@ macro_rules! app {
     };
 
     // Handler
-    (@command ($builder:expr) (handler ($options:ident, $arguments:ident) => $block:block ) $($tt:tt)*) => {
+    (@command ($builder:expr) (handler ($options:ident, $arguments:ident) => $block:block) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|$options, $arguments|{
                 $block
@@ -57,7 +57,7 @@ macro_rules! app {
         }
     };
 
-    (@command ($builder:expr) (handler ($options:ident, $arguments:ident) => $expr:expr ) $($tt:tt)*) => {
+    (@command ($builder:expr) (handler ($options:ident, $arguments:ident) => $expr:expr) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|$options, $arguments|{
                 $expr;
@@ -66,7 +66,7 @@ macro_rules! app {
         }
     };
 
-    (@command ($builder:expr) (handler (...$($arg_name:ident: $arg_type:ty),+) => $block:block ) $($tt:tt)*) => {
+    (@command ($builder:expr) (handler (...$($arg_name:ident: $arg_type:ty),+) => $block:block) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|options, arguments|{
                 $(
@@ -78,7 +78,7 @@ macro_rules! app {
         }
     };
 
-    (@command ($builder:expr) (handler (...$($arg_name:ident: $arg_type:ty),+) => $expr:expr ) $($tt:tt)*) => {
+    (@command ($builder:expr) (handler (...$($arg_name:ident: $arg_type:ty),+) => $expr:expr) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|options, arguments|{
                 $(
@@ -90,7 +90,7 @@ macro_rules! app {
         }
     };
 
-    (@command ($builder:expr) (handler ($($name:ident : $ty:ty)+ $(,...$($arg_name:ident: $arg_type:ty),+)?) => $block:block ) $($tt:tt)*) => {
+    (@command ($builder:expr) (handler ($($name:ident : $ty:ty)+ $(,...$($arg_name:ident: $arg_type:ty),+)?) => $block:block) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|options, arguments|{
                 #[cfg(debug_assertions)]
@@ -111,7 +111,7 @@ macro_rules! app {
         }
     };
 
-    (@command ($builder:expr) (handler ($($name:ident : $ty:ty)+ $(,...$($arg_name:ident: $arg_type:ty),+)?) => $expr:expr ) $($tt:tt)*) => {
+    (@command ($builder:expr) (handler ($($name:ident : $ty:ty)+ $(,...$($arg_name:ident: $arg_type:ty),+)?) => $expr:expr) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|options, arguments|{
                 #[cfg(debug_assertions)]
@@ -132,7 +132,7 @@ macro_rules! app {
         }
     };
 
-    (@command ($builder:expr) (handler () => $block:block ) $($tt:tt)*) => {
+    (@command ($builder:expr) (handler () => $block:block) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|_options, _arguments|{
                 $block
@@ -141,7 +141,25 @@ macro_rules! app {
         }
     };
 
-    (@command ($builder:expr) (handler () => $expr:expr ) $($tt:tt)*) => {
+    (@command ($builder:expr) (handler () => $expr:expr) $($tt:tt)*) => {
+        $crate::app!{
+            @command ($builder.handler(|_options, _arguments|{
+                $expr;
+                Ok(())
+            })) $($tt)*
+        }
+    };
+
+    (@command ($builder:expr) (handler => $block:block) $($tt:tt)*) => {
+        $crate::app!{
+            @command ($builder.handler(|_options, _arguments|{
+                $block
+                Ok(())
+            })) $($tt)*
+        }
+    };
+
+    (@command ($builder:expr) (handler => $expr:expr) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|_options, _arguments|{
                 $expr;

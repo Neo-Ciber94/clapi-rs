@@ -29,6 +29,9 @@ fn main() {
         )
         .subcommand(Command::new("version").description("Shows the version of the command"));
 
+
+    println!("{:#?}", Command::root());
+
     //println!("{}", serde_json::to_string_pretty(&command).unwrap());
     //println!("{}", serde_yaml::to_string(&command).unwrap());
 }

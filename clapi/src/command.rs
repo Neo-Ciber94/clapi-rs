@@ -310,33 +310,21 @@ impl<'a> IntoIterator for &'a Command {
 }
 
 #[doc(hidden)]
-pub fn current_filename() -> &'static str {
-    static mut FILE_NAME: Option<String> = None;
-
-    unsafe {
-        FILE_NAME
-            .get_or_insert_with(|| current_filename_internal(false))
-            .as_str()
-    }
+pub fn current_filename() -> String {
+    current_exe_filename()
+        .trim_end_matches(std::env::consts::EXE_SUFFIX)
+        .to_string()
 }
 
 #[doc(hidden)]
-pub fn current_filename_internal(include_exe: bool) -> String {
-    let path = std::env::current_exe().unwrap();
-    let filename = path.file_name().unwrap();
-
-    if include_exe {
-        filename.to_str().unwrap().to_string()
-    } else {
-        let ext = path.extension().unwrap();
-
-        filename
-            .to_str()
-            .unwrap()
-            .trim_end_matches(ext.to_str().unwrap())
-            .trim_end_matches('.')
-            .to_string()
-    }
+pub fn current_exe_filename() -> String {
+    std::env::current_exe()
+        .unwrap()
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string()
 }
 
 #[cfg(test)]
