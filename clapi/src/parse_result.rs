@@ -1,6 +1,6 @@
+use crate::args::ArgumentList;
 use crate::command::Command;
 use crate::option::{CommandOption, OptionList};
-use crate::args::ArgumentList;
 use crate::Argument;
 
 /// Represents the result of a parse operation
@@ -9,13 +9,17 @@ use crate::Argument;
 pub struct ParseResult {
     command: Command,
     options: OptionList,
-    args: ArgumentList
+    args: ArgumentList,
 }
 
 impl ParseResult {
     /// Constructs a new `ParseResult`.
     pub fn new(command: Command, options: OptionList, args: ArgumentList) -> Self {
-        ParseResult { command, options, args }
+        ParseResult {
+            command,
+            options,
+            args,
+        }
     }
 
     /// Returns the executing `Command`.
@@ -29,7 +33,7 @@ impl ParseResult {
     }
 
     /// Returns the `Argument` passed to the executing command or `None` is there is more than 1 argument.
-    pub fn arg(&self) -> Option<&Argument>{
+    pub fn arg(&self) -> Option<&Argument> {
         if self.args.len() == 1 {
             Some(&self.args[0])
         } else {
@@ -67,21 +71,20 @@ impl ParseResult {
 
     /// Returns the arguments of the option with the given name or alias, or `None` if not found.
     pub fn get_option_args<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&ArgumentList> {
-        self.get_option(name_or_alias)
-            .map(|o| o.get_args())
+        self.get_option(name_or_alias).map(|o| o.get_args())
     }
 
     /// Returns the `Argument` with the given name or `None` if not found.
-    pub fn get_arg<S: AsRef<str>>(&self, arg_name: S) -> Option<&Argument>{
+    pub fn get_arg<S: AsRef<str>>(&self, arg_name: S) -> Option<&Argument> {
         self.args.get(arg_name)
     }
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
-    use crate::{Context, DefaultParser, split_into_args, Parser, ErrorKind, DefaultTokenizer};
     use crate::args::validator::parse_validator;
+    use crate::{split_into_args, Context, DefaultParser, DefaultTokenizer, ErrorKind, Parser};
 
     fn parse_with(value: &str, command: Command) -> crate::Result<ParseResult> {
         let context = Context::new(command);
@@ -90,30 +93,51 @@ mod tests{
     }
 
     #[test]
-    fn parse_result_command_test(){
+    fn parse_result_command_test() {
         let command = Command::new("My App")
             .arg(Argument::one_or_more("values"))
-            .option(CommandOption::new("repeat")
-                .alias("r")
-                .arg(Argument::new("times")
-                    .validator(parse_validator::<u64>())
-                    .default(1)))
-            .option(CommandOption::new("color")
-                .alias("c")
-                .arg(Argument::new("color")
-                    .valid_values(&["red", "blue", "green"])));
+            .option(
+                CommandOption::new("repeat").alias("r").arg(
+                    Argument::new("times")
+                        .validator(parse_validator::<u64>())
+                        .default(1),
+                ),
+            )
+            .option(
+                CommandOption::new("color")
+                    .alias("c")
+                    .arg(Argument::new("color").valid_values(&["red", "blue", "green"])),
+            );
 
         let result = parse_with("--repeat 2 -c red hello world!", command.clone()).unwrap();
         assert!(result.contains_option("repeat"));
         assert!(result.contains_option("r"));
         assert!(result.contains_option("color"));
         assert!(result.contains_option("c"));
-        assert_eq!(result.get_option("repeat").unwrap().get_arg().unwrap().convert::<u64>().ok(), Some(2));
-        assert!(result.get_option("color").unwrap().get_arg().unwrap().contains("red"));
+        assert_eq!(
+            result
+                .get_option("repeat")
+                .unwrap()
+                .get_arg()
+                .unwrap()
+                .convert::<u64>()
+                .ok(),
+            Some(2)
+        );
+        assert!(result
+            .get_option("color")
+            .unwrap()
+            .get_arg()
+            .unwrap()
+            .contains("red"));
         assert_eq!(result.arg().unwrap().get_values(), &["hello", "world!"]);
 
         // Whitespace test
-        assert!(parse_with("\" \"", command.clone()).unwrap().arg().unwrap().contains(" "));
+        assert!(parse_with("\" \"", command.clone())
+            .unwrap()
+            .arg()
+            .unwrap()
+            .contains(" "));
 
         // Ok
         assert!(parse_with("Hola Mundo!", command.clone()).is_ok());
@@ -131,19 +155,33 @@ mod tests{
     }
 
     #[test]
-    fn parse_result_subcommand_test(){
+    fn parse_result_subcommand_test() {
         let command = Command::new("My App")
             .subcommand(Command::new("version"))
-            .subcommand(Command::new("set")
-                .arg(Argument::one_or_more("value"))
-                .option(CommandOption::new("repeat")
-                    .arg(Argument::new("count"))))
+            .subcommand(
+                Command::new("set")
+                    .arg(Argument::one_or_more("value"))
+                    .option(CommandOption::new("repeat").arg(Argument::new("count"))),
+            )
             .subcommand(Command::new("get"));
 
         let result = parse_with("set --repeat 1 1 2 3 4", command.clone()).unwrap();
         assert_eq!(result.command().get_name(), "set");
-        assert!(result.get_option("repeat").unwrap().get_arg().unwrap().contains("1"));
-        assert_eq!(result.arg().unwrap().get_values(), &["1".to_owned(), "2".to_owned(), "3".to_owned(), "4".to_owned()]);
+        assert!(result
+            .get_option("repeat")
+            .unwrap()
+            .get_arg()
+            .unwrap()
+            .contains("1"));
+        assert_eq!(
+            result.arg().unwrap().get_values(),
+            &[
+                "1".to_owned(),
+                "2".to_owned(),
+                "3".to_owned(),
+                "4".to_owned()
+            ]
+        );
 
         // Ok
         assert!(parse_with("version", command.clone()).is_ok());
@@ -159,19 +197,25 @@ mod tests{
     }
 
     #[test]
-    fn parse_result_required_option_test(){
+    fn parse_result_required_option_test() {
         let command = Command::new("My App")
             .option(CommandOption::new("enable"))
-            .option(CommandOption::new("times")
-                .alias("t")
-                .required(true)
-                .arg(Argument::new("times")
-                    .validator(parse_validator::<u64>())))
+            .option(
+                CommandOption::new("times")
+                    .alias("t")
+                    .required(true)
+                    .arg(Argument::new("times").validator(parse_validator::<u64>())),
+            )
             .arg(Argument::zero_or_more("values"));
 
         let result = parse_with("--times 1 -- one two three", command.clone()).unwrap();
         assert!(result.contains_option("times"));
-        assert!(result.get_option("times").unwrap().get_arg().unwrap().contains("1"));
+        assert!(result
+            .get_option("times")
+            .unwrap()
+            .get_arg()
+            .unwrap()
+            .contains("1"));
         assert!(result.arg().unwrap().contains("one"));
         assert!(result.arg().unwrap().contains("two"));
         assert!(result.arg().unwrap().contains("three"));
@@ -198,41 +242,67 @@ mod tests{
     }
 
     #[test]
-    fn parse_result_options_test(){
+    fn parse_result_options_test() {
         let command = Command::new("My App")
             .option(CommandOption::new("hour").alias("h"))
             .option(CommandOption::new("minute").alias("m"))
             .option(CommandOption::new("second").alias("s"))
-            .option(CommandOption::new("enable")
-                .arg(Argument::new("value")
-                    .validator(parse_validator::<bool>())
-                    .arg_count(0..=1)));
+            .option(
+                CommandOption::new("enable").arg(
+                    Argument::new("value")
+                        .validator(parse_validator::<bool>())
+                        .arg_count(0..=1),
+                ),
+            );
 
         let result = parse_with("--hour -m -s --enable false", command.clone()).unwrap();
         assert_eq!(result.args().len(), 0);
         assert!(result.contains_option("hour"));
         assert!(result.contains_option("minute"));
         assert!(result.contains_option("second"));
-        assert!(result.get_option("enable").unwrap().get_arg().unwrap().contains("false"));
+        assert!(result
+            .get_option("enable")
+            .unwrap()
+            .get_arg()
+            .unwrap()
+            .contains("false"));
     }
 
     #[test]
-    fn parse_result_multiple_args_test(){
+    fn parse_result_multiple_args_test() {
         let command = Command::new("My App")
-            .arg(Argument::new("min")
-                .validator(parse_validator::<i64>()))
-            .arg(Argument::new("max")
-                .validator(parse_validator::<i64>()))
-            .option(CommandOption::new("replace")
-                .alias("r")
-                .arg(Argument::new("from"))
-                .arg(Argument::new("to")));
+            .arg(Argument::new("min").validator(parse_validator::<i64>()))
+            .arg(Argument::new("max").validator(parse_validator::<i64>()))
+            .option(
+                CommandOption::new("replace")
+                    .alias("r")
+                    .arg(Argument::new("from"))
+                    .arg(Argument::new("to")),
+            );
 
         let result = parse_with("--replace a A -- 2 10", command.clone()).unwrap();
-        assert!(result.get_option("replace").unwrap().get_args().get("from").unwrap().contains("a"));
-        assert!(result.get_option("replace").unwrap().get_args().get("to").unwrap().contains("A"));
-        assert_eq!(result.get_arg("min").unwrap().convert::<i64>().ok(), Some(2));
-        assert_eq!(result.get_arg("max").unwrap().convert::<i64>().ok(), Some(10));
+        assert!(result
+            .get_option("replace")
+            .unwrap()
+            .get_args()
+            .get("from")
+            .unwrap()
+            .contains("a"));
+        assert!(result
+            .get_option("replace")
+            .unwrap()
+            .get_args()
+            .get("to")
+            .unwrap()
+            .contains("A"));
+        assert_eq!(
+            result.get_arg("min").unwrap().convert::<i64>().ok(),
+            Some(2)
+        );
+        assert_eq!(
+            result.get_arg("max").unwrap().convert::<i64>().ok(),
+            Some(10)
+        );
 
         // Ok
         assert!(parse_with("2 10", command.clone()).is_ok());
@@ -243,7 +313,7 @@ mod tests{
     }
 
     #[test]
-    fn parse_result_eoa_test(){
+    fn parse_result_eoa_test() {
         let command = Command::new("My App")
             .arg(Argument::one_or_more("args"))
             .option(CommandOption::new("A").alias("a"))
@@ -274,30 +344,76 @@ mod tests{
     }
 
     #[test]
-    fn parse_result_variable_arg_count_test1(){
+    fn parse_result_variable_arg_count_test1() {
         let command = Command::new("My App")
             .arg(Argument::new("values").arg_count(0..=3))
-            .option(CommandOption::new("letters")
-                .arg(Argument::new("letters")
-                    .arg_count(1..)
-                    .validator(parse_validator::<char>())))
-            .option(CommandOption::new("numbers")
-                .arg(Argument::new("numbers")
-                    .arg_count(1..=2)
-                    .validator(parse_validator::<i64>())));
+            .option(
+                CommandOption::new("letters").arg(
+                    Argument::new("letters")
+                        .arg_count(1..)
+                        .validator(parse_validator::<char>()),
+                ),
+            )
+            .option(
+                CommandOption::new("numbers").arg(
+                    Argument::new("numbers")
+                        .arg_count(1..=2)
+                        .validator(parse_validator::<i64>()),
+                ),
+            );
 
         let result = parse_with(
             "--letters a b c d e --numbers 1 -- one two three",
-            command.clone()
-        ).unwrap();
+            command.clone(),
+        )
+        .unwrap();
 
-        assert_eq!(result.get_option("letters").unwrap().get_arg().unwrap().get_values().len(), 5);
-        assert!(result.get_option("letters").unwrap().get_arg().unwrap().contains("a"));
-        assert!(result.get_option("letters").unwrap().get_arg().unwrap().contains("b"));
-        assert!(result.get_option("letters").unwrap().get_arg().unwrap().contains("c"));
-        assert!(result.get_option("letters").unwrap().get_arg().unwrap().contains("d"));
-        assert!(result.get_option("letters").unwrap().get_arg().unwrap().contains("e"));
-        assert!(result.get_option("numbers").unwrap().get_arg().unwrap().contains("1"));
+        assert_eq!(
+            result
+                .get_option("letters")
+                .unwrap()
+                .get_arg()
+                .unwrap()
+                .get_values()
+                .len(),
+            5
+        );
+        assert!(result
+            .get_option("letters")
+            .unwrap()
+            .get_arg()
+            .unwrap()
+            .contains("a"));
+        assert!(result
+            .get_option("letters")
+            .unwrap()
+            .get_arg()
+            .unwrap()
+            .contains("b"));
+        assert!(result
+            .get_option("letters")
+            .unwrap()
+            .get_arg()
+            .unwrap()
+            .contains("c"));
+        assert!(result
+            .get_option("letters")
+            .unwrap()
+            .get_arg()
+            .unwrap()
+            .contains("d"));
+        assert!(result
+            .get_option("letters")
+            .unwrap()
+            .get_arg()
+            .unwrap()
+            .contains("e"));
+        assert!(result
+            .get_option("numbers")
+            .unwrap()
+            .get_arg()
+            .unwrap()
+            .contains("1"));
         assert!(result.arg().unwrap().contains("one"));
         assert!(result.arg().unwrap().contains("two"));
         assert!(result.arg().unwrap().contains("three"));
@@ -306,66 +422,121 @@ mod tests{
         assert_eq!(
             parse_with(
                 "--letters a b c d e --numbers 1 2 3 -- one two three",
-                command.clone()).err().unwrap().kind(),
-                &ErrorKind::InvalidArgumentCount);
+                command.clone()
+            )
+            .err()
+            .unwrap()
+            .kind(),
+            &ErrorKind::InvalidArgumentCount
+        );
     }
 
     #[test]
-    fn parse_result_error_kind_test(){
+    fn parse_result_error_kind_test() {
         let command = Command::new("My App")
             .arg(Argument::new("values").arg_count(0..5))
             .subcommand(Command::new("version"))
-            .option(CommandOption::new("range").alias("r")
-                .arg(Argument::new("min").validator(parse_validator::<i64>()))
-                .arg(Argument::new("max").validator(parse_validator::<i64>())))
+            .option(
+                CommandOption::new("range")
+                    .alias("r")
+                    .arg(Argument::new("min").validator(parse_validator::<i64>()))
+                    .arg(Argument::new("max").validator(parse_validator::<i64>())),
+            )
             .option(CommandOption::new("A").alias("a"))
             .option(CommandOption::new("B").alias("b"))
-            .subcommand(Command::new("read")
-                .option(CommandOption::new("mode")
-                    .required(true)
-                    .arg(Argument::new("mode")
-                        .valid_values(&["low", "mid", "high"]))))
-            .subcommand(Command::new("data")
-                .subcommand(Command::new("set")
-                    .arg(Argument::new("value")))
-                .subcommand(Command::new("get")));
+            .subcommand(
+                Command::new("read").option(
+                    CommandOption::new("mode")
+                        .required(true)
+                        .arg(Argument::new("mode").valid_values(&["low", "mid", "high"])),
+                ),
+            )
+            .subcommand(
+                Command::new("data")
+                    .subcommand(Command::new("set").arg(Argument::new("value")))
+                    .subcommand(Command::new("get")),
+            );
 
         let err_kind = move |value: &str| -> ErrorKind {
-            parse_with(value, command.clone()).err()
+            parse_with(value, command.clone())
+                .err()
                 .unwrap_or_else(|| panic!("{}", value))
                 .kind()
                 .clone()
         };
 
-        assert!(matches!(err_kind("version 1 2 3"), ErrorKind::InvalidArgumentCount));
-        assert!(matches!(err_kind("-- 1 2 3 4 5"), ErrorKind::InvalidArgumentCount));
-        assert!(matches!(err_kind("--range 0"), ErrorKind::InvalidArgumentCount));
-        assert!(matches!(err_kind("--range 1 2 3 -- "), ErrorKind::InvalidArgumentCount));
+        assert!(matches!(
+            err_kind("version 1 2 3"),
+            ErrorKind::InvalidArgumentCount
+        ));
+        assert!(matches!(
+            err_kind("-- 1 2 3 4 5"),
+            ErrorKind::InvalidArgumentCount
+        ));
+        assert!(matches!(
+            err_kind("--range 0"),
+            ErrorKind::InvalidArgumentCount
+        ));
+        assert!(matches!(
+            err_kind("--range 1 2 3 -- "),
+            ErrorKind::InvalidArgumentCount
+        ));
         assert!(matches!(err_kind("-r:0:1"), ErrorKind::InvalidExpression));
         assert!(matches!(err_kind("--range 10 b"), ErrorKind::InvalidArgument(x) if x == "b"));
-        assert!(matches!(err_kind("--C"), ErrorKind::UnrecognizedOption(p, o) if p == "--" && o == "C"));
-        assert!(matches!(err_kind("data write"), ErrorKind::UnrecognizedCommand(x) if x == "write"));
+        assert!(
+            matches!(err_kind("--C"), ErrorKind::UnrecognizedOption(p, o) if p == "--" && o == "C")
+        );
+        assert!(
+            matches!(err_kind("data write"), ErrorKind::UnrecognizedCommand(x) if x == "write")
+        );
         assert!(matches!(err_kind("read"), ErrorKind::MissingOption(x) if x == "mode"));
         assert!(matches!(err_kind("read --mode lo"), ErrorKind::InvalidArgument(x) if x == "lo"));
-        assert!(matches!(err_kind("read --mode low mid"), ErrorKind::InvalidArgumentCount));
-        assert!(matches!(err_kind("data clear"), ErrorKind::UnrecognizedCommand(x) if x == "clear"));
-        assert!(matches!(err_kind("data get 0"), ErrorKind::InvalidArgumentCount));
-        assert!(matches!(err_kind("data set \"Hello World\" Bye"), ErrorKind::InvalidArgumentCount));
+        assert!(matches!(
+            err_kind("read --mode low mid"),
+            ErrorKind::InvalidArgumentCount
+        ));
+        assert!(
+            matches!(err_kind("data clear"), ErrorKind::UnrecognizedCommand(x) if x == "clear")
+        );
+        assert!(matches!(
+            err_kind("data get 0"),
+            ErrorKind::InvalidArgumentCount
+        ));
+        assert!(matches!(
+            err_kind("data set \"Hello World\" Bye"),
+            ErrorKind::InvalidArgumentCount
+        ));
     }
 
     #[test]
-    fn parse_result_option_bool_flag(){
-        let command = Command::new("My App")
-            .option(CommandOption::new("enable")
-                .arg(Argument::new("enable")
+    fn parse_result_option_bool_flag() {
+        let command = Command::new("My App").option(
+            CommandOption::new("enable").arg(
+                Argument::new("enable")
                     .arg_count(0..=1)
-                    .validator(parse_validator::<bool>())));
+                    .validator(parse_validator::<bool>()),
+            ),
+        );
 
         let res1 = parse_with("--enable true", command.clone()).unwrap();
-        assert_eq!(res1.get_option("enable").unwrap().get_arg().unwrap().get_values()[0], "true".to_owned());
+        assert_eq!(
+            res1.get_option("enable")
+                .unwrap()
+                .get_arg()
+                .unwrap()
+                .get_values()[0],
+            "true".to_owned()
+        );
 
         let res2 = parse_with("--enable false", command.clone()).unwrap();
-        assert_eq!(res2.get_option("enable").unwrap().get_arg().unwrap().get_values()[0], "false".to_owned());
+        assert_eq!(
+            res2.get_option("enable")
+                .unwrap()
+                .get_arg()
+                .unwrap()
+                .get_values()[0],
+            "false".to_owned()
+        );
 
         let res3 = parse_with("--enable", command.clone()).unwrap();
         assert!(res3.contains_option("enable"));

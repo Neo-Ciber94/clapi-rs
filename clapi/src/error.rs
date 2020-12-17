@@ -1,8 +1,8 @@
 use crate::command::Command;
 use crate::error::Inner::{Custom, Parsed, Simple};
+use crate::{ArgumentList, OptionList, ParseResult};
 use std::fmt::{Debug, Display, Formatter};
 use std::result;
-use crate::{ArgumentList, ParseResult, OptionList};
 
 /// A convenient `Result` type.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -93,7 +93,7 @@ impl Display for Error {
                 } else {
                     write!(f, "{}: {}", custom.kind, custom.error)
                 }
-            },
+            }
         }
     }
 }
@@ -114,7 +114,9 @@ impl From<ErrorKind> for Error {
 
 impl From<ParseError> for Error {
     fn from(parse_error: ParseError) -> Self {
-        Error { inner: Inner::Parsed(Box::new(parse_error)) }
+        Error {
+            inner: Inner::Parsed(Box::new(parse_error)),
+        }
     }
 }
 
@@ -165,7 +167,7 @@ struct CustomError {
 /// Represents an error occurred in a parse operation.
 pub struct ParseError {
     inner: Error,
-    parse_result: ParseResult
+    parse_result: ParseResult,
 }
 
 impl ParseError {

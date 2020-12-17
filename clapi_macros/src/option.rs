@@ -1,9 +1,9 @@
 use crate::arg::ArgAttrData;
-use proc_macro2::{TokenStream, Span};
-use quote::*;
-use crate::command::{FnArgData, is_option_bool_flag};
 use crate::attr;
+use crate::command::{is_option_bool_flag, FnArgData};
 use crate::macro_attribute::Value;
+use proc_macro2::{Span, TokenStream};
+use quote::*;
 
 /// Tokens for an `option` attribute.
 ///
@@ -99,7 +99,10 @@ impl OptionAttrData {
 
             // Is needed to set `false` as default value
             // to allow the option to be marked as no `required`
-            let lit = syn::LitBool { value: false, span: Span::call_site() };
+            let lit = syn::LitBool {
+                value: false,
+                span: Span::call_site(),
+            };
             args.set_default_values(vec![syn::Lit::Bool(lit)]);
             args.set_min(0);
             args.set_max(1);
@@ -109,31 +112,31 @@ impl OptionAttrData {
         option
     }
 
-    pub fn set_alias(&mut self, alias: String){
+    pub fn set_alias(&mut self, alias: String) {
         self.alias = Some(alias);
     }
 
-    pub fn set_description(&mut self, description: String){
+    pub fn set_description(&mut self, description: String) {
         self.description = Some(description);
     }
 
-    pub fn set_args(&mut self, args: ArgAttrData){
+    pub fn set_args(&mut self, args: ArgAttrData) {
         self.args = Some(args);
     }
 
     pub fn expand(&self) -> TokenStream {
         // CommandOption::set_alias
-        let alias = if let Some(s) = &self.alias{
-            quote!{ .alias(#s) }
+        let alias = if let Some(s) = &self.alias {
+            quote! { .alias(#s) }
         } else {
-            quote!{}
+            quote! {}
         };
 
         // CommandOption::set_description
-        let description = if let Some(s) = &self.description{
-            quote!{ .description(#s) }
+        let description = if let Some(s) = &self.description {
+            quote! { .description(#s) }
         } else {
-            quote!{}
+            quote! {}
         };
 
         // `CommandOption::set_required` is args have default values
@@ -141,20 +144,20 @@ impl OptionAttrData {
             Some(args) if !args.has_default_values() => {
                 quote! { .required(true) }
             }
-            _ => quote! {}
+            _ => quote! {},
         };
 
         // CommandOption::set_args
-        let args = if let Some(args) = &self.args{
+        let args = if let Some(args) = &self.args {
             let tokens = args.expand();
-            quote!{ .arg(#tokens) }
+            quote! { .arg(#tokens) }
         } else {
-            quote!{}
+            quote! {}
         };
 
         let name = quote_expr!(self.name);
 
-        quote!{
+        quote! {
             clapi::CommandOption::new(#name)
             #alias
             #description

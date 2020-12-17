@@ -19,9 +19,12 @@ pub fn is_top_function(item_fn: &ItemFn, file: &File) {
 
 pub fn is_public(item_fn: &ItemFn) {
     match item_fn.vis {
-        Visibility::Public(_) => {},
+        Visibility::Public(_) => {}
         _ => {
-            panic!("subcommands must be declared public: `{}` is not public", item_fn.sig.ident);
+            panic!(
+                "subcommands must be declared public: `{}` is not public",
+                item_fn.sig.ident
+            );
         }
     }
 }

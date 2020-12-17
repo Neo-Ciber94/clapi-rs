@@ -106,7 +106,11 @@ impl IntoIterator for MacroAttribute {
 
 impl Display for MacroAttribute {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", attribute_to_string(self.style.as_ref(), self.path(), self.args.as_slice()))
+        write!(
+            f,
+            "{}",
+            attribute_to_string(self.style.as_ref(), self.path(), self.args.as_slice())
+        )
     }
 }
 
@@ -204,8 +208,15 @@ impl Display for MetaItem {
             MetaItem::Literal(lit) => display_lit(f, lit),
             MetaItem::NameValue(name_value) => write!(f, "{}", name_value),
             MetaItem::Nested(nested) => {
-                assert!(nested.style.is_none(), "Nested macro attributes cannot have an style");
-                write!(f, "{}", attribute_to_string(None, nested.path(), nested.args.as_slice()))
+                assert!(
+                    nested.style.is_none(),
+                    "Nested macro attributes cannot have an style"
+                );
+                write!(
+                    f,
+                    "{}",
+                    attribute_to_string(None, nested.path(), nested.args.as_slice())
+                )
             }
         }
     }
@@ -360,9 +371,19 @@ pub fn lit_to_string(lit: &Lit) -> String {
 pub fn display_lit<W: Write>(f: &mut W, lit: &Lit) -> std::fmt::Result {
     match lit {
         Lit::Str(s) => write!(f, "{:?}{}", s.value(), s.suffix()),
-        Lit::ByteStr(s) => write!(f, "b{:?}{}", unsafe { String::from_utf8_unchecked(s.value()) }, s.suffix()),
-        Lit::Byte(s) => write!(f, "b{:?}{}", std::char::from_u32(s.value() as u32).unwrap(), s.suffix()),
-        Lit::Char(s) =>  write!(f, "{:?}{}", s.value(), s.suffix()),
+        Lit::ByteStr(s) => write!(
+            f,
+            "b{:?}{}",
+            unsafe { String::from_utf8_unchecked(s.value()) },
+            s.suffix()
+        ),
+        Lit::Byte(s) => write!(
+            f,
+            "b{:?}{}",
+            std::char::from_u32(s.value() as u32).unwrap(),
+            s.suffix()
+        ),
+        Lit::Char(s) => write!(f, "{:?}{}", s.value(), s.suffix()),
         Lit::Int(s) => write!(f, "{}{}", s.base10_digits(), s.suffix()),
         Lit::Float(s) => write!(f, "{}{}", s.base10_digits(), s.suffix()),
         Lit::Bool(s) => write!(f, "{}", s.value),
@@ -370,15 +391,12 @@ pub fn display_lit<W: Write>(f: &mut W, lit: &Lit) -> std::fmt::Result {
     }
 }
 
-pub fn attribute_to_string<'a, I>(
-    style: Option<&AttrStyle>,
-    path: &str,
-    meta_items: I,
-) -> String
+pub fn attribute_to_string<'a, I>(style: Option<&AttrStyle>, path: &str, meta_items: I) -> String
 where
     I: IntoIterator<Item = &'a MetaItem>,
 {
-    let meta = meta_items.into_iter()
+    let meta = meta_items
+        .into_iter()
         .map(|s| s.to_string())
         .collect::<Vec<String>>();
 
@@ -434,7 +452,7 @@ mod tests {
     }
 
     #[test]
-    fn to_string_test(){
+    fn to_string_test() {
         let tokens = quote! {
             #[attribute(
                 path,

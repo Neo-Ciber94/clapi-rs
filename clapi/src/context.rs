@@ -81,7 +81,7 @@ impl Context {
 
     /// Split the option and returns the `option` name.
     pub fn trim_prefix<'a>(&self, value: &'a str) -> &'a str {
-       self.trim_and_get_prefix(value).1
+        self.trim_and_get_prefix(value).1
     }
 
     /// Split the option and returns its `prefix` (if any) and the `option` name.
@@ -90,7 +90,7 @@ impl Context {
             .name_prefixes()
             .find(|prefix| value.starts_with(prefix.as_str()))
         {
-            if let Some(index) = value.find(prefix){
+            if let Some(index) = value.find(prefix) {
                 let (prefix, value) = value.split_at(index + prefix.len());
                 return (Some(prefix), value);
             }
@@ -100,7 +100,7 @@ impl Context {
             .alias_prefixes()
             .find(|prefix| value.starts_with(prefix.as_str()))
         {
-            if let Some(index) = value.find(prefix){
+            if let Some(index) = value.find(prefix) {
                 let (prefix, value) = value.split_at(index + prefix.len());
                 return (Some(prefix), value);
             }
@@ -130,12 +130,12 @@ impl Context {
 }
 
 #[derive(Clone)]
-pub struct ContextBuilder{
+pub struct ContextBuilder {
     root: Command,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
     arg_assign: LinkedHashSet<char>,
-    delimiter: Option<char>
+    delimiter: Option<char>,
 }
 
 impl ContextBuilder {
@@ -145,7 +145,7 @@ impl ContextBuilder {
             name_prefixes: Default::default(),
             alias_prefixes: Default::default(),
             arg_assign: Default::default(),
-            delimiter: None
+            delimiter: None,
         }
     }
 
@@ -199,7 +199,7 @@ impl ContextBuilder {
             name_prefixes,
             alias_prefixes,
             arg_assign,
-            delimiter
+            delimiter,
         }
     }
 }

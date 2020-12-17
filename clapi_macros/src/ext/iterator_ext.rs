@@ -1,8 +1,7 @@
-
 pub trait IteratorExt: Iterator {
     fn single(self) -> Option<Self::Item>
-        where
-            Self: Sized,
+    where
+        Self: Sized,
     {
         let mut ret: Option<Self::Item> = None;
 

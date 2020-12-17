@@ -1,8 +1,8 @@
-use std::fmt::Write;
 use crate::command::Command;
 use crate::context::Context;
 pub use crate::help::help_writer::*;
 pub use crate::help::indented_writer::*;
+use std::fmt::Write;
 
 /// Provides help information about a command.
 ///
@@ -51,17 +51,17 @@ pub trait HelpProvider {
 
 /// Type of the `HelpProvider`.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum HelpKind{
+pub enum HelpKind {
     /// The help is a root command child like: `command help`.
     Subcommand,
     /// The help is a root command option like: `command --help`.
-    Option
+    Option,
 }
 
 /// Default implementation of the `HelpCommand` trait.
 #[derive(Debug, Clone)]
 pub struct DefaultHelpProvider(pub HelpKind);
-impl Default for DefaultHelpProvider{
+impl Default for DefaultHelpProvider {
     fn default() -> Self {
         DefaultHelpProvider(HelpKind::Subcommand)
     }
@@ -79,13 +79,15 @@ impl HelpProvider for DefaultHelpProvider {
         }
 
         // Command usage
-        if command.take_args() || command.get_options().len() > 0 || command.get_children().len() > 0
+        if command.take_args()
+            || command.get_options().len() > 0
+            || command.get_children().len() > 0
         {
             writer.section("USAGE:", |w| {
                 let mut args_names = Vec::new();
 
                 for arg in command.get_args() {
-                    if arg.get_arg_count().takes_exactly(1){
+                    if arg.get_arg_count().takes_exactly(1) {
                         args_names.push(format!("<{}>", arg.get_name().to_uppercase()));
                     } else {
                         args_names.push(format!("<{}...>", arg.get_name().to_uppercase()));
@@ -164,7 +166,7 @@ impl HelpProvider for DefaultHelpProvider {
             let mut args_names = Vec::new();
 
             for arg in command.get_args() {
-                if arg.get_arg_count().takes_exactly(1){
+                if arg.get_arg_count().takes_exactly(1) {
                     args_names.push(format!("<{}>", arg.get_name().to_uppercase()));
                 } else {
                     args_names.push(format!("<{}...>", arg.get_name().to_uppercase()));
@@ -192,7 +194,7 @@ impl HelpProvider for DefaultHelpProvider {
         writer.into_string()
     }
 
-    fn kind(&self) -> HelpKind{
+    fn kind(&self) -> HelpKind {
         self.0
     }
 }
@@ -240,7 +242,7 @@ mod indented_writer {
             IndentedWriter {
                 buffer: String::new(),
                 current_indent: 0,
-                indent
+                indent,
             }
         }
 
@@ -515,7 +517,7 @@ mod help_writer {
             let mut args_names = Vec::new();
 
             for arg in option.get_args() {
-                if arg.get_arg_count().takes_exactly(1){
+                if arg.get_arg_count().takes_exactly(1) {
                     args_names.push(format!(" <{}>", arg.get_name().to_uppercase()));
                 } else {
                     args_names.push(format!(" <{}...>", arg.get_name().to_uppercase()));

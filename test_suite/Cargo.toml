@@ -1,0 +1,16 @@
+[package]
+name = "test_suite"
+version = "0.1.0"
+authors = ["Freddy L P.B <freddy_luis_94@hotmail.com>"]
+edition = "2018"
+publish = false
+
+[[test]]
+name = "tests"
+path = "tests/compiletest.rs"
+
+[dependencies]
+clapi = { path= "../clapi",  features=["macros"] }
+
+[dev-dependencies]
+trybuild = { version="1.0.35", features = ["diff"] }

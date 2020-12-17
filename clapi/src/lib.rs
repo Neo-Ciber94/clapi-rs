@@ -44,20 +44,20 @@
 #[macro_use]
 pub mod utils;
 
-#[cfg(feature="serde")]
-pub mod serde;
+#[cfg(feature = "serde")]
+mod serde;
 
-mod command;
-mod option;
-mod args;
 mod arg_count;
+mod args;
+mod command;
 mod command_line;
 mod context;
 mod error;
-mod tokenizer;
-mod parser;
+mod option;
 mod parse_result;
+mod parser;
 mod symbol;
+mod tokenizer;
 
 /// Utilities for provide suggestions.
 pub mod suggestion;
@@ -66,41 +66,41 @@ pub mod suggestion;
 pub mod help;
 
 // Re-exports
-pub use self::command::*;
-pub use self::option::*;
-pub use self::args::*;
 pub use self::arg_count::*;
+pub use self::args::*;
+pub use self::command::*;
 pub use self::command_line::*;
 pub use self::context::*;
 pub use self::error::*;
-pub use self::tokenizer::*;
-pub use self::parser::*;
+pub use self::option::*;
 pub use self::parse_result::*;
+pub use self::parser::*;
 pub use self::symbol::*;
+pub use self::tokenizer::*;
 
-#[macro_use]
-mod app_macros;
-
-pub use app_macros::*;
-
-#[cfg(feature="macros")]
+#[cfg(feature = "macros")]
 pub mod macros {
     extern crate clapi_macros;
     pub use clapi_macros::*;
 }
 
-#[cfg(feature="macros")]
+#[cfg(feature = "macros")]
 pub use macros::*;
 
+#[macro_use]
+mod app_macros;
+pub use app_macros::*;
+
+/// Utilities intended for internal use.
 #[doc(hidden)]
-pub mod macro_utils {
-    pub extern crate clapi_macros_utils;
+pub mod internal {
+    pub extern crate clapi_macros_internal;
 
     #[doc(hidden)]
     #[macro_export]
     macro_rules! declare_option_var {
         ($options:ident, $name:ident: $ty:ty) => {
-            $crate::macro_utils::clapi_macros_utils::__declare_option_var!($options, $name: $ty)
+            $crate::internal::clapi_macros_internal::__declare_option_var!($options, $name: $ty)
         };
     }
 
@@ -108,7 +108,7 @@ pub mod macro_utils {
     #[macro_export]
     macro_rules! declare_argument_var {
         ($arguments:ident, $name:ident: $ty:ty) => {
-            $crate::macro_utils::clapi_macros_utils::__declare_argument_var!($arguments, $name: $ty)
+            $crate::internal::clapi_macros_internal::__declare_argument_var!($arguments, $name: $ty)
         };
     }
 
@@ -116,10 +116,10 @@ pub mod macro_utils {
     #[macro_export]
     macro_rules! var_type {
         ($ty:ty) => {
-            $crate::macro_utils::clapi_macros_utils::__var_type!($ty)
+            $crate::internal::clapi_macros_internal::__var_type!($ty)
         };
     }
 }
 
 #[doc(hidden)]
-pub use macro_utils::*;
+pub use internal::*;

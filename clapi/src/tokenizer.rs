@@ -16,7 +16,7 @@ pub enum Token {
     EOO,
 }
 
-const END_OF_OPTIONS : &'static str = "--";
+const END_OF_OPTIONS: &'static str = "--";
 
 impl Token {
     /// Returns `true` if the token is a command.
@@ -143,10 +143,10 @@ where
                             let max_arg_count = arg.get_arg_count().max();
                             let mut count = 0;
                             while count < max_arg_count {
-                                if let Some(value) = iterator.peek(){
-                                    let s : &str = value.borrow();
+                                if let Some(value) = iterator.peek() {
+                                    let s: &str = value.borrow();
                                     // If the token is prefixed as an option: exit
-                                    if context.is_option_prefixed(s) || s == END_OF_OPTIONS{
+                                    if context.is_option_prefixed(s) || s == END_OF_OPTIONS {
                                         break;
                                     } else {
                                         // Adds the next argument
@@ -171,7 +171,7 @@ where
             tokens.extend(iterator.map(|s| Token::Arg(s.borrow().to_string())));
         } else {
             for value in iterator {
-                let s : String = value.borrow().to_string();
+                let s: String = value.borrow().to_string();
                 if s == END_OF_OPTIONS && !has_end_of_options {
                     tokens.push(Token::EOO);
                     has_end_of_options = true;
@@ -193,11 +193,7 @@ struct OptionAndArgs {
 
 fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAndArgs> {
     // Check if the value contains a delimiter
-    if let Some(arg_assign) = context
-        .arg_assign()
-        .cloned()
-        .find(|d| value.contains(*d))
-    {
+    if let Some(arg_assign) = context.arg_assign().cloned().find(|d| value.contains(*d)) {
         let option_and_args = value
             .split(arg_assign)
             .map(|s| s.to_string())
@@ -207,7 +203,8 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
         return if option_and_args.len() != 2 {
             Err(Error::from(ErrorKind::InvalidExpression))
         } else {
-            let (prefix, option) = context
+            let (prefix, option) =
+                context
                     .trim_and_get_prefix(&option_and_args[0])
                     .then_apply(|(p, o)| {
                         (
@@ -224,17 +221,26 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
 
             // Error when: =1,2,3
             if option.is_empty() {
-                return Err(Error::new(ErrorKind::InvalidExpression, "no option specified"));
+                return Err(Error::new(
+                    ErrorKind::InvalidExpression,
+                    "no option specified",
+                ));
             }
 
             // Error when: --option=
             if args.is_empty() {
-                return Err(Error::new(ErrorKind::InvalidExpression, "no arguments specified"));
+                return Err(Error::new(
+                    ErrorKind::InvalidExpression,
+                    "no arguments specified",
+                ));
             }
 
             // Error when: --option=1,,,3
-            if args.iter().any(|s| s.is_empty()){
-                return Err(Error::new(ErrorKind::InvalidExpression, format!("{}", value)));
+            if args.iter().any(|s| s.is_empty()) {
+                return Err(Error::new(
+                    ErrorKind::InvalidExpression,
+                    format!("{}", value),
+                ));
             }
 
             Ok(OptionAndArgs {
@@ -244,13 +250,11 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
             })
         };
     } else {
-        let (prefix, option) = context
-                .trim_and_get_prefix(value)
-                .then_apply(|(p, o)| {
-                (
-                    p.unwrap().trim().to_string(),
-                    o.trim_matches('"').trim().to_string(),
-                )
+        let (prefix, option) = context.trim_and_get_prefix(value).then_apply(|(p, o)| {
+            (
+                p.unwrap().trim().to_string(),
+                o.trim_matches('"').trim().to_string(),
+            )
         });
 
         if option.is_empty() {
@@ -268,23 +272,20 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Command, split_into_args, Argument, CommandOption};
+    use crate::{split_into_args, Argument, Command, CommandOption};
 
-    fn tokenize(command: Command, value: &str) -> crate::Result<Vec<Token>>{
+    fn tokenize(command: Command, value: &str) -> crate::Result<Vec<Token>> {
         let mut tokenizer = DefaultTokenizer::default();
         let context = Context::new(command);
         tokenizer.tokenize(&context, split_into_args(value))
     }
 
     #[test]
-    fn tokenize_test(){
+    fn tokenize_test() {
         let command = Command::new("My App")
             .arg(Argument::one_or_more("args"))
-            .option(CommandOption::new("enable")
-                .alias("e"))
-            .option(CommandOption::new("range")
-                .arg(Argument::new("range")
-                    .arg_count(1..=2)))
+            .option(CommandOption::new("enable").alias("e"))
+            .option(CommandOption::new("range").arg(Argument::new("range").arg_count(1..=2)))
             .subcommand(Command::new("version"));
 
         assert_eq!(tokenize(command.clone(), "").unwrap(), Vec::new());
@@ -311,21 +312,28 @@ mod tests {
     }
 
     #[test]
-    fn tokenize_test2(){
+    fn tokenize_test2() {
         let command = Command::new("My App")
             .arg(Argument::zero_or_one("values"))
-            .option(CommandOption::new("times")
-                .alias("t")
-                .arg(Argument::new("times")))
-            .option(CommandOption::new("numbers")
-                .alias("n")
-                .arg(Argument::zero_or_one("N")));
+            .option(
+                CommandOption::new("times")
+                    .alias("t")
+                    .arg(Argument::new("times")),
+            )
+            .option(
+                CommandOption::new("numbers")
+                    .alias("n")
+                    .arg(Argument::zero_or_one("N")),
+            );
 
         let tokens1 = tokenize(command.clone(), "-t=1 --numbers=2,4,6 --").unwrap();
         assert_eq!(tokens1.len(), 7);
         assert_eq!(tokens1[0], Token::Opt("-".to_owned(), "t".to_owned()));
         assert_eq!(tokens1[1], Token::Arg("1".to_owned()));
-        assert_eq!(tokens1[2], Token::Opt("--".to_owned(), "numbers".to_owned()));
+        assert_eq!(
+            tokens1[2],
+            Token::Opt("--".to_owned(), "numbers".to_owned())
+        );
         assert_eq!(tokens1[3], Token::Arg("2".to_owned()));
         assert_eq!(tokens1[4], Token::Arg("4".to_owned()));
         assert_eq!(tokens1[5], Token::Arg("6".to_owned()));
@@ -333,15 +341,19 @@ mod tests {
     }
 
     #[test]
-    fn invalid_expression_test(){
+    fn invalid_expression_test() {
         let command = Command::new("My App")
             .arg(Argument::zero_or_one("values"))
-            .option(CommandOption::new("times")
-                .alias("t")
-                .arg(Argument::new("times")))
-            .option(CommandOption::new("numbers")
-                .alias("n")
-                .arg(Argument::zero_or_one("N")));
+            .option(
+                CommandOption::new("times")
+                    .alias("t")
+                    .arg(Argument::new("times")),
+            )
+            .option(
+                CommandOption::new("numbers")
+                    .alias("n")
+                    .arg(Argument::zero_or_one("N")),
+            );
 
         // Err
         assert!(tokenize(command.clone(), "-").is_err());

@@ -121,11 +121,11 @@ impl<T: PartialOrd> PartialOrd for InnerCell<T> {
 unsafe impl<T: Send> Send for InnerCell<T> {}
 
 #[cfg(test)]
-mod test{
+mod test {
     use super::*;
 
     #[test]
-    fn inner_cell_test1(){
+    fn inner_cell_test1() {
         let cell = InnerCell::new(0);
         assert_eq!(*cell.get(), 0);
 
@@ -134,7 +134,7 @@ mod test{
     }
 
     #[test]
-    fn inner_cell_test2(){
+    fn inner_cell_test2() {
         let cell = InnerCell::new(0);
 
         cell.set(3);

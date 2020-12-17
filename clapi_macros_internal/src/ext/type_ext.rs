@@ -1,3 +1,4 @@
+// Copied from clapi_macros::ext
 use syn::{GenericArgument, PathArguments, Type};
 
 macro_rules! is_primitive_type {

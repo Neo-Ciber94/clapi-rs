@@ -20,7 +20,7 @@ impl ArgCount {
 
     #[inline(always)]
     const fn new_unchecked(min: usize, max: usize) -> Self {
-        ArgCount { min, max, }
+        ArgCount { min, max }
     }
 
     /// Constructs a new `ArgCount` for not arguments.
@@ -112,11 +112,7 @@ impl Display for ArgCount {
                 if self.takes_exactly(1) { "" } else { "s" }
             )
         } else {
-            write!(
-                f,
-                "{} to {} arguments",
-                self.min, self.max
-            )
+            write!(f, "{} to {} arguments", self.min, self.max)
         }
     }
 }
@@ -255,16 +251,25 @@ mod tests {
         assert!(arg_count.takes(3));
         assert!(arg_count.takes(4));
         assert!(arg_count.takes(5));
-
     }
 
     #[test]
-    fn into_arg_count_test(){
-        fn assert_into<A: Into<ArgCount>>(value: A, expected_min: usize, expected_max: usize){
+    fn into_arg_count_test() {
+        fn assert_into<A: Into<ArgCount>>(value: A, expected_min: usize, expected_max: usize) {
             let arg_count = value.into();
             let type_name = std::any::type_name::<A>();
-            assert_eq!(arg_count.min(), expected_min, "min value - type: `{}`", type_name);
-            assert_eq!(arg_count.max(), expected_max, "max value - type: `{}`", type_name);
+            assert_eq!(
+                arg_count.min(),
+                expected_min,
+                "min value - type: `{}`",
+                type_name
+            );
+            assert_eq!(
+                arg_count.max(),
+                expected_max,
+                "max value - type: `{}`",
+                type_name
+            );
         }
 
         assert_into(2, 2, 2);
@@ -280,20 +285,20 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn into_arg_count_panic_test1(){
-        let _ : ArgCount = (-1_i32).into();
+    fn into_arg_count_panic_test1() {
+        let _: ArgCount = (-1_i32).into();
     }
 
     #[test]
     #[should_panic]
-    fn into_arg_count_panic_test2(){
-        let _ : ArgCount = (1..1).into();
+    fn into_arg_count_panic_test2() {
+        let _: ArgCount = (1..1).into();
     }
 
     #[test]
     #[should_panic]
-    fn into_arg_count_panic_test3(){
-        let _ : ArgCount = (0..-2).into();
+    fn into_arg_count_panic_test3() {
+        let _: ArgCount = (0..-2).into();
     }
 
     #[test]

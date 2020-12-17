@@ -12,7 +12,7 @@ pub trait SuggestionProvider {
     fn suggestions_for(&self, value: &str, source: &[String]) -> Option<SuggestionResult>;
 
     /// Provides a message for the given suggestions.
-    fn suggestion_message_for(&self, suggestions: SuggestionResult) -> Option<String>{
+    fn suggestion_message_for(&self, suggestions: SuggestionResult) -> Option<String> {
         match suggestions {
             SuggestionResult::Value(s) => Some(format!("\n\n\tDid you mean `{}`?\n", s)),
             SuggestionResult::List(values) => {
@@ -52,7 +52,9 @@ pub trait SuggestionProvider {
 ///
 /// # See
 /// https://en.wikipedia.org/wiki/Levenshtein_distance
-pub struct DefaultSuggestionProvider { max_count: usize }
+pub struct DefaultSuggestionProvider {
+    max_count: usize,
+}
 impl DefaultSuggestionProvider {
     /// Constructs a new `DefaultSuggestionProvider` that returns a max of 5 suggestions.
     pub const fn new() -> Self {
@@ -85,15 +87,15 @@ impl SuggestionProvider for DefaultSuggestionProvider {
             .cloned()
             .collect::<Vec<String>>()
             .then_apply(|mut result| {
-               if result.is_empty() {
-                   None
-               } else {
-                   if result.len() == 1 {
-                       Some(SuggestionResult::Value(result.swap_remove(0)))
-                   } else {
-                       Some(SuggestionResult::List(result))
-                   }
-               }
+                if result.is_empty() {
+                    None
+                } else {
+                    if result.len() == 1 {
+                        Some(SuggestionResult::Value(result.swap_remove(0)))
+                    } else {
+                        Some(SuggestionResult::List(result))
+                    }
+                }
             })
     }
 }
@@ -146,16 +148,14 @@ pub enum SuggestionResult {
     /// A single suggestion value.
     Value(String),
     /// A list of suggested values.
-    List(Vec<String>)
+    List(Vec<String>),
 }
 
 impl SuggestionResult {
     pub fn contains<S: Borrow<str>>(&self, value: S) -> bool {
         match self {
             SuggestionResult::Value(s) => s == value.borrow(),
-            SuggestionResult::List(values) => {
-                values.iter().any(|s| s == value.borrow())
-            }
+            SuggestionResult::List(values) => values.iter().any(|s| s == value.borrow()),
         }
     }
 

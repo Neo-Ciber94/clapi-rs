@@ -1,7 +1,7 @@
+use crate::args::{Argument, ArgumentList};
 use linked_hash_set::LinkedHashSet;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
-use crate::args::{ArgumentList, Argument};
 
 /// Represents a command-line option.
 #[derive(Debug, Clone)]
@@ -37,7 +37,9 @@ impl CommandOption {
 
     /// Returns an `Iterator` over the aliases of this option.
     pub fn get_aliases(&self) -> Aliases<'_> {
-        Aliases { iter: self.aliases.iter() }
+        Aliases {
+            iter: self.aliases.iter(),
+        }
     }
 
     /// Returns a short description of this option or `None` if not set.
@@ -51,7 +53,7 @@ impl CommandOption {
     }
 
     /// Returns the `Argument` this option takes or `None` if have more than 1 argument.
-    pub fn get_arg(&self) -> Option<&Argument>{
+    pub fn get_arg(&self) -> Option<&Argument> {
         if self.args.len() > 1 {
             None
         } else {
@@ -79,7 +81,10 @@ impl CommandOption {
     /// # Panics:
     /// Panics if the `alias` if blank or empty.
     pub fn alias<S: Into<String>>(mut self, alias: S) -> Self {
-        self.aliases.insert(assert_not_blank!(alias.into(), "`alias` cannot be blank or empty"));
+        self.aliases.insert(assert_not_blank!(
+            alias.into(),
+            "`alias` cannot be blank or empty"
+        ));
         self
     }
 
@@ -88,7 +93,10 @@ impl CommandOption {
     /// # Panics:
     /// Panics if the `description` is blank or empty.
     pub fn description<S: Into<String>>(mut self, description: S) -> Self {
-        self.description = Some(assert_not_blank!(description.into(), "`description` cannot be blank or empty"));
+        self.description = Some(assert_not_blank!(
+            description.into(),
+            "`description` cannot be blank or empty"
+        ));
         self
     }
 
@@ -101,7 +109,11 @@ impl CommandOption {
     /// Adds a new `Argument` to this option.
     pub fn arg(mut self, arg: Argument) -> Self {
         if let Err(duplicated) = self.args.add(arg) {
-            panic!("`{}` already contains an argument named: `{}`", self.name, duplicated.get_name());
+            panic!(
+                "`{}` already contains an argument named: `{}`",
+                self.name,
+                duplicated.get_name()
+            );
         }
         self
     }
@@ -130,7 +142,7 @@ impl Hash for CommandOption {
 /// An iterator over the aliases of `CommandOption`.
 #[derive(Debug, Clone)]
 pub struct Aliases<'a> {
-    iter: linked_hash_set::Iter<'a, String>
+    iter: linked_hash_set::Iter<'a, String>,
 }
 
 impl<'a> Iterator for Aliases<'a> {
@@ -168,12 +180,12 @@ impl OptionList {
     pub fn add(&mut self, option: CommandOption) -> std::result::Result<(), CommandOption> {
         // Check if there if any option that match the new option alias or name
 
-        if self.contains(option.name.as_str()){
+        if self.contains(option.name.as_str()) {
             return Err(option);
         }
 
         for alias in &option.aliases {
-            if self.contains(alias){
+            if self.contains(alias) {
                 return Err(option);
             }
         }
@@ -190,21 +202,21 @@ impl OptionList {
     /// Returns the `CommandOption` with the given name or alias or `None`
     /// if not found.
     pub fn get<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&CommandOption> {
-        self.inner
-            .iter()
-            .find(|o| o.name == name_or_alias.as_ref() || o.aliases.contains(name_or_alias.as_ref()))
+        self.inner.iter().find(|o| {
+            o.name == name_or_alias.as_ref() || o.aliases.contains(name_or_alias.as_ref())
+        })
     }
 
     /// Returns the `CommandOption` with the given name or `None` if not found.
     pub fn get_by_name<S: AsRef<str>>(&self, name: S) -> Option<&CommandOption> {
-        self.inner.iter()
+        self.inner
+            .iter()
             .find(|opt| opt.get_name() == name.as_ref())
     }
 
     /// Returns the `CommandOption` with the given alias or `None` if not found.
     pub fn get_by_alias<S: AsRef<str>>(&self, alias: S) -> Option<&CommandOption> {
-        self.inner.iter()
-            .find(|opt| opt.has_alias(alias.as_ref()))
+        self.inner.iter().find(|opt| opt.has_alias(alias.as_ref()))
     }
 
     /// Returns the `Argument` of the option with the given name or alias or
@@ -217,9 +229,8 @@ impl OptionList {
 
     /// Returns the `ArgumentList` of the option with the given name or alias, or `None`
     /// if the option canno tbe found.
-    pub fn get_args<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&ArgumentList>{
-        self.get(name_or_alias.as_ref())
-            .map(|o| o.get_args())
+    pub fn get_args<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&ArgumentList> {
+        self.get(name_or_alias.as_ref()).map(|o| o.get_args())
     }
 
     /// Returns `true` if there is an option with the given name or alias.
@@ -238,25 +249,27 @@ impl OptionList {
     }
 
     /// Removes all the `Option`s.
-    pub fn clear(&mut self){
+    pub fn clear(&mut self) {
         self.inner.clear();
     }
 
     /// Returns an `ExactSizeIterator` over the `CommandOption` of this collection.
     pub fn iter(&self) -> Iter<'_> {
-        Iter { iter: self.inner.iter() }
+        Iter {
+            iter: self.inner.iter(),
+        }
     }
 }
 
 /// An iterator over the `CommandOption`s of an option list.
 #[derive(Debug, Clone)]
-pub struct Iter<'a>{
-    iter: linked_hash_set::Iter<'a, CommandOption>
+pub struct Iter<'a> {
+    iter: linked_hash_set::Iter<'a, CommandOption>,
 }
 
 /// An owning iterator over the `CommandOption`s of an option list.
 pub struct IntoIter {
-    iter: linked_hash_set::IntoIter<CommandOption>
+    iter: linked_hash_set::IntoIter<CommandOption>,
 }
 
 impl<'a> Iterator for Iter<'a> {
@@ -303,7 +316,9 @@ impl IntoIterator for OptionList {
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        IntoIter { iter: self.inner.into_iter() }
+        IntoIter {
+            iter: self.inner.into_iter(),
+        }
     }
 }
 
@@ -360,7 +375,9 @@ mod tests {
         let mut options = OptionList::new();
         assert!(options.is_empty());
 
-        assert!(options.add(CommandOption::new("version").alias("v")).is_ok());
+        assert!(options
+            .add(CommandOption::new("version").alias("v"))
+            .is_ok());
         assert!(options.add(CommandOption::new("author").alias("a")).is_ok());
         assert!(options.add(CommandOption::new("verbose")).is_ok());
         assert_eq!(options.len(), 3);
@@ -369,8 +386,12 @@ mod tests {
     #[test]
     fn options_get_test() {
         let mut options = OptionList::new();
-        options.add(CommandOption::new("version").alias("v")).unwrap();
-        options.add(CommandOption::new("author").alias("a")).unwrap();
+        options
+            .add(CommandOption::new("version").alias("v"))
+            .unwrap();
+        options
+            .add(CommandOption::new("author").alias("a"))
+            .unwrap();
         options.add(CommandOption::new("verbose")).unwrap();
 
         assert_eq!(options.get("version"), Some(&CommandOption::new("version")));
@@ -382,8 +403,12 @@ mod tests {
     #[test]
     fn options_contains_test() {
         let mut options = OptionList::new();
-        options.add(CommandOption::new("version").alias("v")).unwrap();
-        options.add(CommandOption::new("author").alias("a")).unwrap();
+        options
+            .add(CommandOption::new("version").alias("v"))
+            .unwrap();
+        options
+            .add(CommandOption::new("author").alias("a"))
+            .unwrap();
         options.add(CommandOption::new("verbose")).unwrap();
 
         assert!(options.contains("version"));
@@ -405,8 +430,7 @@ mod tests {
             .alias("a")
             .arg(Argument::new("x").arg_count(0..));
 
-        let opt3 = CommandOption::new("verbose")
-            .arg(Argument::new("x").arg_count(1..3));
+        let opt3 = CommandOption::new("verbose").arg(Argument::new("x").arg_count(1..3));
 
         options.add(opt1).unwrap();
         options.add(opt2).unwrap();
@@ -419,13 +443,17 @@ mod tests {
     }
 
     #[test]
-    fn options_add_duplicated_test(){
+    fn options_add_duplicated_test() {
         let mut options = OptionList::new();
-        options.add(CommandOption::new("version").alias("v")).unwrap();
+        options
+            .add(CommandOption::new("version").alias("v"))
+            .unwrap();
 
         assert!(options.add(CommandOption::new("version")).is_err());
         assert!(options.add(CommandOption::new("v")).is_err());
-        assert!(options.add(CommandOption::new("V").alias("version")).is_err());
+        assert!(options
+            .add(CommandOption::new("V").alias("version"))
+            .is_err());
         assert!(options.add(CommandOption::new("value").alias("v")).is_err());
     }
 }

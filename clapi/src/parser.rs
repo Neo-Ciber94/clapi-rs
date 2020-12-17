@@ -1,27 +1,39 @@
+use crate::args::ArgumentList;
+use crate::command::Command;
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, Result};
-use crate::option::{OptionList, CommandOption};
+use crate::option::{CommandOption, OptionList};
 use crate::parse_result::ParseResult;
 use crate::tokenizer::{Token, Tokenizer};
 use crate::utils::Then;
 use std::borrow::Borrow;
-use crate::command::Command;
-use crate::args::ArgumentList;
 
 /// A trait for parse command arguments.
 pub trait Parser<Args> {
     /// Parse the provided command arguments and returns a `Ok(ParseResult)` if not error is found,
     /// otherwise returns `Err(Error)`.
-    fn parse<T: Tokenizer<Args>>(&mut self, context: &Context, tokenizer: &mut T, args: Args) -> Result<ParseResult>;
+    fn parse<T: Tokenizer<Args>>(
+        &mut self,
+        context: &Context,
+        tokenizer: &mut T,
+        args: Args,
+    ) -> Result<ParseResult>;
 }
 
 /// A default implementation of the `Parser` trait.
 #[derive(Debug, Default)]
 pub struct DefaultParser;
 impl<S, I> Parser<I> for DefaultParser
-where S: Borrow<str>,
-      I: IntoIterator<Item = S>, {
-    fn parse<T: Tokenizer<I>>(&mut self, context: &Context, tokenizer: &mut T, args: I) -> Result<ParseResult> {
+where
+    S: Borrow<str>,
+    I: IntoIterator<Item = S>,
+{
+    fn parse<T: Tokenizer<I>>(
+        &mut self,
+        context: &Context,
+        tokenizer: &mut T,
+        args: I,
+    ) -> Result<ParseResult> {
         let tokens = tokenizer.tokenize(context, args)?;
         let mut iterator = tokens.iter().peekable();
         let mut command_options = OptionList::new();
@@ -35,8 +47,8 @@ where S: Borrow<str>,
                     ParseResult::new(
                         command.clone(),
                         OptionList::default(),
-                        ArgumentList::default()
-                    )
+                        ArgumentList::default(),
+                    ),
                 )
             })?;
 
@@ -51,11 +63,9 @@ where S: Borrow<str>,
 
                 if option.take_args() {
                     let mut option_args = ArgumentList::new();
-                    let mut option_args_iter = option.get_args()
-                        .iter()
-                        .peekable();
+                    let mut option_args_iter = option.get_args().iter().peekable();
 
-                    while let Some(arg) = option_args_iter.next(){
+                    while let Some(arg) = option_args_iter.next() {
                         let mut values = Vec::new();
                         let max_count = arg.get_arg_count().max();
                         let mut count = 0;
@@ -72,12 +82,12 @@ where S: Borrow<str>,
 
                         // If there is no more args, check if there is an `end of arguments`
                         if option_args_iter.peek().is_none() {
-                            if iterator.peek().map_or(false, |t| !t.is_option()){
+                            if iterator.peek().map_or(false, |t| !t.is_option()) {
                                 // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html
                                 // Check Guide 10
                                 // If there is an `--` (end of arguments) we pass all the values
                                 // before to the last option (if any)
-                                if let Some(mut index) = iterator.clone().position(|t| t.is_eoo()){
+                                if let Some(mut index) = iterator.clone().position(|t| t.is_eoo()) {
                                     while index > 0 {
                                         let t = iterator.next().unwrap().clone().into_string();
                                         values.push(t);
@@ -89,26 +99,23 @@ where S: Borrow<str>,
 
                         // Sets the argument values
                         let mut arg = arg.clone();
-                        arg.set_values(values)
-                            .or_else(|error| {
-                                // We add the last option
-                                let mut options = command_options.clone();
-                                options.add(option.clone()).unwrap();
-                                Err(Error::new_parse_error(
-                                    error,
-                                    ParseResult::new(
-                                        command.clone(),
-                                        options,
-                                        ArgumentList::default()
-                                    ),
-                                ))
-                            })?;
+                        arg.set_values(values).or_else(|error| {
+                            // We add the last option
+                            let mut options = command_options.clone();
+                            options.add(option.clone()).unwrap();
+                            Err(Error::new_parse_error(
+                                error,
+                                ParseResult::new(command.clone(), options, ArgumentList::default()),
+                            ))
+                        })?;
 
                         option_args.add(arg).unwrap();
                     }
 
                     // Sets the option arguments
-                    command_options.add(option.clone().args(option_args)).unwrap();
+                    command_options
+                        .add(option.clone().args(option_args))
+                        .unwrap();
                 } else {
                     // Adds the option
                     command_options.add(option.clone()).unwrap();
@@ -119,14 +126,14 @@ where S: Borrow<str>,
                     ParseResult::new(
                         command.clone(),
                         command_options.clone(),
-                        ArgumentList::default()
+                        ArgumentList::default(),
                     ),
                 ));
             }
         }
 
         // We check for `end of arguments` if any we skip it if there is no arguments before it
-        if let Some(index) = iterator.clone().position(|t| t.is_eoo()){
+        if let Some(index) = iterator.clone().position(|t| t.is_eoo()) {
             // If there is arguments before `--` (end of arguments)
             // values are being passed to the last option which not exist.
             if index > 0 {
@@ -135,12 +142,10 @@ where S: Borrow<str>,
 
                 // We get the last argument to provide a hint of the error
                 let value = iterator.next().cloned().unwrap().into_string();
-                return Err(
-                    Error::new(
-                        ErrorKind::InvalidArgument(value),
-                        "there is no options that expect arguments"
-                    )
-                );
+                return Err(Error::new(
+                    ErrorKind::InvalidArgument(value),
+                    "there is no options that expect arguments",
+                ));
             } else {
                 iterator.next();
             }
@@ -153,7 +158,9 @@ where S: Borrow<str>,
 
         for opt in required_options {
             if !command_options.contains(opt.get_name()) {
-                return Err(Error::from(ErrorKind::MissingOption(opt.get_name().to_owned())));
+                return Err(Error::from(ErrorKind::MissingOption(
+                    opt.get_name().to_owned(),
+                )));
             }
         }
 
@@ -170,12 +177,9 @@ where S: Borrow<str>,
         }
 
         let mut command_args = ArgumentList::new();
-        let mut args_iter = command.get_args()
-            .iter()
-            .cloned()
-            .peekable();
+        let mut args_iter = command.get_args().iter().cloned().peekable();
 
-        while let Some(mut arg) = args_iter.next(){
+        while let Some(mut arg) = args_iter.next() {
             let mut values = Vec::new();
 
             if args_iter.peek().is_some() {
@@ -193,7 +197,7 @@ where S: Borrow<str>,
                 }
             } else {
                 // If there is no `Argument`s left, pass the rest of the tokens as values
-                while let Some(s) = iterator.next().cloned(){
+                while let Some(s) = iterator.next().cloned() {
                     values.push(s.into_string());
                 }
             }
@@ -202,21 +206,16 @@ where S: Borrow<str>,
             // We attempt to set them even if the values is empty
             // to return an `invalid argument count` error.
             if values.len() > 0 || (values.is_empty() && !arg.has_default_values()) {
-                arg.set_values(values)
-                    .or_else(|error| {
-                        // We add the last arg
-                        let mut args = command_args.clone();
-                        args.add(arg.clone()).unwrap();
+                arg.set_values(values).or_else(|error| {
+                    // We add the last arg
+                    let mut args = command_args.clone();
+                    args.add(arg.clone()).unwrap();
 
-                        Err(Error::new_parse_error(
-                            error,
-                            ParseResult::new(
-                                command.clone(),
-                                command_options.clone(),
-                                args
-                            ),
-                        ))
-                    })?;
+                    Err(Error::new_parse_error(
+                        error,
+                        ParseResult::new(command.clone(), command_options.clone(), args),
+                    ))
+                })?;
             }
 
             command_args.add(arg).unwrap();
@@ -226,16 +225,25 @@ where S: Borrow<str>,
         if iterator.peek().is_some() {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
-                format!("`{}` takes no arguments", command.get_name())
+                format!("`{}` takes no arguments", command.get_name()),
             ));
         }
 
         // Sets the command options and arguments
-        Ok(ParseResult::new(command.clone(), command_options, command_args))
+        Ok(ParseResult::new(
+            command.clone(),
+            command_options,
+            command_args,
+        ))
     }
 }
 
-fn get_option_prefixed<'a>(context: &'a Context, command: &'a Command, prefix: &'a str, option: &'a str) -> Option<&'a CommandOption>{
+fn get_option_prefixed<'a>(
+    context: &'a Context,
+    command: &'a Command,
+    prefix: &'a str,
+    option: &'a str,
+) -> Option<&'a CommandOption> {
     if context.is_name_prefix(prefix) {
         return command.get_options().get_by_name(option);
     }

@@ -1,10 +1,10 @@
+use crate::serde::internal::{AnyToString, StringOrList};
 use crate::{ArgCount, Argument, ArgumentList, Command, CommandOption, OptionList};
 use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::export::{Formatter, Result};
 use serde::ser::{SerializeSeq, SerializeStruct};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
-use crate::serde::internal::{AnyToString, StringOrList};
 
 // ArgCount
 impl Serialize for ArgCount {
@@ -153,7 +153,6 @@ impl<'de> Deserialize<'de> for Argument {
     where
         D: Deserializer<'de>,
     {
-
         const FIELDS: &'static [&'static str] = &[
             "name",
             "description",
@@ -174,8 +173,8 @@ impl<'de> Deserialize<'de> for Argument {
 
         impl<'de> Deserialize<'de> for Field {
             fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
-                where
-                    D: Deserializer<'de>,
+            where
+                D: Deserializer<'de>,
             {
                 struct FieldVisitor;
                 impl<'de> Visitor<'de> for FieldVisitor {
@@ -186,8 +185,8 @@ impl<'de> Deserialize<'de> for Argument {
                     }
 
                     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-                        where
-                            E: de::Error,
+                    where
+                        E: de::Error,
                     {
                         match v {
                             "name" => Ok(Field::Name),
@@ -201,8 +200,8 @@ impl<'de> Deserialize<'de> for Argument {
                     }
 
                     fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
-                        where
-                            E: de::Error,
+                    where
+                        E: de::Error,
                     {
                         match v {
                             b"name" => Ok(Field::Name),
@@ -232,8 +231,8 @@ impl<'de> Deserialize<'de> for Argument {
             }
 
             fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, <A as SeqAccess<'de>>::Error>
-                where
-                    A: SeqAccess<'de>,
+            where
+                A: SeqAccess<'de>,
             {
                 let name: String = seq
                     .next_element()?
@@ -259,7 +258,8 @@ impl<'de> Deserialize<'de> for Argument {
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(5, &self))?;
 
-                let mut argument = Argument::new(name).arg_count(ArgCount::new(min_count, max_count));
+                let mut argument =
+                    Argument::new(name).arg_count(ArgCount::new(min_count, max_count));
 
                 if let Some(description) = description {
                     argument = argument.description(description);
@@ -277,8 +277,8 @@ impl<'de> Deserialize<'de> for Argument {
             }
 
             fn visit_map<A>(self, mut map: A) -> Result<Self::Value, <A as MapAccess<'de>>::Error>
-                where
-                    A: MapAccess<'de>,
+            where
+                A: MapAccess<'de>,
             {
                 let mut name: Option<String> = None;
                 let mut description: Option<Option<String>> = None;
@@ -344,7 +344,8 @@ impl<'de> Deserialize<'de> for Argument {
                     }
                 }
 
-                let mut argument = Argument::new(name.ok_or_else(|| de::Error::missing_field("name"))?);
+                let mut argument =
+                    Argument::new(name.ok_or_else(|| de::Error::missing_field("name"))?);
 
                 if let Some(Some(description)) = description {
                     argument = argument.description(description);
@@ -438,7 +439,10 @@ impl Serialize for CommandOption {
         if self.get_aliases().count() == 1 {
             state.serialize_field("alias", &self.get_aliases().next().cloned().unwrap())?;
         } else {
-            state.serialize_field("aliases", &self.get_aliases().cloned().collect::<Vec<String>>())?;
+            state.serialize_field(
+                "aliases",
+                &self.get_aliases().cloned().collect::<Vec<String>>(),
+            )?;
         }
 
         state.serialize_field("description", &self.get_description())?;
@@ -453,8 +457,14 @@ impl<'de> Deserialize<'de> for CommandOption {
     where
         D: Deserializer<'de>,
     {
-        const FIELDS: &'static [&'static str] =
-            &["name", "alias", "aliases", "description", "required", "args"];
+        const FIELDS: &'static [&'static str] = &[
+            "name",
+            "alias",
+            "aliases",
+            "description",
+            "required",
+            "args",
+        ];
 
         enum Field {
             Name,
@@ -474,8 +484,9 @@ impl<'de> Deserialize<'de> for CommandOption {
                     type Value = Field;
 
                     fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-                        formatter
-                            .write_str("`name`,  `alias`, `aliases`, `description`, `required` or `args`")
+                        formatter.write_str(
+                            "`name`,  `alias`, `aliases`, `description`, `required` or `args`",
+                        )
                     }
 
                     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -625,7 +636,7 @@ impl<'de> Deserialize<'de> for CommandOption {
                 if let Some(aliases) = aliases {
                     for alias in aliases {
                         // Prints duplicated aliases warnings
-                        if option.has_alias(&alias){
+                        if option.has_alias(&alias) {
                             println!("duplicated alias `{}`", alias);
                         }
 
@@ -706,7 +717,10 @@ impl Serialize for Command {
         state.serialize_field("name", self.get_name())?;
         state.serialize_field("description", &self.get_description())?;
         state.serialize_field("about", &self.get_about())?;
-        state.serialize_field("subcommands", &self.get_children().cloned().collect::<Vec<Command>>())?;
+        state.serialize_field(
+            "subcommands",
+            &self.get_children().cloned().collect::<Vec<Command>>(),
+        )?;
         state.serialize_field("options", &self.get_options())?;
         state.serialize_field("args", &self.get_args())?;
         state.end()
@@ -728,22 +742,33 @@ impl<'de> Deserialize<'de> for Command {
         ];
 
         enum Field {
-            Name, Description, About, Subcommands, Options, Args
+            Name,
+            Description,
+            About,
+            Subcommands,
+            Options,
+            Args,
         }
 
         impl<'de> Deserialize<'de> for Field {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where
-                D: Deserializer<'de> {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
                 struct FieldVisitor;
                 impl<'de> Visitor<'de> for FieldVisitor {
                     type Value = Field;
 
                     fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-                        formatter.write_str("`name`, `description`, `about`, `subcommands`, `options` or `args`")
+                        formatter.write_str(
+                            "`name`, `description`, `about`, `subcommands`, `options` or `args`",
+                        )
                     }
 
-                    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where
-                        E: de::Error, {
+                    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                    where
+                        E: de::Error,
+                    {
                         match v {
                             "name" => Ok(Field::Name),
                             "description" => Ok(Field::Description),
@@ -751,12 +776,14 @@ impl<'de> Deserialize<'de> for Command {
                             "subcommands" => Ok(Field::Subcommands),
                             "options" => Ok(Field::Options),
                             "args" => Ok(Field::Args),
-                            _ => return Err(de::Error::unknown_field(v, FIELDS))
+                            _ => return Err(de::Error::unknown_field(v, FIELDS)),
                         }
                     }
 
-                    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E> where
-                        E: de::Error, {
+                    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+                    where
+                        E: de::Error,
+                    {
                         match v {
                             b"name" => Ok(Field::Name),
                             b"description" => Ok(Field::Description),
@@ -766,7 +793,7 @@ impl<'de> Deserialize<'de> for Command {
                             b"args" => Ok(Field::Args),
                             _ => {
                                 let value = String::from_utf8_lossy(v);
-                                return Err(de::Error::unknown_field(&value, FIELDS))
+                                return Err(de::Error::unknown_field(&value, FIELDS));
                             }
                         }
                     }
@@ -784,29 +811,35 @@ impl<'de> Deserialize<'de> for Command {
                 formatter.write_str("struct Command")
             }
 
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error> where
-                A: SeqAccess<'de>, {
-                let name : String = seq.next_element()?
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let name: String = seq
+                    .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(0, &self))?;
 
-                let description : Option<String> = seq.next_element()?
+                let description: Option<String> = seq
+                    .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(1, &self))?;
 
-                let about : Option<String> = seq.next_element()?
+                let about: Option<String> = seq
+                    .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(2, &self))?;
 
-                let subcommands : Vec<Command> = seq.next_element()?
+                let subcommands: Vec<Command> = seq
+                    .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(3, &self))?;
 
-                let options : OptionList = seq.next_element()?
+                let options: OptionList = seq
+                    .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(4, &self))?;
 
-                let args : ArgumentList = seq.next_element()?
+                let args: ArgumentList = seq
+                    .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(5, &self))?;
 
-                let mut command = Command::new(name)
-                    .options(options)
-                    .args(args);
+                let mut command = Command::new(name).options(options).args(args);
 
                 for subcommand in subcommands {
                     command = command.subcommand(subcommand);
@@ -823,15 +856,16 @@ impl<'de> Deserialize<'de> for Command {
                 Ok(command)
             }
 
-            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error> where
-                A: MapAccess<'de>, {
-
-                let mut name : Option<String> = None;
-                let mut description : Option<Option<String>> = None;
-                let mut about : Option<Option<String>> = None;
-                let mut subcommands : Option<Vec<Command>> = None;
-                let mut options : Option<OptionList> = None;
-                let mut args : Option<ArgumentList> = None;
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let mut name: Option<String> = None;
+                let mut description: Option<Option<String>> = None;
+                let mut about: Option<Option<String>> = None;
+                let mut subcommands: Option<Vec<Command>> = None;
+                let mut options: Option<OptionList> = None;
+                let mut args: Option<ArgumentList> = None;
 
                 while let Some(key) = map.next_key()? {
                     match key {
@@ -880,9 +914,8 @@ impl<'de> Deserialize<'de> for Command {
                     }
                 }
 
-                let mut command = Command::new(
-                    name.ok_or_else(|| de::Error::missing_field("name"))?
-                );
+                let mut command =
+                    Command::new(name.ok_or_else(|| de::Error::missing_field("name"))?);
 
                 if let Some(Some(description)) = description {
                     command = command.description(description);
@@ -975,9 +1008,9 @@ mod internal {
     /// for example the `CommandOption` aliases.
     #[derive(Deserialize)]
     #[serde(untagged)]
-    pub enum StringOrList{
+    pub enum StringOrList {
         String(String),
-        List(Vec<String>)
+        List(Vec<String>),
     }
 }
 
@@ -1013,8 +1046,8 @@ mod tests {
     #[cfg(test)]
     mod args_tests {
         use super::*;
-        use serde_test::Token;
         use crate::{Argument, ArgumentList};
+        use serde_test::Token;
 
         #[test]
         fn argument_test() {
@@ -1029,10 +1062,11 @@ mod tests {
                 &args_tokens(
                     "numbers",
                     Some("A set of numbers"),
-                    1, 10,
+                    1,
+                    10,
                     vec!["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-                    vec!["1", "2", "3"]
-                )
+                    vec!["1", "2", "3"],
+                ),
             );
         }
 
@@ -1040,16 +1074,7 @@ mod tests {
         fn argument_missing_fields_test1() {
             let arg = Argument::new("numbers");
 
-            serde_test::assert_tokens(
-                &arg,
-                &args_tokens(
-                    "numbers",
-                    None,
-                    1, 1,
-                    vec![],
-                    vec![]
-                )
-            );
+            serde_test::assert_tokens(&arg, &args_tokens("numbers", None, 1, 1, vec![], vec![]));
         }
 
         #[test]
@@ -1060,13 +1085,7 @@ mod tests {
 
             serde_test::assert_tokens(
                 &arg,
-                &args_tokens(
-                    "numbers",
-                    None,
-                    1, 1,
-                    vec!["0", "1", "2", "3"],
-                    vec!["0"]
-                )
+                &args_tokens("numbers", None, 1, 1, vec!["0", "1", "2", "3"], vec!["0"]),
             );
         }
 
@@ -1078,7 +1097,9 @@ mod tests {
             "name": "numbers",
             "valid_values": [1,2,3]
         }
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
 
             assert_eq!(arg.get_name(), "numbers");
             assert_eq!(
@@ -1088,23 +1109,18 @@ mod tests {
         }
 
         #[test]
-        fn argument_list(){
+        fn argument_list() {
             let mut args = ArgumentList::new();
             args.add(Argument::new("A").description("a")).unwrap();
             args.add(Argument::new("B").arg_count(2)).unwrap();
-            args.add(Argument::new("C").valid_values(&['a','b', 'c'])).unwrap();
+            args.add(Argument::new("C").valid_values(&['a', 'b', 'c']))
+                .unwrap();
 
             let mut tokens = Vec::new();
             tokens.push(Token::Seq { len: Some(3) });
-            tokens.extend(args_tokens(
-                "A", Some("a"), 1, 1, vec![], vec![]
-            ));
-            tokens.extend(args_tokens(
-                "B", None, 2, 2, vec![], vec![]
-            ));
-            tokens.extend(args_tokens(
-                "C", None, 1, 1, vec!["a", "b", "c"], vec![]
-            ));
+            tokens.extend(args_tokens("A", Some("a"), 1, 1, vec![], vec![]));
+            tokens.extend(args_tokens("B", None, 2, 2, vec![], vec![]));
+            tokens.extend(args_tokens("C", None, 1, 1, vec!["a", "b", "c"], vec![]));
             tokens.push(Token::SeqEnd);
 
             serde_test::assert_tokens(&args, tokens.as_slice());
@@ -1113,12 +1129,12 @@ mod tests {
 
     #[cfg(test)]
     mod options_tests {
-        use crate::{CommandOption, Argument, ArgCount, OptionList};
         use crate::serde::tests::{args_tokens, option_tokens};
+        use crate::{ArgCount, Argument, CommandOption, OptionList};
         use serde_test::Token;
 
         #[test]
-        fn option_test(){
+        fn option_test() {
             let opt = CommandOption::new("time")
                 .alias("t")
                 .alias("T")
@@ -1127,9 +1143,7 @@ mod tests {
                 .arg(Argument::new("N"));
 
             let mut args = Vec::new();
-            args.extend(args_tokens(
-                "N", None, 1, 1, vec![], vec![])
-            );
+            args.extend(args_tokens("N", None, 1, 1, vec![], vec![]));
 
             serde_test::assert_tokens(
                 &opt,
@@ -1138,32 +1152,29 @@ mod tests {
                     vec!["t", "T"],
                     Some("Number of times"),
                     false,
-                    (1, args)
-                )
+                    (1, args),
+                ),
             );
         }
 
         #[test]
-        fn option_missing_fields_test(){
+        fn option_missing_fields_test() {
             let option = CommandOption::new("color")
                 .required(true)
-                .arg(Argument::new("color")
-                    .valid_values(vec!["red", "blue", "green"]));
+                .arg(Argument::new("color").valid_values(vec!["red", "blue", "green"]));
 
-            let args = Vec::from(
-                args_tokens(
-                    "color",
-                    None,
-                    1, 1,
-                    vec!["red", "blue", "green"],
-                    vec![]
-                )
-            );
+            let args = Vec::from(args_tokens(
+                "color",
+                None,
+                1,
+                1,
+                vec!["red", "blue", "green"],
+                vec![],
+            ));
 
-            serde_test::assert_tokens(&option,
-            &option_tokens(
-                "color", vec![], None, true, (1, args)
-                )
+            serde_test::assert_tokens(
+                &option,
+                &option_tokens("color", vec![], None, true, (1, args)),
             )
         }
 
@@ -1183,77 +1194,78 @@ mod tests {
                             }
                         ]
                     }
-                "#
-            ).unwrap();
+                "#,
+            )
+            .unwrap();
 
             assert_eq!(option.get_name(), "color");
-            assert_eq!(option.get_aliases().cloned().collect::<Vec<String>>(), vec!["c".to_owned()]);
+            assert_eq!(
+                option.get_aliases().cloned().collect::<Vec<String>>(),
+                vec!["c".to_owned()]
+            );
             assert_eq!(option.is_required(), true);
             assert_eq!(option.get_description(), Some("The color to use"));
 
             let arg = option.get_arg().unwrap();
             assert_eq!(arg.get_name(), "color");
             assert_eq!(arg.get_arg_count(), &ArgCount::new(1, 1));
-            assert_eq!(arg.get_valid_values(), &["red".to_owned(), "green".to_owned(), "blue".to_owned()]);
+            assert_eq!(
+                arg.get_valid_values(),
+                &["red".to_owned(), "green".to_owned(), "blue".to_owned()]
+            );
         }
 
         #[test]
-        fn option_list(){
+        fn option_list() {
             let mut option_list = OptionList::new();
-            option_list.add(CommandOption::new("A")
-                .description("generic description")).unwrap();
-            option_list.add(CommandOption::new("B")
-                .alias("b")
-                .arg(Argument::new("value"))).unwrap();
+            option_list
+                .add(CommandOption::new("A").description("generic description"))
+                .unwrap();
+            option_list
+                .add(
+                    CommandOption::new("B")
+                        .alias("b")
+                        .arg(Argument::new("value")),
+                )
+                .unwrap();
 
             let mut tokens = Vec::new();
-            tokens.push(Token::Seq { len: Some(2) } );
-            tokens.extend(
-                option_tokens(
-                    "A",
-                    vec![],
-                    Some("generic description"),
-                    false,
-                    (0, vec![]))
-            );
-            tokens.extend(
-                option_tokens(
-                    "B",
-                    vec!["b"],
-                    None,
-                    false,
-                    (1, args_tokens(
-                        "value",
-                        None,
-                        1, 1,
-                        vec![],
-                        vec![]
-                    )))
-            );
+            tokens.push(Token::Seq { len: Some(2) });
+            tokens.extend(option_tokens(
+                "A",
+                vec![],
+                Some("generic description"),
+                false,
+                (0, vec![]),
+            ));
+            tokens.extend(option_tokens(
+                "B",
+                vec!["b"],
+                None,
+                false,
+                (1, args_tokens("value", None, 1, 1, vec![], vec![])),
+            ));
             tokens.push(Token::SeqEnd);
 
-            serde_test::assert_tokens(
-                &option_list,
-                &tokens
-            );
+            serde_test::assert_tokens(&option_list, &tokens);
         }
     }
 
     #[cfg(test)]
     mod command_tests {
-        use crate::{Command, CommandOption, Argument, ArgCount};
-        use crate::serde::tests::{option_tokens, args_tokens, command_tokens};
+        use crate::serde::tests::{args_tokens, command_tokens, option_tokens};
+        use crate::{ArgCount, Argument, Command, CommandOption};
 
         #[test]
-        fn command_test(){
+        fn command_test() {
             let command = Command::new("echo")
                 .description("Prints a value")
                 .about("echo 1.0")
-                .subcommand(Command::new("version")
-                    .description("Shows the version of the app"))
-                .option(CommandOption::new("color")
-                    .arg(Argument::new("color")
-                        .valid_values(vec!["red", "green", "blue"])))
+                .subcommand(Command::new("version").description("Shows the version of the app"))
+                .option(
+                    CommandOption::new("color")
+                        .arg(Argument::new("color").valid_values(vec!["red", "green", "blue"])),
+                )
                 .arg(Argument::new("values").arg_count(1..));
 
             let subcommands = command_tokens(
@@ -1262,74 +1274,49 @@ mod tests {
                 None,
                 (0, vec![]),
                 (0, vec![]),
-                (0, vec![])
+                (0, vec![]),
             );
 
-            let options = Vec::from(
-                option_tokens(
-                    "color",
-                    vec![],
-                    None,
-                    false,
-                    (1, args_tokens(
-                        "color",
-                        None,
-                        1, 1,
-                        vec!["red", "green", "blue"],
-                        vec![])
-                    )
-                )
-            );
-
-            let args = args_tokens(
-                "values",
-                None,
-                1,
-                u64::max_value(),
+            let options = Vec::from(option_tokens(
+                "color",
                 vec![],
-                vec![]
-            );
-
-            serde_test::assert_ser_tokens(&command,
-            &command_tokens(
-                "echo",
-                Some("Prints a value"),
-                Some("echo 1.0"),
-                (1, subcommands),
-                (1, options),
-                (1, args)
-                )
-            );
-        }
-
-        #[test]
-        fn command_missing_fields_test(){
-            let command = Command::new("echo")
-                .arg(Argument::new("value"));
-
-            let arg = args_tokens(
-                "value",
                 None,
-                1, 1,
-                vec![],
-                vec![]
-            );
+                false,
+                (
+                    1,
+                    args_tokens("color", None, 1, 1, vec!["red", "green", "blue"], vec![]),
+                ),
+            ));
 
-            serde_test::assert_tokens(
+            let args = args_tokens("values", None, 1, u64::max_value(), vec![], vec![]);
+
+            serde_test::assert_ser_tokens(
                 &command,
                 &command_tokens(
                     "echo",
-                    None,
-                    None,
-                    (0, vec![]),
-                    (0, vec![]),
-                    (1, arg)
-                )
+                    Some("Prints a value"),
+                    Some("echo 1.0"),
+                    (1, subcommands),
+                    (1, options),
+                    (1, args),
+                ),
             );
         }
 
         #[test]
-        fn command_from_json(){
+        fn command_missing_fields_test() {
+            let command = Command::new("echo").arg(Argument::new("value"));
+
+            let arg = args_tokens("value", None, 1, 1, vec![], vec![]);
+
+            serde_test::assert_tokens(
+                &command,
+                &command_tokens("echo", None, None, (0, vec![]), (0, vec![]), (1, arg)),
+            );
+        }
+
+        #[test]
+        fn command_from_json() {
             let command = serde_json::from_str::<Command>(
                 r#"
                 {
@@ -1360,8 +1347,9 @@ mod tests {
                         }
                     ]
                 }
-                "#
-            ).unwrap();
+                "#,
+            )
+            .unwrap();
 
             assert_eq!(command.get_name(), "echo");
             assert_eq!(command.get_description(), Some("Prints a value"));
@@ -1369,14 +1357,20 @@ mod tests {
 
             let subcommand = command.find_subcommand("version").unwrap();
             assert_eq!(subcommand.get_name(), "version");
-            assert_eq!(subcommand.get_description(), Some("Shows the version of the app"));
+            assert_eq!(
+                subcommand.get_description(),
+                Some("Shows the version of the app")
+            );
 
             let option = command.get_options().get("color").unwrap();
             assert_eq!(option.get_name(), "color");
 
             let option_arg = option.get_arg().unwrap();
             assert_eq!(option_arg.get_name(), "color");
-            assert_eq!(option_arg.get_valid_values(), &["red".to_owned(), "green".to_owned(), "blue".to_owned()]);
+            assert_eq!(
+                option_arg.get_valid_values(),
+                &["red".to_owned(), "green".to_owned(), "blue".to_owned()]
+            );
 
             let arg = command.get_arg().unwrap();
             assert_eq!(arg.get_name(), "values");
@@ -1391,9 +1385,13 @@ mod tests {
         min_count: u64,
         max_count: u64,
         valid_values: Vec<&'static str>,
-        default_values: Vec<&'static str>) -> Vec<Token>{
+        default_values: Vec<&'static str>,
+    ) -> Vec<Token> {
         let mut tokens = Vec::new();
-        tokens.push(Token::Struct { name: "Argument", len: 6 });
+        tokens.push(Token::Struct {
+            name: "Argument",
+            len: 6,
+        });
 
         tokens.push(Token::Str("name"));
         tokens.push(Token::String(name));
@@ -1413,14 +1411,18 @@ mod tests {
         tokens.push(Token::U64(max_count));
 
         tokens.push(Token::Str("valid_values"));
-        tokens.push(Token::Seq { len: Some(valid_values.len())});
+        tokens.push(Token::Seq {
+            len: Some(valid_values.len()),
+        });
         for value in valid_values {
             tokens.push(Token::Str(value));
         }
         tokens.push(Token::SeqEnd);
 
         tokens.push(Token::Str("default_values"));
-        tokens.push(Token::Seq { len: Some(default_values.len())});
+        tokens.push(Token::Seq {
+            len: Some(default_values.len()),
+        });
         for value in default_values {
             tokens.push(Token::Str(value));
         }
@@ -1435,9 +1437,13 @@ mod tests {
         aliases: Vec<&'static str>,
         description: Option<&'static str>,
         required: bool,
-        args: (usize, Vec<Token>)) -> Vec<Token>{
+        args: (usize, Vec<Token>),
+    ) -> Vec<Token> {
         let mut tokens = Vec::new();
-        tokens.push(Token::Struct { name: "CommandOption", len: 5 });
+        tokens.push(Token::Struct {
+            name: "CommandOption",
+            len: 5,
+        });
 
         tokens.push(Token::Str("name"));
         tokens.push(Token::String(name));
@@ -1447,7 +1453,9 @@ mod tests {
             tokens.push(Token::String(aliases[0].clone()))
         } else {
             tokens.push(Token::Str("aliases"));
-            tokens.push(Token::Seq { len: Some(aliases.len())});
+            tokens.push(Token::Seq {
+                len: Some(aliases.len()),
+            });
             for value in aliases {
                 tokens.push(Token::Str(value));
             }
@@ -1466,7 +1474,7 @@ mod tests {
         tokens.push(Token::Bool(required));
 
         tokens.push(Token::Str("args"));
-        tokens.push(Token::Seq { len: Some(args.0)});
+        tokens.push(Token::Seq { len: Some(args.0) });
         tokens.extend(args.1);
         tokens.push(Token::SeqEnd);
 
@@ -1480,9 +1488,13 @@ mod tests {
         about: Option<&'static str>,
         subcommands: (usize, Vec<Token>),
         options: (usize, Vec<Token>),
-        args: (usize, Vec<Token>)) -> Vec<Token>{
+        args: (usize, Vec<Token>),
+    ) -> Vec<Token> {
         let mut tokens = Vec::new();
-        tokens.push(Token::Struct { name: "Command", len: 6 });
+        tokens.push(Token::Struct {
+            name: "Command",
+            len: 6,
+        });
 
         tokens.push(Token::Str("name"));
         tokens.push(Token::String(name));
@@ -1504,17 +1516,21 @@ mod tests {
         }
 
         tokens.push(Token::Str("subcommands"));
-        tokens.push(Token::Seq { len: Some(subcommands.0)});
+        tokens.push(Token::Seq {
+            len: Some(subcommands.0),
+        });
         tokens.extend(subcommands.1);
         tokens.push(Token::SeqEnd);
 
         tokens.push(Token::Str("options"));
-        tokens.push(Token::Seq { len: Some(options.0)});
+        tokens.push(Token::Seq {
+            len: Some(options.0),
+        });
         tokens.extend(options.1);
         tokens.push(Token::SeqEnd);
 
         tokens.push(Token::Str("args"));
-        tokens.push(Token::Seq { len: Some(args.0)});
+        tokens.push(Token::Seq { len: Some(args.0) });
         tokens.extend(args.1);
         tokens.push(Token::SeqEnd);
 

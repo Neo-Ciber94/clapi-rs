@@ -1,13 +1,13 @@
+use crate::args::{Argument, ArgumentList};
 use crate::error::Result;
 use crate::option::{CommandOption, OptionList};
 use crate::symbol::Symbol;
+use crate::utils::debug_option;
 use linked_hash_set::LinkedHashSet;
 use std::cell::{RefCell, RefMut};
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
-use crate::args::{ArgumentList, Argument};
-use crate::utils::debug_option;
 
 /// A command-line command.
 #[derive(Clone)]
@@ -74,8 +74,10 @@ impl Command {
     }
 
     /// Returns an `ExactSizeIterator` over the children of this command.
-    pub fn get_children(&self) -> Iter<'_>{
-        Iter { iter: self.children.iter() }
+    pub fn get_children(&self) -> Iter<'_> {
+        Iter {
+            iter: self.children.iter(),
+        }
     }
 
     /// Returns the `Options` of this command.
@@ -84,7 +86,7 @@ impl Command {
     }
 
     /// Returns the `Argument` this option takes or `None` if have more than 1 argument.
-    pub fn get_arg(&self) -> Option<&Argument>{
+    pub fn get_arg(&self) -> Option<&Argument> {
         if self.args.len() > 1 {
             None
         } else {
@@ -108,7 +110,9 @@ impl Command {
     }
 
     /// Returns the handler of this command, or `None` if not set.
-    pub fn get_handler(&self) -> Option<RefMut<'_, dyn FnMut(&OptionList, &ArgumentList) -> Result<()> + 'static>> {
+    pub fn get_handler(
+        &self,
+    ) -> Option<RefMut<'_, dyn FnMut(&OptionList, &ArgumentList) -> Result<()> + 'static>> {
         self.handler.as_ref().map(|x| x.borrow_mut())
     }
 
@@ -122,7 +126,10 @@ impl Command {
     /// # Panics:
     /// Panics if the `description` is blank or empty.
     pub fn description<S: Into<String>>(mut self, description: S) -> Self {
-        self.description = Some(assert_not_blank!(description.into(), "`description` cannot be blank or empty"));
+        self.description = Some(assert_not_blank!(
+            description.into(),
+            "`description` cannot be blank or empty"
+        ));
         self
     }
 
@@ -131,7 +138,10 @@ impl Command {
     /// # Panics:
     /// Panics if the `about` is blank or empty.
     pub fn about<S: Into<String>>(mut self, help: S) -> Self {
-        self.about = Some(assert_not_blank!(help.into(), "`help` cannot be blank or empty"));
+        self.about = Some(assert_not_blank!(
+            help.into(),
+            "`help` cannot be blank or empty"
+        ));
         self
     }
 
@@ -156,7 +166,11 @@ impl Command {
     /// Panic if the command contains an `Argument` with the same name.
     pub fn arg(mut self, arg: Argument) -> Self {
         if let Err(duplicated) = self.args.add(arg) {
-            panic!("`{}` already contains an argument named: `{}`", self.name, duplicated.get_name());
+            panic!(
+                "`{}` already contains an argument named: `{}`",
+                self.name,
+                duplicated.get_name()
+            );
         }
         self
     }
@@ -195,7 +209,11 @@ impl Command {
 
     pub(crate) fn add_command(&mut self, mut command: Command) -> bool {
         if self.children.contains(&command) {
-            panic!("`{}` already contains a subcommand named: `{}`", self.name, command.get_name());
+            panic!(
+                "`{}` already contains a subcommand named: `{}`",
+                self.name,
+                command.get_name()
+            );
         }
 
         command.parent = Some(Symbol::Cmd(self.name.clone()));
@@ -205,12 +223,19 @@ impl Command {
     pub(crate) fn add_option(&mut self, option: CommandOption) {
         if let Err(duplicated) = self.options.add(option) {
             if self.options.contains(duplicated.get_name()) {
-                panic!("`{}` already contains an option named: `{}`", self.name, duplicated.get_name());
+                panic!(
+                    "`{}` already contains an option named: `{}`",
+                    self.name,
+                    duplicated.get_name()
+                );
             } else {
                 for alias in duplicated.get_aliases() {
-                   if self.options.contains(alias) {
-                       panic!("`{}` already contains an option with alias: `{}`", self.name, alias);
-                   }
+                    if self.options.contains(alias) {
+                        panic!(
+                            "`{}` already contains an option with alias: `{}`",
+                            self.name, alias
+                        );
+                    }
                 }
 
                 unreachable!()
@@ -241,7 +266,13 @@ impl Debug for Command {
             .field("parent", &self.get_parent())
             .field("options", &self.get_options())
             .field("arguments", &self.get_args())
-            .field("handler", &debug_option(&self.get_handler(), "FnMut(&Options, &ArgumentList) -> Result<()>"))
+            .field(
+                "handler",
+                &debug_option(
+                    &self.get_handler(),
+                    "FnMut(&Options, &ArgumentList) -> Result<()>",
+                ),
+            )
             .field("children", &self.get_children())
             .finish()
     }
@@ -250,10 +281,10 @@ impl Debug for Command {
 /// An iterator over the children of a `Command`.
 #[derive(Debug, Clone)]
 pub struct Iter<'a> {
-    iter: linked_hash_set::Iter<'a, Command>
+    iter: linked_hash_set::Iter<'a, Command>,
 }
 
-impl<'a> Iterator for Iter<'a>{
+impl<'a> Iterator for Iter<'a> {
     type Item = &'a Command;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -261,7 +292,7 @@ impl<'a> Iterator for Iter<'a>{
     }
 }
 
-impl<'a> ExactSizeIterator for Iter<'a>{
+impl<'a> ExactSizeIterator for Iter<'a> {
     #[inline]
     fn len(&self) -> usize {
         self.iter.len()
@@ -333,8 +364,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn command_test3() {
-        Command::new("time")
-            .description("");
+        Command::new("time").description("");
     }
 
     #[test]
@@ -379,7 +409,10 @@ mod tests {
             cmd.get_options().get("version"),
             Some(&CommandOption::new("version"))
         );
-        assert_eq!(cmd.get_options().get("v"), Some(&CommandOption::new("version")));
+        assert_eq!(
+            cmd.get_options().get("v"),
+            Some(&CommandOption::new("version"))
+        );
     }
 
     #[test]
@@ -411,8 +444,7 @@ mod tests {
 
     #[test]
     fn args_test() {
-        let cmd = Command::new("time")
-            .arg(Argument::new("arg").arg_count(1));
+        let cmd = Command::new("time").arg(Argument::new("arg").arg_count(1));
 
         assert_eq!(cmd.get_arg().unwrap(), &Argument::new("arg"));
     }

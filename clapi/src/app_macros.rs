@@ -1,4 +1,3 @@
-
 /// Constructs a `CommandLine` app.
 #[macro_export]
 macro_rules! app {
@@ -368,8 +367,7 @@ macro_rules! run_crate_app {
 #[macro_export]
 macro_rules! crate_name {
     () => {
-        option_env!("CARGO_PKG_NAME")
-            .expect("package `name` is not defined")
+        option_env!("CARGO_PKG_NAME").expect("package `name` is not defined")
     };
 }
 
@@ -380,8 +378,7 @@ macro_rules! crate_name {
 #[macro_export]
 macro_rules! crate_description {
     () => {
-        option_env!("CARGO_PKG_DESCRIPTION")
-            .expect("package `description` is not defined")
+        option_env!("CARGO_PKG_DESCRIPTION").expect("package `description` is not defined")
     };
 }
 
@@ -392,7 +389,6 @@ macro_rules! crate_description {
 #[macro_export]
 macro_rules! crate_version {
     () => {
-        option_env!("CARGO_PKG_VERSION")
-            .expect("package `version` is not defined")
+        option_env!("CARGO_PKG_VERSION").expect("package `version` is not defined")
     };
 }

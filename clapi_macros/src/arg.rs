@@ -1,11 +1,11 @@
+use crate::command::{is_option_bool_flag, FnArgData};
+use crate::macro_attribute::{lit_to_string, Value};
+use crate::utils::pat_type_to_string;
+use crate::var::ArgumentType;
+use crate::{attr, LitExtensions, TypeExtensions};
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::Lit;
-use crate::macro_attribute::{lit_to_string, Value};
-use crate::{attr, LitExtensions, TypeExtensions};
-use crate::command::{FnArgData, is_option_bool_flag};
-use crate::utils::pat_type_to_string;
-use crate::var::ArgumentType;
 
 /// Tokens for an `arg` attribute.
 ///
@@ -68,7 +68,7 @@ impl ArgAttrData {
                             .expect("arg `max` must be an integer literal");
 
                         args.set_max(max);
-                    },
+                    }
                     attr::DESCRIPTION => {
                         let description = value
                             .clone()
@@ -94,7 +94,7 @@ impl ArgAttrData {
         !self.default_values.is_empty()
     }
 
-    pub fn set_name(&mut self, name: String){
+    pub fn set_name(&mut self, name: String) {
         self.name = name;
     }
 
@@ -106,18 +106,19 @@ impl ArgAttrData {
         self.max = Some(max);
     }
 
-    pub fn set_description(&mut self, description: String){
+    pub fn set_description(&mut self, description: String) {
         self.description = Some(description)
     }
 
     pub fn set_default_values(&mut self, default_values: Vec<Lit>) {
         assert!(default_values.len() > 0, "default values is empty");
         if let Err(diff) = check_same_type(&default_values[0], default_values.as_slice()) {
-            panic!("invalid default value for arg `{}`, expected `{}` but was `{}`.\
+            panic!(
+                "invalid default value for arg `{}`, expected `{}` but was `{}`.\
                 Default values must be of the same type",
-                   self.name,
-                   lit_variant_to_string(&default_values[0]),
-                   lit_variant_to_string(diff)
+                self.name,
+                lit_variant_to_string(&default_values[0]),
+                lit_variant_to_string(diff)
             )
         }
         self.default_values = default_values;
@@ -136,12 +137,13 @@ impl ArgAttrData {
             assert!(
                 (min..=max).contains(&self.default_values.len()),
                 "invalid default values count, expected from `{}` to `{}` values",
-                min, max
+                min,
+                max
             );
         }
 
-        let min = quote!{ #min };
-        let max = quote!{ #max };
+        let min = quote! { #min };
+        let max = quote! { #max };
 
         let arg_count = quote! {
             .arg_count(#min..=#max)
@@ -154,9 +156,11 @@ impl ArgAttrData {
             quote! { .defaults(&[#(#tokens),*]) }
         };
 
-        let description = self.description.as_ref()
-            .map(|s| quote! { .description(#s)} )
-            .unwrap_or_else(|| quote!{});
+        let description = self
+            .description
+            .as_ref()
+            .map(|s| quote! { .description(#s)})
+            .unwrap_or_else(|| quote! {});
 
         let name = quote_expr!(self.name);
 
@@ -179,11 +183,14 @@ impl ArgAttrData {
         }
 
         let (arg, arg_type) = if let Some(named_arg) = self.fn_arg.as_ref() {
-          named_arg
+            named_arg
         } else {
             let min = self.min.expect("`min` argument count is not defined");
             let max = self.max.expect("`max` argument count is not defined");
-            assert!(min <= max, "invalid arguments range `min` cannot be greater than `max`");
+            assert!(
+                min <= max,
+                "invalid arguments range `min` cannot be greater than `max`"
+            );
             return (min, max);
         };
 
@@ -200,20 +207,29 @@ impl ArgAttrData {
             },
         };
 
-        assert!(min <= max, "invalid arguments range `min` cannot be greater than `max`");
+        assert!(
+            min <= max,
+            "invalid arguments range `min` cannot be greater than `max`"
+        );
 
         match arg_type {
             ArgumentType::Type(_) => {
                 // bool flag don't need check because are handler internally in `command`
                 if !is_option_bool_flag(arg) {
                     if min != 1 {
-                        panic!("invalid `min` number of arguments for `{}` expected 1 but was {}",
-                               pat_type_to_string(&arg.pat_type), min);
+                        panic!(
+                            "invalid `min` number of arguments for `{}` expected 1 but was {}",
+                            pat_type_to_string(&arg.pat_type),
+                            min
+                        );
                     }
 
                     if max != 1 {
-                        panic!("invalid `max` number of arguments for `{}` expected 1 but was {}",
-                               pat_type_to_string(&arg.pat_type), max);
+                        panic!(
+                            "invalid `max` number of arguments for `{}` expected 1 but was {}",
+                            pat_type_to_string(&arg.pat_type),
+                            max
+                        );
                     }
                 }
 
@@ -221,13 +237,19 @@ impl ArgAttrData {
             }
             ArgumentType::Option(_) => {
                 if min != 0 {
-                    panic!("invalid `min` number of arguments for `{}` expected 0 but was {}",
-                           pat_type_to_string(&arg.pat_type), min);
+                    panic!(
+                        "invalid `min` number of arguments for `{}` expected 0 but was {}",
+                        pat_type_to_string(&arg.pat_type),
+                        min
+                    );
                 }
 
-                if max != 1{
-                    panic!("invalid `max` number of arguments for `{}` expected 1 but was {}",
-                           pat_type_to_string(&arg.pat_type), max);
+                if max != 1 {
+                    panic!(
+                        "invalid `max` number of arguments for `{}` expected 1 but was {}",
+                        pat_type_to_string(&arg.pat_type),
+                        max
+                    );
                 }
 
                 (min, max)
@@ -243,7 +265,10 @@ impl ToTokens for ArgAttrData {
     }
 }
 
-fn assert_arg_and_default_values_same_type((arg, ty): &(FnArgData, ArgumentType), default_values: &[Lit]) {
+fn assert_arg_and_default_values_same_type(
+    (arg, ty): &(FnArgData, ArgumentType),
+    default_values: &[Lit],
+) {
     let arg_type = ty.get_type();
     let lit = &default_values[0];
 

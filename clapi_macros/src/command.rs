@@ -4,11 +4,11 @@ use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::fmt::Display;
 use syn::export::{Formatter, ToTokens};
-use syn::{Attribute, AttributeArgs, ItemFn, ReturnType, Stmt, Item, Type, PatType, AttrStyle};
+use syn::{AttrStyle, Attribute, AttributeArgs, Item, ItemFn, PatType, ReturnType, Stmt, Type};
 
-use crate::macro_attribute::NameValueAttribute;
 use crate::arg::ArgAttrData;
 use crate::attr;
+use crate::macro_attribute::NameValueAttribute;
 use crate::option::OptionAttrData;
 use crate::var::{ArgLocalVar, ArgumentType};
 use crate::TypeExtensions;
@@ -62,7 +62,8 @@ impl CommandAttrData {
 
     pub fn from_fn(args: AttributeArgs, func: ItemFn) -> Self {
         let name = func.sig.ident.to_string();
-        let attr_data = NameValueAttribute::from_attribute_args(name.as_str(), args, AttrStyle::Outer).unwrap();
+        let attr_data =
+            NameValueAttribute::from_attribute_args(name.as_str(), args, AttrStyle::Outer).unwrap();
         cmd::new_command(attr_data, func, false, true)
     }
 
@@ -140,11 +141,13 @@ impl CommandAttrData {
             .unwrap_or_else(|| quote! {});
 
         // Command version
-        let version = self.version
+        let version = self
+            .version
             .as_ref()
             .map(|_| {
                 quote! { .option(clapi::CommandOption::new("version").alias("v")) }
-            }).unwrap_or_else(|| quote!{});
+            })
+            .unwrap_or_else(|| quote! {});
 
         // Command description
         let description = self
@@ -174,16 +177,18 @@ impl CommandAttrData {
         };
 
         // Show version
-        let show_version = self.version
+        let show_version = self
+            .version
             .as_ref()
             .map(|s| {
-                quote!{
+                quote! {
                     if opts.contains("version"){
                         println!("{} {}", clapi::current_filename(), #s);
                         return Ok(());
                     }
                 }
-            }).unwrap_or_else(|| quote!{});
+            })
+            .unwrap_or_else(|| quote! {});
 
         // Build the command
         command = quote! {
@@ -356,13 +361,13 @@ impl Display for FnName {
 }
 
 fn is_clapi_result_type(ty: &Type) -> bool {
-    if ty.is_result(){
+    if ty.is_result() {
         return true;
     }
 
     match ty.path().unwrap().as_str() {
         "clapi::Result" | "clapi::error::Result" => true,
-        _ => false
+        _ => false,
     }
 }
 
@@ -384,8 +389,8 @@ pub fn is_option_bool_flag(fn_arg: &FnArgData) -> bool {
     if let Some(attr) = &fn_arg.attribute {
         fn_arg.pat_type.ty.is_bool()
             && !(attr.contains_name(attr::MIN)
-            || attr.contains_name(attr::MAX)
-            || attr.contains_name(attr::DEFAULT))
+                || attr.contains_name(attr::MAX)
+                || attr.contains_name(attr::DEFAULT))
     } else {
         fn_arg.pat_type.ty.is_bool()
     }
@@ -396,16 +401,21 @@ mod cmd {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use syn::{Attribute, AttributeArgs, AttrStyle, File, FnArg, Item, ItemFn, ItemMod, PatType, Stmt, Type};
+    use syn::{
+        AttrStyle, Attribute, AttributeArgs, File, FnArg, Item, ItemFn, ItemMod, PatType, Stmt,
+        Type,
+    };
 
-    use crate::macro_attribute::{MacroAttribute, NameValueAttribute, MetaItem};
     use crate::arg::ArgAttrData;
-    use crate::command::{drop_command_attributes, CommandAttrData, FnName, FnArgData, is_option_bool_flag};
+    use crate::command::{
+        drop_command_attributes, is_option_bool_flag, CommandAttrData, FnArgData, FnName,
+    };
+    use crate::macro_attribute::{MacroAttribute, MetaItem, NameValueAttribute};
     use crate::option::OptionAttrData;
     use crate::utils::{pat_type_to_string, path_to_string};
     use crate::var::{ArgLocalVar, VarSource};
-    use crate::{attr, AttrQuery};
     use crate::TypeExtensions;
+    use crate::{attr, AttrQuery};
 
     // Create a new command from an `ItemFn`
 
@@ -510,7 +520,7 @@ mod cmd {
             for fn_arg in fn_args.iter().filter(|f| !f.is_option) {
                 let arg = if fn_arg.attribute.is_some() {
                     ArgAttrData::from_arg_data(fn_arg.clone())
-                }  else {
+                } else {
                     ArgAttrData::with_name(fn_arg.arg_name.clone())
                 };
 
@@ -551,22 +561,24 @@ mod cmd {
 
                     if subcommands.len() > 0 {
                         assert_eq!(
-                            subcommands.len(), 1,
+                            subcommands.len(),
+                            1,
                             "multiples `subcommand` attributes defined in `{}`",
                             item_fn.sig.ident.to_string()
                         );
 
                         let mut inner_fn = item_fn.clone();
 
-                        let name_value_attr = if let Some(index) = inner_fn.attrs.iter().position(|att| {
-                            attr::is_subcommand(path_to_string(&att.path).as_str())
-                        }) {
-                            MacroAttribute::new(inner_fn.attrs.swap_remove(index))
-                                .into_name_values()
-                                .unwrap()
-                        } else {
-                            unreachable!()
-                        };
+                        let name_value_attr =
+                            if let Some(index) = inner_fn.attrs.iter().position(|att| {
+                                attr::is_subcommand(path_to_string(&att.path).as_str())
+                            }) {
+                                MacroAttribute::new(inner_fn.attrs.swap_remove(index))
+                                    .into_name_values()
+                                    .unwrap()
+                            } else {
+                                unreachable!()
+                            };
 
                         ret.push((name_value_attr, inner_fn))
                     }
@@ -598,26 +610,39 @@ mod cmd {
             .map(|att| split_attr_path_and_name_values(&att))
             .collect::<Vec<(String, NameValueAttribute)>>();
 
-        let fn_args = item_fn.sig.inputs.iter()
+        let fn_args = item_fn
+            .sig
+            .inputs
+            .iter()
             .map(|f| get_fn_arg_ident_name(f))
             .collect::<Vec<(String, PatType)>>();
 
         for (arg_name, pat_type) in fn_args {
             let attribute = attributes.iter().find_map(|(path, att)| {
-                if path == &arg_name { Some(att.clone()) } else { None }
+                if path == &arg_name {
+                    Some(att.clone())
+                } else {
+                    None
+                }
             });
 
-            let is_option = attribute.as_ref()
+            let is_option = attribute
+                .as_ref()
                 .map(|att| attr::is_option(att.path()))
                 .unwrap_or(true);
 
-            ret.push(FnArgData { arg_name, pat_type, attribute, is_option });
+            ret.push(FnArgData {
+                arg_name,
+                pat_type,
+                attribute,
+                is_option,
+            });
         }
 
         ret
     }
 
-    fn split_attr_path_and_name_values(attr: &MacroAttribute) -> (String, NameValueAttribute){
+    fn split_attr_path_and_name_values(attr: &MacroAttribute) -> (String, NameValueAttribute) {
         let name = attr.get(0)
             .cloned()
             .unwrap_or_else(|| panic!("the first element in `{}` must be the argument name, but was empty", attr))
@@ -627,7 +652,7 @@ mod cmd {
             });
 
         let name_value_attribute = if attr.len() == 1 {
-          NameValueAttribute::empty(attr.path().to_owned(), AttrStyle::Outer)
+            NameValueAttribute::empty(attr.path().to_owned(), AttrStyle::Outer)
         } else {
             let meta_items = attr[1..].iter().cloned().collect::<Vec<MetaItem>>();
             NameValueAttribute::new(attr.path(), meta_items, AttrStyle::Outer).unwrap()
@@ -672,7 +697,8 @@ mod cmd {
         // root `command` must be a top function
         crate::assertions::is_top_function(&item_fn, &root_file);
 
-        let attr = NameValueAttribute::from_attribute_args(attr::COMMAND, args, AttrStyle::Outer).unwrap();
+        let attr =
+            NameValueAttribute::from_attribute_args(attr::COMMAND, args, AttrStyle::Outer).unwrap();
         let mut command = new_command(attr, item_fn.clone(), false, true);
 
         for (path, attr, item_fn, file) in find_subcommands(&root_path, &root_file) {
@@ -723,7 +749,9 @@ mod cmd {
     ) -> Vec<(PathBuf, NameValueAttribute, ItemFn, File)> {
         let mut subcommands = Vec::new();
 
-        for (item_fn, path, file) in find_subcommands_item_fn_from_path_recursive(root_path, root_file) {
+        for (item_fn, path, file) in
+            find_subcommands_item_fn_from_path_recursive(root_path, root_file)
+        {
             let attr = get_subcommand_attribute(&item_fn).unwrap();
             subcommands.push((path, attr, item_fn, file))
         }
@@ -796,7 +824,7 @@ mod cmd {
         ret
     }
 
-    fn find_subcommands_item_fn_from_module_path(path: &Path) -> Vec<(ItemFn, PathBuf, File)>{
+    fn find_subcommands_item_fn_from_module_path(path: &Path) -> Vec<(ItemFn, PathBuf, File)> {
         if let Ok(read_dir) = path.read_dir() {
             for e in read_dir {
                 if let Ok(entry) = e {
@@ -805,9 +833,7 @@ mod cmd {
                     if path.is_file() && entry.file_name() == "mod.rs" {
                         let src = std::fs::read_to_string(entry.path()).unwrap();
                         let file = syn::parse_file(&src).unwrap();
-                        return find_subcommands_item_fn_from_path_recursive(
-                            &path, &file,
-                        );
+                        return find_subcommands_item_fn_from_path_recursive(&path, &file);
                     }
                 }
             }
