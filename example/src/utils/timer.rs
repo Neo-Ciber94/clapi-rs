@@ -2,7 +2,7 @@ use super::*;
 use std::time::Duration;
 
 #[subcommand]
-#[arg(name="time")]
+#[arg(time)]
 pub fn timer(time: u32){
     for current in 0..=time {
         println!("{}", time - current);

@@ -40,7 +40,7 @@ pub struct CommandAttrData {
     item_fn: Option<ItemFn>,
     children: Vec<CommandAttrData>,
     options: Vec<OptionAttrData>,
-    args: Option<ArgAttrData>,
+    args: Vec<ArgAttrData>,
     vars: Vec<ArgLocalVar>,
 }
 
@@ -56,7 +56,7 @@ impl CommandAttrData {
             children: vec![],
             options: vec![],
             vars: vec![],
-            args: None,
+            args: vec![],
         }
     }
 
@@ -94,7 +94,7 @@ impl CommandAttrData {
     }
 
     pub fn set_args(&mut self, args: ArgAttrData) {
-        self.args = Some(args);
+        self.args.push(args)
     }
 
     pub fn set_var(&mut self, var: ArgLocalVar) {
@@ -111,6 +111,13 @@ impl CommandAttrData {
             "`ItemFn` is not set for command `{}`",
             self.fn_name
         );
+
+        // Command args
+        let args = self
+            .args
+            .iter()
+            .map(|tokens| quote! { .arg(#tokens) })
+            .collect::<Vec<TokenStream>>();
 
         // Command options
         let options = self
@@ -132,13 +139,6 @@ impl CommandAttrData {
             .iter()
             .map(|x| quote! { #x })
             .collect::<Vec<TokenStream>>();
-
-        // Command args
-        let args = self
-            .args
-            .as_ref()
-            .map(|tokens| quote! { .arg(#tokens)})
-            .unwrap_or_else(|| quote! {});
 
         // Command version
         let version = self
@@ -195,8 +195,8 @@ impl CommandAttrData {
             #command
                 #description
                 #about
-                #args
                 #version
+                #(#args)*
                 #(#options)*
                 #(#children)*
                 .handler(|opts, args|{
@@ -517,6 +517,7 @@ mod cmd {
 
         // Add args
         if arg_count > 0 {
+            println!("args: {}", arg_count);
             for fn_arg in fn_args.iter().filter(|f| !f.is_option) {
                 let arg = if fn_arg.attribute.is_some() {
                     ArgAttrData::from_arg_data(fn_arg.clone())

@@ -1,9 +1,9 @@
 use super::*;
 
 #[subcommand]
-#[arg(name="min")]
-#[arg(name="max")]
-#[option(name="closed", default=true)]
+#[arg(min)]
+#[arg(max)]
+#[option(closed, default=true)]
 pub fn count(min: usize, max: usize, closed: bool) {
     assert!(min <= max);
 
@@ -17,5 +17,14 @@ pub fn count(min: usize, max: usize, closed: bool) {
         if iter.peek().is_some() {
             print!(", ");
         }
+    }
+}
+
+pub mod internal {
+    use super::*;
+
+    #[subcommand]
+    pub fn other(){
+        println!("Other");
     }
 }

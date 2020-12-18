@@ -13,8 +13,9 @@ pub(crate) use ext::*;
 
 #[macro_use]
 mod utils;
-mod arg;
+mod query;
 mod assertions;
+mod arg;
 mod attr;
 mod command;
 mod macro_attribute;
@@ -77,6 +78,24 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
     let func = syn::parse_macro_input!(item as ItemFn);
     let path = call_site::path();
 
+    // use syn::Item;
+    //
+    // let items = query::find_items(
+    //     &path, true, |item|{
+    //         match item {
+    //             Item::Fn(item_fn)
+    //                 if item_fn.contains_attribute("command") ||
+    //                     item_fn.contains_attribute("subcommand") => true,
+    //             _ => false
+    //         }
+    //     }
+    // );
+    //
+    // println!("found: {}", items.len());
+    // for item in items {
+    //     println!("{}", item.0);
+    // }
+
     CommandAttrData::from_path(args, func, path).expand().into()
 }
 
@@ -118,6 +137,7 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
         panic!("invalid function: `{}`\nfree function `subcommand`s are only supported in nightly builds", func.sig.ident);
     }
 
+    // We need to drop all the `clapi` attributes to prevent `option` or `arg` panics
     command::drop_command_attributes(func)
         .into_token_stream()
         .into()
