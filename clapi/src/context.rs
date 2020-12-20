@@ -1,11 +1,18 @@
 use crate::command::Command;
 use crate::option::CommandOption;
 use linked_hash_set::LinkedHashSet;
+use crate::help::{Help, HelpKind};
+use crate::suggestion::SuggestionProvider;
+use std::rc::Rc;
+use std::fmt::{Debug, Formatter};
+use crate::utils::debug_option;
 
 /// Provides common values used for a command-line parsing.
-#[derive(Debug)]
+#[derive(Clone)]
 pub struct Context {
     root: Command,
+    help: Option<Rc<dyn Help + 'static>>,
+    suggestions: Option<Rc<dyn SuggestionProvider + 'static>>,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
     arg_assign: LinkedHashSet<char>,
@@ -16,16 +23,6 @@ impl Context {
     /// Constructs a new `Context` with the `RootCommand`.
     pub fn new(root: Command) -> Self {
         ContextBuilder::new(root).build()
-    }
-
-    /// Returns `true` if the value is a name prefix.
-    pub fn is_name_prefix(&self, value: &str) -> bool {
-        self.name_prefixes.contains(value)
-    }
-
-    /// Returns `true` if the value is an alias prefix.
-    pub fn is_alias_prefix(&self, value: &str) -> bool {
-        self.alias_prefixes.contains(value)
     }
 
     /// Returns an `Iterator` over the option name prefixes of this context.
@@ -48,6 +45,36 @@ impl Context {
         self.delimiter
     }
 
+    /// Returns the `Help` provider or `None` if not set.
+    pub fn help(&self) -> Option<&Rc<dyn Help>> {
+        self.help.as_ref()
+    }
+
+    /// Returns the `SuggestionProvider` or `None` if not set.
+    pub fn suggestions(&self) -> Option<&Rc<dyn SuggestionProvider>> {
+        self.suggestions.as_ref()
+    }
+
+    /// Sets the `Help` provider of this context.
+    pub fn set_help<H: Help + 'static>(&mut self, help: H) {
+        // If the `help` is a subcommand we add the subcommand to the root
+        match help.kind() {
+            HelpKind::Any | HelpKind::Subcommand => {
+                self.root.add_command(
+                    crate::help::to_command(&help)
+                );
+            }
+            _ => {}
+        }
+
+        self.help = Some(Rc::new(help));
+    }
+
+    /// Sets the `SuggestionProvider` of this context.
+    pub fn set_suggestions<S: SuggestionProvider + 'static>(&mut self, suggestions: S) {
+        self.suggestions = Some(Rc::new(suggestions));
+    }
+
     /// Returns the `CommandOption` by the specified name or alias or `None` if not found.
     pub fn get_option(&self, name_or_alias: &str) -> Option<&CommandOption> {
         if let Some(opt) = self.root().get_options().get(name_or_alias) {
@@ -68,6 +95,16 @@ impl Context {
         self.root().get_children().find(|c| c.get_name() == name)
     }
 
+    /// Returns `true` if the value is a name prefix.
+    pub fn is_name_prefix(&self, value: &str) -> bool {
+        self.name_prefixes.contains(value)
+    }
+
+    /// Returns `true` if the value is an alias prefix.
+    pub fn is_alias_prefix(&self, value: &str) -> bool {
+        self.alias_prefixes.contains(value)
+    }
+
     /// Returns `true` if the specified value starts with an option prefix.
     pub fn is_option_prefixed(&self, value: &str) -> bool {
         self.name_prefixes
@@ -77,6 +114,23 @@ impl Context {
                 .alias_prefixes
                 .iter()
                 .any(|prefix| value.starts_with(prefix))
+    }
+
+    /// Returns `true` if the `name` match with the `help` provider.
+    pub fn is_help<S: AsRef<str>>(&self, name: S) -> bool {
+        if let Some(help) = &self.help {
+            if help.name() == name.as_ref() {
+                return true;
+            }
+
+            if matches!(help.kind(), HelpKind::Option | HelpKind::Any) {
+                if let Some(alias) = help.alias() {
+                    return alias == name.as_ref();
+                }
+            }
+        }
+
+        false
     }
 
     /// Split the option and returns the `option` name.
@@ -124,14 +178,30 @@ impl Context {
         &self.root
     }
 
-    pub(crate) fn root_mut(&mut self) -> &mut Command {
-        &mut self.root
+    // pub(crate) fn root_mut(&mut self) -> &mut Command {
+    //     &mut self.root
+    // }
+}
+
+impl Debug for Context {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Context")
+            .field("root", &self.root)
+            .field("help", &debug_option(&self.help, "Help"))
+            .field("suggestions", &debug_option(&self.suggestions, "SuggestionProvider"))
+            .field("name_prefixes", &self.name_prefixes)
+            .field("alias_prefixes", &self.alias_prefixes)
+            .field("arg_assign", &self.arg_assign)
+            .field("delimiter", &self.delimiter)
+            .finish()
     }
 }
 
 #[derive(Clone)]
 pub struct ContextBuilder {
     root: Command,
+    help: Option<Rc<dyn Help>>,
+    suggestions: Option<Rc<dyn SuggestionProvider>>,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
     arg_assign: LinkedHashSet<char>,
@@ -142,6 +212,8 @@ impl ContextBuilder {
     pub fn new(root: Command) -> Self {
         ContextBuilder {
             root,
+            help: None,
+            suggestions: None,
             name_prefixes: Default::default(),
             alias_prefixes: Default::default(),
             arg_assign: Default::default(),
@@ -169,37 +241,66 @@ impl ContextBuilder {
         self
     }
 
+    pub fn help<H: Help + 'static>(mut self, help: H) -> Self {
+        self.help = Some(Rc::new(help));
+        self
+    }
+
+    pub fn suggestions<S: SuggestionProvider + 'static>(mut self, suggestions: S) -> Self {
+        self.suggestions = Some(Rc::new(suggestions));
+        self
+    }
+
     pub fn build(mut self) -> Context {
-        let name_prefixes = {
-            if self.name_prefixes.is_empty() {
-                self.name_prefixes.insert("--".to_owned());
+        // If the `help` is a subcommand we add the subcommand to the root
+        if let Some(help) = &self.help {
+            match help.kind() {
+                HelpKind::Any | HelpKind::Subcommand => {
+                    self.root.add_command(
+                        crate::help::to_command(help.as_ref())
+                    );
+                }
+                _ => {}
             }
-            self.name_prefixes
-        };
-
-        let alias_prefixes = {
-            if self.alias_prefixes.is_empty() {
-                self.alias_prefixes.insert("-".to_owned());
-            }
-            self.alias_prefixes
-        };
-
-        let arg_assign = {
-            if self.arg_assign.is_empty() {
-                self.arg_assign.insert('=');
-                self.arg_assign.insert(':');
-            }
-            self.arg_assign
-        };
-
-        let delimiter = self.delimiter.unwrap_or(',');
+        }
 
         Context {
+            // Root Command
             root: self.root,
-            name_prefixes,
-            alias_prefixes,
-            arg_assign,
-            delimiter,
+
+            // Help provider
+            help: self.help,
+
+            // Suggestion Provider
+            suggestions: self.suggestions,
+
+            // Delimiter
+            delimiter: self.delimiter.unwrap_or(','),
+
+            // Name prefixes
+            name_prefixes: {
+                if self.name_prefixes.is_empty() {
+                    self.name_prefixes.insert("--".to_owned());
+                }
+                self.name_prefixes
+            },
+
+            // Alias prefixes
+            alias_prefixes: {
+                if self.alias_prefixes.is_empty() {
+                    self.alias_prefixes.insert("-".to_owned());
+                }
+                self.alias_prefixes
+            },
+
+            // Assign char
+            arg_assign: {
+                if self.arg_assign.is_empty() {
+                    self.arg_assign.insert('=');
+                    self.arg_assign.insert(':');
+                }
+                self.arg_assign
+            },
         }
     }
 }

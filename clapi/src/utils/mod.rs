@@ -13,40 +13,70 @@ pub use ext::*;
 mod macros;
 pub use macros::*;
 
-/// Performs an operation over a value of type `T` and returns the result.
+/// Performs an operation over `Self` and returns the result.
 ///
 /// This trait is implemented for all types.
 pub trait Then: Sized {
+    /// Performs an operation over `&Self` and returns the result.
     #[inline]
     fn then<'a, R, F: Fn(&'a Self) -> R>(&'a self, f: F) -> R {
         f(self)
     }
 
+    /// Performs an operation over `&mut Self` and returns the result.
     #[inline]
     fn then_mut<'a, R, F: FnMut(&'a mut Self) -> R>(&'a mut self, mut f: F) -> R {
         f(self)
     }
 
+    /// Performs an operation over `Self` and returns the result.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::utils::Then;
+    ///
+    /// let value = "Hello World".then_apply(|s| {
+    ///    if s.is_empty() { None } else { Some(s.to_owned()) }
+    /// });
+    ///
+    /// assert_eq!(value, Some("Hello World".to_owned()));
+    /// ```
     #[inline]
     fn then_apply<R, F: FnOnce(Self) -> R>(self, f: F) -> R {
         f(self)
     }
 }
 
-/// Performs an operation over a value of type `T` and returns `Self`.
+/// Performs an operation over `Self` and returns `Self`.
 ///
 /// This trait is implemented for all types.
 pub trait Also: Sized {
+    /// Performs an operation over `&Self`.
     #[inline]
     fn also<R, F: Fn(&Self) -> R>(self, f: F) -> Self {
         f(&self);
         self
     }
 
+    /// Performs an operation over `&mut Self`.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::utils::Also;
+    ///
+    /// let values = vec![1, 2, 3].also_mut(|v| v.extend(&[4, 5, 6]));
+    /// assert_eq!(values, vec![1, 2, 3, 4, 5, 6]);
+    /// ```
     #[inline]
     fn also_mut<R, F: Fn(&mut Self) -> R>(mut self, f: F) -> Self {
         f(&mut self);
         self
+    }
+
+    /// Performs an operation over `Self`.
+    #[inline]
+    fn also_apply<R, F: FnOnce(Self) -> Self>(self, f: F) -> Self {
+        f(self)
     }
 }
 

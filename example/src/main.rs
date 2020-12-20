@@ -1,4 +1,3 @@
-use clapi::validator::parse_validator;
 use clapi::*;
 //use clapi::help::{HelpProvider, HelpKind};
 

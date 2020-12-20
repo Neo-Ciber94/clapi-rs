@@ -84,12 +84,11 @@ impl ParseResult {
 mod tests {
     use super::*;
     use crate::args::validator::parse_validator;
-    use crate::{split_into_args, Context, DefaultParser, DefaultTokenizer, ErrorKind, Parser};
+    use crate::{split_into_args, Context, Parser, ErrorKind};
 
     fn parse_with(value: &str, command: Command) -> crate::Result<ParseResult> {
         let context = Context::new(command);
-        let mut parser = DefaultParser::default();
-        parser.parse(&context, &mut DefaultTokenizer, split_into_args(value))
+        Parser.parse(&context, split_into_args(value))
     }
 
     #[test]

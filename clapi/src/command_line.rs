@@ -1,28 +1,22 @@
 use crate::command::Command;
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, ParseError, Result};
-use crate::help::{DefaultHelpProvider, HelpKind, HelpProvider};
-use crate::parser::{DefaultParser, Parser};
+use crate::help::{DefaultHelp, HelpKind, Help};
+use crate::parser::Parser;
 use crate::suggestion::{SingleSuggestionProvider, SuggestionProvider};
-use crate::utils::{debug_option, OptionExt};
-use crate::{Argument, CommandOption, DefaultTokenizer, ParseResult, Tokenizer};
+use crate::utils::OptionExt;
+use crate::{Argument, ParseResult};
 use std::borrow::Borrow;
-use std::env::Args;
-use std::fmt::{Debug, Formatter};
-
-/// Represents the command-line arguments,
-/// ignoring the first value that may be the path of the executable.
-pub type RestArgs = std::iter::Skip<Args>;
+use std::fmt::Debug;
+use std::rc::Rc;
 
 /// Represents a command-line app.
-pub struct CommandLine<P> {
+#[derive(Debug)]
+pub struct CommandLine {
     context: Context,
-    parser: P,
-    help: Option<Box<dyn HelpProvider>>,
-    suggestions: Option<Box<dyn SuggestionProvider>>,
 }
 
-impl CommandLine<DefaultParser> {
+impl CommandLine {
     /// Constructs a new `CommandLine` with the provided `Command`.
     #[inline]
     pub fn new(root: Command) -> Self {
@@ -31,29 +25,12 @@ impl CommandLine<DefaultParser> {
 
     /// Constructs a new `CommandLine` with the provided `Context`.
     pub fn with_context(context: Context) -> Self {
-        CommandLine::with_parser(context, DefaultParser)
-    }
-}
-
-impl<P> CommandLine<P> {
-    /// Constructs a new `CommandLine` with the given `parser`.
-    pub fn with_parser(context: Context, parser: P) -> Self {
-        CommandLine {
-            context,
-            parser,
-            help: None,
-            suggestions: None,
-        }
+        CommandLine { context }
     }
 
     /// Returns the `Context` used by this command-line.
     pub fn context(&self) -> &Context {
         &self.context
-    }
-
-    /// Returns the parser used by this command-line.
-    pub fn parser(&self) -> &P {
-        &self.parser
     }
 
     /// Returns the `Command` used by this command-line.
@@ -62,46 +39,23 @@ impl<P> CommandLine<P> {
     }
 
     /// Returns the `HelpProvider` used by this command-line or `None` if not set.
-    pub fn help(&self) -> Option<&Box<dyn HelpProvider>> {
-        self.help.as_ref()
+    pub fn help(&self) -> Option<&Rc<dyn Help>> {
+        self.context.help()
     }
 
     /// Returns the `SuggestionProvider` used by this command-line.
-    pub fn suggestions(&self) -> Option<&Box<dyn SuggestionProvider>> {
-        self.suggestions.as_ref()
+    pub fn suggestions(&self) -> Option<&Rc<dyn SuggestionProvider>> {
+        self.context.suggestions()
     }
 
     /// Sets the default `HelpCommand`.
     pub fn use_default_help(self) -> Self {
-        self.set_help(DefaultHelpProvider(HelpKind::Subcommand))
+        self.set_help(DefaultHelp(HelpKind::Any))
     }
 
     /// Sets the specified `HelpProvider`.
-    pub fn set_help(mut self, help: impl HelpProvider + 'static) -> Self {
-        match help.kind() {
-            HelpKind::Subcommand => {
-                assert_eq!(
-                    self.context.root().find_subcommand(help.name()),
-                    None,
-                    "Command `{}` already exists",
-                    help.name()
-                );
-
-                let command = Command::new(help.name())
-                    .description(help.description())
-                    .arg(Argument::zero_or_more("args"));
-
-                self.context.root_mut().add_command(command);
-            }
-            HelpKind::Option => {
-                let option = CommandOption::new(help.name())
-                    .description(help.description())
-                    .arg(Argument::zero_or_more("args"));
-
-                self.context.root_mut().add_option(option);
-            }
-        }
-        self.help = Some(Box::new(help));
+    pub fn set_help<H: Help + 'static>(mut self, help: H) -> Self {
+        self.context.set_help(help);
         self
     }
 
@@ -111,8 +65,8 @@ impl<P> CommandLine<P> {
     }
 
     /// Sets the specified `SuggestionProvider`.
-    pub fn set_suggestions(mut self, suggestions: impl SuggestionProvider + 'static) -> Self {
-        self.suggestions = Some(Box::new(suggestions));
+    pub fn set_suggestions<S: SuggestionProvider + 'static>(mut self, suggestions: S) -> Self {
+        self.context.set_suggestions(suggestions);
         self
     }
 
@@ -120,22 +74,10 @@ impl<P> CommandLine<P> {
     #[inline]
     pub fn exec<S, I>(&mut self, args: I) -> Result<()>
     where
-        P: Parser<I>,
         S: Borrow<str>,
         I: IntoIterator<Item = S>,
     {
-        self.exec_with_tokenizer(&mut DefaultTokenizer, args)
-    }
-
-    /// Executes this command-line app with a custom tokenizer passing the specified arguments.
-    pub fn exec_with_tokenizer<T, S, I>(&mut self, tokenizer: &mut T, args: I) -> Result<()>
-    where
-        P: Parser<I>,
-        T: Tokenizer<I>,
-        S: Borrow<str>,
-        I: IntoIterator<Item = S>,
-    {
-        let result = self.parser.parse(&self.context, tokenizer, args);
+        let result = Parser.parse(&self.context, args);
         let parse_result = match result {
             Ok(r) => r,
             Err(error) => return self.handle_error(error),
@@ -143,17 +85,9 @@ impl<P> CommandLine<P> {
 
         let command = parse_result.command();
 
-        // Check if the command is a 'help' command and display help
-        if self.is_help(&parse_result) {
-            let help = self.help.as_ref().unwrap();
-            return match help.kind() {
-                HelpKind::Subcommand => self.display_help(parse_result.arg()),
-                HelpKind::Option => {
-                    let args = parse_result.get_option(help.name()).unwrap().get_arg();
-
-                    self.display_help(args)
-                }
-            };
+        // Check if the command require to display help
+        if self.contains_help(&parse_result) {
+            return self.handle_help(&parse_result);
         }
 
         // We borrow the value from the Option to avoid create a temporary
@@ -170,23 +104,11 @@ impl<P> CommandLine<P> {
         }
     }
 
-    #[inline]
-    pub fn run_with_tokenizer<T>(&mut self, tokenizer: &mut T) -> Result<()>
-    where
-        P: Parser<RestArgs>,
-        T: Tokenizer<RestArgs>,
-    {
-        self.exec_with_tokenizer(tokenizer, std::env::args().skip(1))
-    }
-
     /// Runs this command-line app.
     ///
     /// This is equivalent to `cmd_line.exec(std::env::args().skip(1))`.
     #[inline]
-    pub fn run(&mut self) -> Result<()>
-    where
-        P: Parser<RestArgs>,
-    {
+    pub fn run(&mut self) -> Result<()> {
         self.exec(std::env::args().skip(1))
     }
 
@@ -194,45 +116,75 @@ impl<P> CommandLine<P> {
     ///
     /// This forwards the call to `CommandLine::exec` by slit the `str`.
     #[inline]
-    pub fn exec_str(&mut self, args: &str) -> Result<()>
-    where
-        P: Parser<Vec<String>>,
-    {
+    pub fn exec_str(&mut self, args: &str) -> Result<()> {
         self.exec(split_into_args(args))
     }
 
     fn handle_error(&self, error: Error) -> Result<()> {
-        // If is a parse error and `InvalidArgumentCount`
-        // we show a message about the usage of the command
-        if error.kind() == &ErrorKind::InvalidArgumentCount {
-            let message = self.get_message(None, MessageKind::Usage)?;
-            return Err(Error::new(
-                error.kind().clone(),
-                format!("{}\n{}", error, message),
-            ));
-        }
+        match error.try_into_parse_error() {
+            Ok(parse_error) => {
+                if self.contains_help(parse_error.parse_result()) {
+                    return self.handle_help(parse_error.parse_result())
+                }
 
-        if self.suggestions.is_some() {
-            let parse_error = error.try_into_parse_error()?;
-            if self.is_help(parse_error.parse_result()) {
-                let args = parse_error.parse_result().arg();
-                return self.display_help(args);
+                if self.suggestions().is_some() {
+                    return Err(self.display_suggestions(parse_error));
+                }
+
+                Err(Error::from(parse_error))
             }
+            Err(error) => {
+                // If is a parse error and `InvalidArgumentCount`
+                // we show a message about the usage of the command
+                if error.kind() == &ErrorKind::InvalidArgumentCount {
+                    let message = self.get_message(None, MessageKind::Usage)?;
+                    return Err(Error::new(
+                        error.kind().clone(),
+                        format!("{}\n{}", error, message),
+                    ));
+                }
 
-            return Err(self.display_suggestions(parse_error));
+                return Err(error);
+            }
         }
-
-        return Err(error);
     }
 
-    fn is_help(&self, parse_result: &ParseResult) -> bool {
-        if let Some(help_provider) = &self.help {
-            match help_provider.kind() {
-                HelpKind::Subcommand => help_provider.name() == parse_result.command().get_name(),
-                HelpKind::Option => parse_result
-                    .options()
-                    .iter()
-                    .any(|s| s.get_name() == help_provider.name()),
+    fn handle_help(&self, parse_result: &ParseResult) -> Result<()> {
+        let command = parse_result.command();
+        let help = self.help().unwrap();
+
+        if is_help_option(help.as_ref(), parse_result) {
+            // handler for: subcommand --help [ignore args]
+            if command.get_parent().is_some() {
+                println!("{}", help.help(self.context(), &command));
+                Ok(())
+            } else {
+                // handler for: --help [subcommand]
+                let args = parse_result.get_option(help.name())
+                    .unwrap()
+                    .get_arg();
+
+                self.display_help(args)
+            }
+        } else {
+            // handler for: help [subcommand]
+            self.display_help(parse_result.arg())
+        }
+    }
+
+    fn contains_help(&self, parse_result: &ParseResult) -> bool {
+        if let Some(help) = &self.help() {
+            match help.kind() {
+                HelpKind::Subcommand => {
+                    is_help_subcommand(help.as_ref(), parse_result)
+                },
+                HelpKind::Option => {
+                    is_help_option(help.as_ref(), parse_result)
+                },
+                HelpKind::Any => {
+                    is_help_subcommand(help.as_ref(), parse_result)
+                        || is_help_option(help.as_ref(), parse_result)
+                }
             }
         } else {
             false
@@ -240,11 +192,7 @@ impl<P> CommandLine<P> {
     }
 
     fn get_message(&self, args: Option<&Argument>, kind: MessageKind) -> Result<String> {
-        let help_provider = self.help.as_ref().expect("help command is not set");
-
         fn find_command<'a>(root: &'a Command, children: &[String]) -> Result<&'a Command> {
-            //debug_assert!(children.len() > 0);
-
             let mut current = root;
 
             for i in 0..children.len() {
@@ -261,22 +209,22 @@ impl<P> CommandLine<P> {
             Ok(current)
         }
 
-        let output = match args {
-            None => match kind {
-                MessageKind::Help => help_provider.help(&self.context, self.context.root()),
-                MessageKind::Usage => help_provider.usage(&self.context, self.context.root()),
-            },
-            Some(args) => {
-                let root = self.context.root();
-                let subcommand = find_command(root, args.get_values())?;
-                match kind {
-                    MessageKind::Help => help_provider.help(&self.context, subcommand),
-                    MessageKind::Usage => help_provider.usage(&self.context, subcommand),
-                }
+        match args {
+            None => Ok(self.get_message_for_command(&self.context.root(), kind)),
+            Some(arg) => {
+                let subcommand = find_command(&self.context.root(), arg.get_values())?;
+                Ok(self.get_message_for_command(subcommand, kind))
             }
-        };
+        }
+    }
 
-        Ok(output)
+    fn get_message_for_command(&self, command: &Command, kind: MessageKind) -> String {
+        let help = self.help().expect("help command is not set");
+
+        match kind {
+            MessageKind::Help => help.help(&self.context, command),
+            MessageKind::Usage => help.usage(&self.context, command),
+        }
     }
 
     fn display_help(&self, args: Option<&Argument>) -> Result<()> {
@@ -286,7 +234,7 @@ impl<P> CommandLine<P> {
 
     fn display_suggestions(&self, parse_error: ParseError) -> Error {
         // SAFETY: We check if the method is `Some` before enter
-        let provider = self.suggestions.as_ref().unwrap();
+        let provider = self.suggestions().unwrap();
         let kind = parse_error.kind();
 
         let (value, source) = match kind {
@@ -330,20 +278,6 @@ impl<P> CommandLine<P> {
     }
 }
 
-impl<P: Debug> Debug for CommandLine<P> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CommandLine")
-            .field("context", &self.context)
-            .field("parser", &self.parser)
-            .field("help", &debug_option(&self.help, "HelpProvider"))
-            .field(
-                "suggestions",
-                &debug_option(&self.suggestions, "SuggestionProvider"),
-            )
-            .finish()
-    }
-}
-
 /// Type of the suggestion message of the `CommandLine`.
 enum MessageKind {
     /// A help message.
@@ -364,6 +298,20 @@ fn prefix_option(context: &Context, options: &crate::option::OptionList, name: S
     }
 
     name
+}
+
+fn is_help_option<H: Help + ?Sized>(help: &H, parse_result: &ParseResult) -> bool{
+    if let Some(alias) = help.alias() {
+        if parse_result.contains_option(alias){
+            return true;
+        }
+    }
+
+    parse_result.contains_option(help.name())
+}
+
+fn is_help_subcommand<H: Help + ?Sized>(help: &H, parse_result: &ParseResult) -> bool {
+    help.name() == parse_result.command().get_name()
 }
 
 /// Split the given value `&str` into command-line args.

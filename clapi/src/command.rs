@@ -12,7 +12,6 @@ use std::rc::Rc;
 /// A command-line command.
 #[derive(Clone)]
 pub struct Command {
-    // Name of the parent command, used for debugging, may be removed
     parent: Option<Symbol>,
     name: String,
     description: Option<String>,
@@ -104,7 +103,7 @@ impl Command {
         self.args.len() > 0
     }
 
-    /// Returns the parent `Symbol` of this command, or `None` if not have a parent.
+    /// Returns the parent `Symbol` of this command, or `None` if is a root command.
     pub fn get_parent(&self) -> Option<&Symbol> {
         self.parent.as_ref()
     }
@@ -244,6 +243,7 @@ impl Command {
     }
 }
 
+// todo: compare `Command`s by names makes no sense, so create a wrapper could be needed
 impl Eq for Command {}
 
 impl PartialEq for Command {

@@ -7,34 +7,17 @@ use crate::parse_result::ParseResult;
 use crate::tokenizer::{Token, Tokenizer};
 use crate::utils::Then;
 use std::borrow::Borrow;
+use crate::help::HelpKind;
 
-/// A trait for parse command arguments.
-pub trait Parser<Args> {
-    /// Parse the provided command arguments and returns a `Ok(ParseResult)` if not error is found,
-    /// otherwise returns `Err(Error)`.
-    fn parse<T: Tokenizer<Args>>(
-        &mut self,
-        context: &Context,
-        tokenizer: &mut T,
-        args: Args,
-    ) -> Result<ParseResult>;
-}
-
-/// A default implementation of the `Parser` trait.
+/// A command-line argument parser.
 #[derive(Debug, Default)]
-pub struct DefaultParser;
-impl<S, I> Parser<I> for DefaultParser
-where
-    S: Borrow<str>,
-    I: IntoIterator<Item = S>,
-{
-    fn parse<T: Tokenizer<I>>(
-        &mut self,
-        context: &Context,
-        tokenizer: &mut T,
-        args: I,
-    ) -> Result<ParseResult> {
-        let tokens = tokenizer.tokenize(context, args)?;
+pub struct Parser;
+
+impl Parser {
+    pub fn parse<S, I>(&mut self, context: &Context, args: I, ) -> Result<ParseResult>
+        where S: Borrow<str>,
+              I: IntoIterator<Item = S>,{
+        let tokens = Tokenizer.tokenize(context, args)?;
         let mut iterator = tokens.iter().peekable();
         let mut command_options = OptionList::new();
         let mut command = context.root();
@@ -103,9 +86,12 @@ where
                             // We add the last option
                             let mut options = command_options.clone();
                             options.add(option.clone()).unwrap();
+
                             Err(Error::new_parse_error(
                                 error,
-                                ParseResult::new(command.clone(), options, ArgumentList::default()),
+                                ParseResult::new(
+                                    command.clone(), options, ArgumentList::default()
+                                ),
                             ))
                         })?;
 
@@ -114,11 +100,11 @@ where
 
                     // Sets the option arguments
                     command_options
-                        .add(option.clone().args(option_args))
+                        .add(option.args(option_args))
                         .unwrap();
                 } else {
                     // Adds the option
-                    command_options.add(option.clone()).unwrap();
+                    command_options.add(option).unwrap();
                 }
             } else {
                 return Err(Error::new_parse_error(
@@ -213,7 +199,9 @@ where
 
                     Err(Error::new_parse_error(
                         error,
-                        ParseResult::new(command.clone(), command_options.clone(), args),
+                        ParseResult::new(
+                            command.clone(), command_options.clone(), args
+                        ),
                     ))
                 })?;
             }
@@ -243,13 +231,26 @@ fn get_option_prefixed<'a>(
     command: &'a Command,
     prefix: &'a str,
     option: &'a str,
-) -> Option<&'a CommandOption> {
+) -> Option<CommandOption> {
+    if context.is_help(option) {
+        if let Some(opt) = command.get_options().get(option){
+            panic!("duplicated option: `{}`", opt.get_name());
+        }
+
+        if let Some(help) = context.help() {
+            if matches!(help.kind(), HelpKind::Option | HelpKind::Any) {
+                // Returns the `help` option.
+                return Some(crate::help::to_option(context.help().unwrap().as_ref()));
+            }
+        }
+    }
+
     if context.is_name_prefix(prefix) {
-        return command.get_options().get_by_name(option);
+        return command.get_options().get_by_name(option).cloned();
     }
 
     if context.is_alias_prefix(prefix) {
-        return command.get_options().get_by_alias(option);
+        return command.get_options().get_by_alias(option).cloned();
     }
 
     None

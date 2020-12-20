@@ -517,7 +517,6 @@ mod cmd {
 
         // Add args
         if arg_count > 0 {
-            println!("args: {}", arg_count);
             for fn_arg in fn_args.iter().filter(|f| !f.is_option) {
                 let arg = if fn_arg.attribute.is_some() {
                     ArgAttrData::from_arg_data(fn_arg.clone())

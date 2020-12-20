@@ -144,6 +144,7 @@ impl SuggestionProvider for SingleSuggestionProvider {
 }
 
 /// Represents the values of a suggestion.
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum SuggestionResult {
     /// A single suggestion value.
     Value(String),

@@ -62,20 +62,14 @@ impl Token {
     }
 }
 
-/// A trait to converts to tokens the given arguments.
-pub trait Tokenizer<Args> {
-    fn tokenize(&mut self, context: &Context, args: Args) -> Result<Vec<Token>>;
-}
+/// A converts a collection of `String`s to `Token`s.
+#[derive(Debug, Default)]
+pub struct Tokenizer;
 
-/// A default implementation of the `Tokenizer` trait.
-#[derive(Default, Debug)]
-pub struct DefaultTokenizer;
-impl<S, I> Tokenizer<I> for DefaultTokenizer
-where
-    S: Borrow<str>,
-    I: IntoIterator<Item = S>,
-{
-    fn tokenize(&mut self, context: &Context, args: I) -> Result<Vec<Token>> {
+impl Tokenizer {
+    pub fn tokenize<S, I>(&mut self, context: &Context, args: I) -> Result<Vec<Token>>
+        where S: Borrow<str>,
+              I: IntoIterator<Item = S>,{
         let mut iterator = args
             .into_iter()
             .filter(|s| !s.borrow().is_empty())
@@ -275,7 +269,7 @@ mod tests {
     use crate::{split_into_args, Argument, Command, CommandOption};
 
     fn tokenize(command: Command, value: &str) -> crate::Result<Vec<Token>> {
-        let mut tokenizer = DefaultTokenizer::default();
+        let mut tokenizer = Tokenizer::default();
         let context = Context::new(command);
         tokenizer.tokenize(&context, split_into_args(value))
     }

@@ -1,13 +1,15 @@
+use std::fmt::Write;
 use crate::command::Command;
+use crate::{CommandOption, Argument};
 use crate::context::Context;
 pub use crate::help::help_writer::*;
-pub use crate::help::indented_writer::*;
-use std::fmt::Write;
+pub use crate::help::writer::*;
+use crate::utils::Then;
 
 /// Provides help information about a command.
 ///
 /// # Implementing `HelpCommand`:
-/// The only method needed to implement is `help` all the other methods provide a default value.
+/// The only method needed to implement is `help` and `about` all the other methods provide a default value.
 ///
 /// Example output of `help`:
 /// ```text
@@ -24,7 +26,7 @@ use std::fmt::Write;
 /// SUBCOMMANDS:
 ///     print   Prints information
 /// ```
-pub trait HelpProvider {
+pub trait Help {
     /// Returns a `String` information about the command.
     /// - Name, description, options and subcommands.
     fn help(&self, context: &Context, command: &Command) -> String;
@@ -32,13 +34,21 @@ pub trait HelpProvider {
     /// Returns a `String` information about the usage of the command.
     fn usage(&self, context: &Context, command: &Command) -> String;
 
-    /// Type of the `HelpProvider`.
-    fn kind(&self) -> HelpKind;
+    /// Type of the `HelpProvider`, the default is `HelpKind::Any`.
+    fn kind(&self) -> HelpKind {
+        HelpKind::Any
+    }
 
-    /// Returns the name of this help command, the default name is: `help`.
+    /// Returns the name of this help command, the default is: `help`.
     #[inline]
     fn name(&self) -> &str {
         "help"
+    }
+
+    /// Returns the alias of the help command, the default is: `None`.
+    #[inline]
+    fn alias(&self) -> Option<&str>{
+        None
     }
 
     /// Returns the description of this help command, the default is:
@@ -52,21 +62,27 @@ pub trait HelpProvider {
 /// Type of the `HelpProvider`.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum HelpKind {
-    /// The help is a root command child like: `command help`.
+    /// The help is a command, for example:
+    ///
+    /// `command help [args]`.
     Subcommand,
-    /// The help is a root command option like: `command --help`.
+    /// The help is an option, for example:
+    ///
+    /// `command --help`.
     Option,
+    /// The help is both a command or option.
+    Any
 }
 
 /// Default implementation of the `HelpCommand` trait.
 #[derive(Debug, Clone)]
-pub struct DefaultHelpProvider(pub HelpKind);
-impl Default for DefaultHelpProvider {
+pub struct DefaultHelp(pub HelpKind);
+impl Default for DefaultHelp {
     fn default() -> Self {
-        DefaultHelpProvider(HelpKind::Subcommand)
+        DefaultHelp(HelpKind::Subcommand)
     }
 }
-impl HelpProvider for DefaultHelpProvider {
+impl Help for DefaultHelp {
     fn help(&self, context: &Context, command: &Command) -> String {
         let mut writer = HelpWriter::new(context);
 
@@ -161,6 +177,10 @@ impl HelpProvider for DefaultHelpProvider {
     }
 
     fn usage(&self, context: &Context, command: &Command) -> String {
+        if command.get_options().is_empty() && command.get_args().is_empty() {
+            return String::default();
+        }
+
         let mut writer = HelpWriter::new(context);
         writer.section("USAGE", |w| {
             let mut args_names = Vec::new();
@@ -199,27 +219,46 @@ impl HelpProvider for DefaultHelpProvider {
     }
 }
 
-mod indented_writer {
+pub(crate) fn to_command<H: Help + ?Sized>(help: &H) -> Command {
+    Command::new(help.name())
+        .arg(Argument::new("subcommand").arg_count(0..=1))
+        .description(help.description())
+}
+
+pub(crate) fn to_option<H: Help + ?Sized>(help: &H) -> CommandOption {
+    CommandOption::new(help.name())
+        .arg(Argument::new("subcommand").arg_count(0..=1))
+        .description(help.description())
+        .then_apply(|opt| {
+            if let Some(alias) = help.alias() {
+                opt.alias(alias)
+            } else {
+                opt
+            }
+        })
+}
+
+mod writer {
     use std::borrow::Borrow;
 
     /// A writer with indentation.
-    ///
-    /// # Example
-    /// ```rust
-    /// use clapi::help::IndentedWriter;
-    ///
-    /// let mut writer = IndentedWriter::new();
-    /// writer.writeln("Hello");
-    /// writer.indented(|w|{
-    ///     w.writeln("Make the dinner.");
-    ///     w.indented(|w| w.writeln("PS: There are potatoes."))
-    /// });
-    /// writer.writeln("Good bye");
-    ///
-    /// assert_eq!("Hello\n   Make the dinner.\n      PS: There are potatoes.\nGood bye\n",
-    ///     writer.into_string()
-    /// );
-    /// ```
+        ///
+        /// # Example
+        /// ```rust
+        /// use clapi::help::IndentedWriter;
+        ///
+        /// let mut writer = IndentedWriter::new();
+        /// writer.writeln("Hello");
+        /// writer.indented(|w|{
+        ///     w.writeln("Make the dinner.");
+        ///     w.indented(|w| w.writeln("PS: There are potatoes."))
+        /// });
+        /// writer.writeln("Good bye");
+        ///
+        /// assert_eq!("Hello\n   Make the dinner.\n      PS: There are potatoes.\nGood bye\n",
+        ///     writer.into_string()
+        /// );
+        /// ```
     #[derive(Debug, Clone)]
     pub struct IndentedWriter {
         buffer: String,
@@ -363,11 +402,12 @@ mod indented_writer {
 }
 
 mod help_writer {
+    use std::borrow::Borrow;
+
     use crate::command::Command;
     use crate::context::Context;
     use crate::help::IndentedWriter;
     use crate::option::CommandOption;
-    use std::borrow::Borrow;
 
     /// Utilities for write command help.
     pub struct HelpWriter<'a> {
@@ -484,15 +524,15 @@ mod help_writer {
                 writer: self.writer.unwrap_or_else(|| IndentedWriter::new()),
                 option_writer: self
                     .option_writer
-                    .unwrap_or_else(|| Box::new(write_option_internal)),
+                    .unwrap_or_else(|| Box::new(write_option)),
                 command_writer: self
                     .command_writer
-                    .unwrap_or_else(|| Box::new(write_command_internal)),
+                    .unwrap_or_else(|| Box::new(write_command)),
             }
         }
     }
 
-    fn write_option_internal(context: &Context, option: &CommandOption) -> String {
+    fn write_option(context: &Context, option: &CommandOption) -> String {
         const WIDTH: usize = 25;
         let name_prefix: &str = context.name_prefixes().next().unwrap();
         let alias_prefix: &str = context.alias_prefixes().next().unwrap();
@@ -536,7 +576,7 @@ mod help_writer {
         buffer
     }
 
-    fn write_command_internal(_: &Context, command: &Command) -> String {
+    fn write_command(_: &Context, command: &Command) -> String {
         const WIDTH: usize = 15;
         let mut buffer = String::new();
 

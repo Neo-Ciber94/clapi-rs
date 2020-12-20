@@ -1,6 +1,6 @@
 use crate::command::Command;
 use crate::error::Inner::{Custom, Parsed, Simple};
-use crate::{ArgumentList, OptionList, ParseResult};
+use crate::{ArgumentList, OptionList, ParseResult, Argument};
 use std::fmt::{Debug, Display, Formatter};
 use std::result;
 
@@ -166,15 +166,15 @@ struct CustomError {
 
 /// Represents an error occurred in a parse operation.
 pub struct ParseError {
-    inner: Error,
     parse_result: ParseResult,
+    inner: Error,
 }
 
 impl ParseError {
     fn new(inner: Error, parse_result: ParseResult) -> Self {
         ParseError {
-            inner,
             parse_result,
+            inner,
         }
     }
 
@@ -201,6 +201,11 @@ impl ParseError {
     /// Returns the `OptionList`s of the executing command.
     pub fn options(&self) -> &OptionList {
         self.parse_result.options()
+    }
+
+    /// Returns the `Argument` of this error if any or `None` if there is more than 1 argument.
+    pub fn arg(&self) -> Option<&Argument>{
+        self.parse_result.arg()
     }
 
     /// Returns the arguments values of the command.
