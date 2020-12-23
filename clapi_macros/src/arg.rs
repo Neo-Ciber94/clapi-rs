@@ -6,7 +6,6 @@ use crate::{attr, LitExtensions, TypeExtensions};
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::Lit;
-use std::hash::{Hash, Hasher};
 
 /// Tokens for an `arg` attribute.
 ///
@@ -275,12 +274,6 @@ impl Eq for ArgAttrData {}
 impl PartialEq for ArgAttrData {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
-    }
-}
-
-impl Hash for ArgAttrData {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.name.hash(state)
     }
 }
 

@@ -10,7 +10,6 @@ use crate::option::OptionAttrData;
 use crate::var::{ArgLocalVar, ArgumentType};
 use crate::TypeExtensions;
 use crate::utils::NamePath;
-use std::hash::{Hasher, Hash};
 
 /// Tokens for either `command` or `subcommand` attribute.
 ///
@@ -222,11 +221,15 @@ impl CommandAttrData {
             // NOT EMPTY:
             //      fn test() { println!("HELLO WORLD"); }
             //      fn test() { let value = 0; }
-            quote!{
-                .handler(|opts, args|{
-                    #show_version
-                    Err(clapi::Error::from(clapi::ErrorKind::FallthroughHelp))
-                })
+            if show_version.is_empty() {
+                quote!{}
+            } else {
+                quote!{
+                    .handler(|opts, args|{
+                        #show_version
+                        Err(clapi::Error::from(clapi::ErrorKind::FallthroughHelp))
+                    })
+                }
             }
         };
 
@@ -392,12 +395,6 @@ impl Eq for CommandAttrData{}
 impl PartialEq for CommandAttrData {
     fn eq(&self, other: &Self) -> bool {
         self.fn_name == other.fn_name
-    }
-}
-
-impl Hash for CommandAttrData {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.fn_name.hash(state)
     }
 }
 

@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 
 #[command(description="A test")]
-fn main(){
+fn main(x: i64){
     static VALUE : AtomicI64 = AtomicI64::new(0);
 
     #[subcommand]
@@ -28,8 +28,6 @@ fn main(){
         get();
     }
 }
-
-
 
 // #[subcommand]
 // #[arg(values, min=1)]

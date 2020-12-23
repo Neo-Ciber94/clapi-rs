@@ -123,7 +123,7 @@ impl CommandLine {
     fn handle_error(&self, error: Error) -> Result<()> {
         // Special case, the caller can returns `ErrorKind::FallthroughHelp`
         // to indicates the `CommandLine` to show a help message.
-        if error.kind() == ErrorKind::FallthroughHelp {
+        if error.kind() == &ErrorKind::FallthroughHelp {
             return self.display_help(None);
         }
 

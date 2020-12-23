@@ -4,7 +4,6 @@ use crate::command::{is_option_bool_flag, FnArgData};
 use crate::macro_attribute::Value;
 use proc_macro2::{Span, TokenStream};
 use quote::*;
-use std::hash::{Hasher, Hash};
 
 /// Tokens for an `option` attribute.
 ///
@@ -183,11 +182,5 @@ impl Eq for OptionAttrData{}
 impl PartialEq for OptionAttrData {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
-    }
-}
-
-impl Hash for OptionAttrData {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.name.hash(state)
     }
 }
