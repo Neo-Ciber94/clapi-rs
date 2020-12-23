@@ -406,6 +406,8 @@ impl Eq for Argument {}
 
 impl PartialEq for Argument {
     fn eq(&self, other: &Self) -> bool {
+        // This implementation is enough for the purposes of the library
+        // but don't reflect the true equality of this struct
         self.name == other.name
     }
 }

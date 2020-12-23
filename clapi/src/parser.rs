@@ -10,13 +10,13 @@ use std::borrow::Borrow;
 use crate::help::HelpKind;
 
 /// A command-line argument parser.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Parser;
 
 impl Parser {
     pub fn parse<S, I>(&mut self, context: &Context, args: I, ) -> Result<ParseResult>
         where S: Borrow<str>,
-              I: IntoIterator<Item = S>,{
+              I: IntoIterator<Item = S> {
         let tokens = Tokenizer.tokenize(context, args)?;
         let mut iterator = tokens.iter().peekable();
         let mut command_options = OptionList::new();

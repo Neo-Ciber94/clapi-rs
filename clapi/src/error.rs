@@ -137,6 +137,9 @@ pub enum ErrorKind {
     MissingOption(String),
     /// An error no listed.
     Other,
+    /// Indicates to the caller to show a help message. This should not be used as an `Error`.
+    #[doc(hidden)]
+    FallthroughHelp
 }
 
 impl Display for ErrorKind {
@@ -149,6 +152,7 @@ impl Display for ErrorKind {
             ErrorKind::UnrecognizedCommand(s) => write!(f, "unrecognized command: '{}'", s),
             ErrorKind::MissingOption(s) => write!(f, "'{}' is required", s),
             ErrorKind::Other => write!(f, "unknown error"),
+            ErrorKind::FallthroughHelp => panic!("`ErrorKind::FallthroughHelp` should not be used as an error")
         }
     }
 }

@@ -1,59 +1,91 @@
-use syn::{Item, ItemMod, UseTree};
+use syn::{Item, ItemMod, UseTree, File};
 use std::path::{Path, PathBuf};
-use syn::export::ToTokens;
+use syn::export::{ToTokens, Formatter};
 use syn::visit::Visit;
-use std::fmt::{Display, Formatter};
+use crate::utils::NamePath;
+use std::fmt::Debug;
 
-/// Represents the path of a `syn::Item` like: `utils::get_values`.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct ItemPath {
-    path: Vec<String>
+// A result item of a query.
+pub struct QueryItem<T>{
+    pub path: PathBuf,
+    pub name_path: NamePath,
+    pub file: File,
+    pub item: T
 }
 
-impl ItemPath {
-    pub fn new(name: String) -> Self {
-        ItemPath { path: vec![name] }
-    }
-
-    pub fn from_path(path: Vec<String>) -> Self {
-        assert!(path.len() > 0);
-        ItemPath { path }
-    }
-
-    pub fn name(&self) -> &str {
-        self.path.last()
-            .map(|s| s.as_str())
-            .unwrap()
-    }
-
-    pub fn path(&self) -> &[String]{
-        self.path.as_slice()
-    }
-}
-
-impl Display for ItemPath {
+impl<T: Debug> Debug for QueryItem<T>{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.path.join("::"))
+        f.debug_struct("QueryItem")
+            .field("path", &self.path)
+            .field("name_path", &self.name_path)
+            .field("file", &self.file)
+            .field("item", &self.item)
+            .finish()
     }
 }
 
-/// Get all the `syn::Item` that match the given predicate.
-pub fn find_items<F>(file_path: &Path, recursive: bool, f: F) -> Vec<(ItemPath, Item)>
-    where F: Fn(&Item) -> bool {
-    find_items_internal(file_path, recursive, &f)
+impl<T: Clone> Clone for QueryItem<T>{
+    fn clone(&self) -> Self {
+        QueryItem {
+            path: self.path.clone(),
+            name_path: self.name_path.clone(),
+            file: self.file.clone(),
+            item: self.item.clone()
+        }
+    }
 }
 
-fn find_items_internal<F>(file_path: &Path, recursive: bool, f: &F) -> Vec<(ItemPath, Item)>
+pub fn get_mod_path(path: &Path) -> Vec<String> {
+    let mut ret_path = Vec::new();
+
+    // Iterate from `src/`
+    let iter = path
+        .iter()
+        .map(|s| s.to_str().unwrap())
+        .skip_while(|s| *s != "src")
+        .skip(1);
+
+    for item in iter {
+        // `mod.rs` is not necessary to access the module
+        if item == "mod.rs" {
+            break;
+        }
+
+        ret_path.push(item.trim_end_matches(".rs").to_string());
+    }
+
+    ret_path
+}
+
+pub fn find_items<F>(file_path: &Path, visit_mods: bool, recursive: bool, f: F) -> Vec<QueryItem<Item>>
     where F: Fn(&Item) -> bool {
+    find_items_internal(file_path, true, visit_mods, recursive, &|item| {
+        if f(item){
+            Some(item.clone())
+        } else {
+            None
+        }
+    })
+}
+
+pub fn find_map_items<T, F>(file_path: &Path, visit_mods: bool, recursive: bool, f: F) -> Vec<QueryItem<T>>
+    where F: Fn(&Item) -> Option<T> {
+    find_items_internal(file_path, true, visit_mods, recursive, &f)
+}
+
+fn find_items_internal<T, F>(file_path: &Path, is_root: bool, visit_mods: bool, recursive: bool, f: &F) -> Vec<QueryItem<T>>
+    where F: Fn(&Item) -> Option<T> {
 
     let src = std::fs::read_to_string(&file_path).unwrap();
     let file = syn::parse_file(&src).unwrap();
+    let path = if !is_root { get_mod_path(file_path) } else { Vec::new() };
 
     // A visitor over all the items
     let mut visitor = ItemVisitor {
         items: vec![],
         mods: vec![],
-        path: vec![],
+        path,
+        visit_mods,
         recursive,
         f
     };
@@ -61,17 +93,31 @@ fn find_items_internal<F>(file_path: &Path, recursive: bool, f: &F) -> Vec<(Item
     // Begin
     visitor.visit_file(&file);
 
-    if recursive {
+    // Deconstruct the visitor
+    let ItemVisitor { items, mods, f, .. } = visitor;
+    let mut items = items
+        .into_iter()
+        .map(|(name_path, item)| {
+            QueryItem {
+                path: file_path.to_path_buf(),
+                file: file.clone(),
+                name_path,
+                item,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    if visit_mods {
         // Iterate through the items of the all the declared modules
         // This ignore if the mod is public or private
-        for item_mod in visitor.mods {
+        for item_mod in mods {
             if let Some(mod_path) = find_item_mod_path(file_path, &item_mod) {
-                visitor.items.extend(find_items_internal(&mod_path, true, visitor.f));
+                items.extend(find_items_internal(&mod_path, false, visit_mods, recursive, f));
             }
         }
     }
 
-    visitor.items
+    items
 }
 
 fn find_item_mod_path(mod_path: &Path, item_mod: &ItemMod) -> Option<PathBuf> {
@@ -202,26 +248,30 @@ fn get_item_name(item: &Item) -> Option<String> {
     }
 }
 
-struct ItemVisitor<'ast, F> {
-    items: Vec<(ItemPath, Item)>,
-    mods: Vec<&'ast ItemMod>,
-    path: Vec<String>,
-    recursive: bool,
-    f: &'ast F
+struct ItemVisitor<'ast, T, F> {
+    items: Vec<(NamePath, T)>,          // Items and its Path
+    mods: Vec<&'ast ItemMod>,           // Modules, empty if `visit_mods` is false
+    path: Vec<String>,                  // Only for internal use, a buffer for the path
+    visit_mods: bool,                   // Indicates if visit the declared modules
+    recursive: bool,                    // Indicates if visit the inner modules
+    f: &'ast F                          // Predicate function
 }
 
-impl<'ast, F> Visit<'ast> for ItemVisitor<'ast, F> where F : Fn(&'ast Item) -> bool {
+impl<'ast, T, F> Visit<'ast> for ItemVisitor<'ast, T, F> where F : Fn(&'ast Item) -> Option<T> {
     fn visit_item(&mut self, i: &'ast Item) {
-        if (self.f)(i) {
-            let mut path = self.path.clone();
-            let item_name = get_item_name(i)
-                .unwrap_or_else(|| panic!(
-                    "unable to get the ident name of the `Item`: `{}`",
-                    i.to_token_stream().to_string())
-                );
+        match (self.f)(i){
+            Some(item) => {
+                let mut path = self.path.clone();
+                let item_name = get_item_name(i)
+                    .unwrap_or_else(|| panic!(
+                        "unable to get the ident name of the `Item`: `{}`",
+                        i.to_token_stream().to_string())
+                    );
 
-            path.push(item_name);
-            self.items.push((ItemPath::from_path(path), i.clone()));
+                path.push(item_name);
+                self.items.push((NamePath::from_path(path), item));
+            },
+            None => {}
         }
 
         if let Item::Mod(item_mod) = i {
@@ -233,12 +283,14 @@ impl<'ast, F> Visit<'ast> for ItemVisitor<'ast, F> where F : Fn(&'ast Item) -> b
 
     fn visit_item_mod(&mut self, i: &'ast ItemMod) {
         if let Some((_, content)) = &i.content {
-            for item in content {
-                self.visit_item(item);
+            if self.recursive {
+                for item in content {
+                    self.visit_item(item);
+                }
             }
         } else {
             // We only store the mods, later we can visit them
-            if self.recursive {
+            if self.visit_mods {
                 self.mods.push(i);
             }
         }

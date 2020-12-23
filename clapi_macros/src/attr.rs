@@ -8,6 +8,7 @@ pub const NAME: &'static str = "name";
 pub const ALIAS: &'static str = "alias";
 pub const VERSION: &'static str = "version";
 pub const DESCRIPTION: &'static str = "description";
+pub const PARENT: &'static str = "parent";
 pub const ABOUT: &'static str = "about";
 pub const MIN: &'static str = "min";
 pub const MAX: &'static str = "max";

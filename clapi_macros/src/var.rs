@@ -5,6 +5,7 @@ use syn::export::fmt::Display;
 use syn::export::{Formatter, ToTokens};
 use syn::spanned::Spanned;
 use syn::{GenericArgument, Pat, PatType, Type};
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone)]
 pub struct ArgLocalVar {
@@ -135,6 +136,20 @@ impl ArgLocalVar {
 impl ToTokens for ArgLocalVar {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append_all(self.expand().into_iter())
+    }
+}
+
+impl Eq for ArgLocalVar {}
+
+impl PartialEq for ArgLocalVar {
+    fn eq(&self, other: &Self) -> bool {
+        self.var_name == other.var_name
+    }
+}
+
+impl Hash for ArgLocalVar {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.var_name.hash(state)
     }
 }
 

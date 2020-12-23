@@ -121,6 +121,12 @@ impl CommandLine {
     }
 
     fn handle_error(&self, error: Error) -> Result<()> {
+        // Special case, the caller can returns `ErrorKind::FallthroughHelp`
+        // to indicates the `CommandLine` to show a help message.
+        if error.kind() == ErrorKind::FallthroughHelp {
+            return self.display_help(None);
+        }
+
         match error.try_into_parse_error() {
             Ok(parse_error) => {
                 if self.contains_help(parse_error.parse_result()) {
@@ -156,7 +162,7 @@ impl CommandLine {
         if is_help_option(help.as_ref(), parse_result) {
             // handler for: subcommand --help [ignore args]
             if command.get_parent().is_some() {
-                println!("{}", help.help(self.context(), &command));
+                println!("{}", self.get_message_for_command(command, MessageKind::Help));
                 Ok(())
             } else {
                 // handler for: --help [subcommand]

@@ -4,6 +4,7 @@ use crate::command::{is_option_bool_flag, FnArgData};
 use crate::macro_attribute::Value;
 use proc_macro2::{Span, TokenStream};
 use quote::*;
+use std::hash::{Hasher, Hash};
 
 /// Tokens for an `option` attribute.
 ///
@@ -14,7 +15,7 @@ use quote::*;
 ///     println!("{}", numbers.iter().sum::<i64>() / numbers.len() as i64);
 /// }
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OptionAttrData {
     name: String,
     alias: Option<String>,
@@ -112,6 +113,10 @@ impl OptionAttrData {
         option
     }
 
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
     pub fn set_alias(&mut self, alias: String) {
         self.alias = Some(alias);
     }
@@ -170,5 +175,19 @@ impl OptionAttrData {
 impl ToTokens for OptionAttrData {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append_all(self.expand().into_iter())
+    }
+}
+
+impl Eq for OptionAttrData{}
+
+impl PartialEq for OptionAttrData {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Hash for OptionAttrData {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state)
     }
 }

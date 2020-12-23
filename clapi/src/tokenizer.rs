@@ -63,13 +63,13 @@ impl Token {
 }
 
 /// A converts a collection of `String`s to `Token`s.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Tokenizer;
 
 impl Tokenizer {
     pub fn tokenize<S, I>(&mut self, context: &Context, args: I) -> Result<Vec<Token>>
         where S: Borrow<str>,
-              I: IntoIterator<Item = S>,{
+              I: IntoIterator<Item = S> {
         let mut iterator = args
             .into_iter()
             .filter(|s| !s.borrow().is_empty())

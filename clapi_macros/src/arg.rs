@@ -6,6 +6,7 @@ use crate::{attr, LitExtensions, TypeExtensions};
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::Lit;
+use std::hash::{Hash, Hasher};
 
 /// Tokens for an `arg` attribute.
 ///
@@ -16,7 +17,7 @@ use syn::Lit;
 ///     println!("Total: {}", numbers.iter().sum::<i64>());
 /// }
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ArgAttrData {
     name: String,
     min: Option<usize>,
@@ -88,6 +89,10 @@ impl ArgAttrData {
 
         args.fn_arg = Some((arg_data, arg_type));
         args
+    }
+
+    pub fn name(&self) -> &str {
+        self.name.as_str()
     }
 
     pub fn has_default_values(&self) -> bool {
@@ -262,6 +267,20 @@ impl ArgAttrData {
 impl ToTokens for ArgAttrData {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append_all(self.expand().into_iter())
+    }
+}
+
+impl Eq for ArgAttrData {}
+
+impl PartialEq for ArgAttrData {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Hash for ArgAttrData {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state)
     }
 }
 

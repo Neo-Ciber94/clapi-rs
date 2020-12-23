@@ -1,5 +1,5 @@
-mod item_path;
-pub use item_path::ItemPath;
+mod name_path;
+pub use name_path::NamePath;
 
 #[macro_use]
 mod macros;
