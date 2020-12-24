@@ -1,23 +1,18 @@
 use super::*;
 
-static mut VALUE : i64 = 0;
+static VALUE : AtomicI64 = AtomicI64::new(0);
 
 #[subcommand]
-pub fn data(){
-}
+pub fn data(){}
 
-#[subcommand(parent="data")]
+#[subcommand]
 pub fn get(){
-    unsafe {
-        println!("{}", VALUE);
-    }
+    println!("{}", VALUE.load(Ordering::Relaxed));
 }
 
 #[subcommand(parent="data")]
 #[arg(value)]
 pub fn set(value: i64){
-    unsafe {
-        VALUE = value;
-        get();
-    }
+    VALUE.store(value, Ordering::Relaxed);
+    get();
 }

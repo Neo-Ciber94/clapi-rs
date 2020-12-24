@@ -1,42 +1,29 @@
 use clapi::*;
 use std::sync::atomic::{AtomicI64, Ordering};
-//use clapi::help::{HelpProvider, HelpKind};
 
-// mod count;
+mod count;
 // mod utils;
-// mod data;
+mod data;
 
+/// A command
+#[command(description="A test", version=1)]
+fn main(){
 
-#[command(description="A test")]
-fn main(x: i64){
-    static VALUE : AtomicI64 = AtomicI64::new(0);
-
-    #[subcommand]
-    fn data(){
-
-    }
-
-    #[subcommand(parent="data")]
-    fn get(){
-        println!("{}", VALUE.load(Ordering::Relaxed));
-    }
-
-    #[subcommand(parent="data")]
-    #[arg(value)]
-    fn set(value: i64){
-        VALUE.store(value, Ordering::Relaxed);
-        get();
-    }
 }
 
-// #[subcommand]
-// #[arg(values, min=1)]
-// fn echo(values: Vec<String>){
-//     for value in values {
-//         print!("{} ", value);
-//     }
-//     println!()
-// }
+#[subcommand]
+#[arg(values, min=1)]
+fn echo(values: Vec<String>){
+    for value in values {
+        print!("{} ", value);
+    }
+    println!()
+}
+
+#[subcommand]
+fn data(){
+
+}
 
 // #[command]
 // fn main() {

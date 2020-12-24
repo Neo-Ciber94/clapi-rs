@@ -1,6 +1,9 @@
 mod name_path;
 pub use name_path::NamePath;
 
+use syn::{ItemFn, Attribute};
+use syn::parse_quote::ParseQuote;
+
 #[macro_use]
 mod macros;
 
@@ -27,4 +30,10 @@ pub fn path_to_string(path: &syn::Path) -> String {
         .map(|s| s.ident.to_string())
         .collect::<Vec<String>>()
         .join("::")
+}
+
+pub fn insert_allow_dead_code_attribute(item_fn: &mut ItemFn){
+    let tokens = quote::quote! { #[allow(dead_code)] };
+    let attribute = syn::parse::Parser::parse2(Attribute::parse, tokens).unwrap();
+    item_fn.attrs.push(attribute);
 }

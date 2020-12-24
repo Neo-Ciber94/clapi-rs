@@ -29,13 +29,3 @@ pub fn count(min: usize, max: usize, closed: bool) {
 // pub fn get(){
 //
 // }
-
-
-pub mod internal {
-    use super::*;
-
-    #[subcommand]
-    pub fn other(){
-        println!("Other");
-    }
-}
