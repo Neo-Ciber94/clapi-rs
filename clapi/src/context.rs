@@ -26,13 +26,17 @@ impl Context {
     }
 
     /// Returns an `Iterator` over the option name prefixes of this context.
-    pub fn name_prefixes(&self) -> impl ExactSizeIterator<Item = &String> {
-        self.name_prefixes.iter()
+    pub fn name_prefixes(&self) -> Prefixes<'_> {
+        Prefixes {
+            iter: self.name_prefixes.iter()
+        }
     }
 
     /// Returns an `Iterator` over the option alias prefixes of this context.
-    pub fn alias_prefixes(&self) -> impl ExactSizeIterator<Item = &String> {
-        self.alias_prefixes.iter()
+    pub fn alias_prefixes(&self) -> Prefixes<'_> {
+        Prefixes {
+            iter: self.alias_prefixes.iter()
+        }
     }
 
     /// Returns an `Iterator` over the argument assign `char`s.
@@ -194,6 +198,25 @@ impl Debug for Context {
             .field("arg_assign", &self.arg_assign)
             .field("delimiter", &self.delimiter)
             .finish()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Prefixes<'a> {
+    iter: linked_hash_set::Iter<'a, String>
+}
+
+impl<'a> Iterator for Prefixes<'a> {
+    type Item = &'a String;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+impl<'a> ExactSizeIterator for Prefixes<'a>{
+    fn len(&self) -> usize {
+        self.iter.len()
     }
 }
 

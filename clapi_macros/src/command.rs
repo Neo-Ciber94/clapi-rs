@@ -311,13 +311,13 @@ impl CommandAttrData {
             struct __Help;
             impl clapi::help::Help for __Help {
                 #[inline]
-                fn help(&self, context: &clapi::Context, command: &clapi::Command) -> String {
-                    #help.help(context, command)
+                fn help(&self, buf: &mut clapi::help::Buffer, context: &clapi::Context, command: &clapi::Command) -> std::fmt::Result {
+                    #help.help(buf, context, command)
                 }
 
                 #[inline]
-                fn usage(&self, context: &clapi::Context, command: &clapi::Command) -> String {
-                    #help.usage(context, command)
+                fn usage(&self, buf: &mut clapi::help::Buffer, context: &clapi::Context, command: &clapi::Command) -> std::fmt::Result {
+                    #help.usage(buf, context, command)
                 }
 
                 #[inline]

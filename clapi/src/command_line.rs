@@ -226,11 +226,14 @@ impl CommandLine {
 
     fn get_message_for_command(&self, command: &Command, kind: MessageKind) -> String {
         let help = self.help().expect("help command is not set");
+        let mut buffer = crate::help::Buffer::new();
 
         match kind {
-            MessageKind::Help => help.help(&self.context, command),
-            MessageKind::Usage => help.usage(&self.context, command),
-        }
+            MessageKind::Help => help.help(&mut buffer, &self.context, command).unwrap(),
+            MessageKind::Usage => help.usage(&mut buffer, &self.context, command).unwrap(),
+        };
+
+        buffer.to_string()
     }
 
     fn display_help(&self, args: Option<&Argument>) -> Result<()> {

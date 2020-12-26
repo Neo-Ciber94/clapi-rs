@@ -1,38 +1,18 @@
-use std::fmt::Write;
-use crate::command::Command;
-use crate::{CommandOption, Argument};
-use crate::context::Context;
-pub use crate::help::help_writer::*;
-pub use crate::help::writer::*;
+use std::fmt::{Write, Display, Formatter};
+use crate::{Context, Command, CommandOption, Argument};
 use crate::utils::Then;
 
-/// Provides help information about a command.
-///
-/// # Implementing `HelpCommand`:
-/// The only method needed to implement is `help` and `about` all the other methods provide a default value.
-///
-/// Example output of `help`:
-/// ```text
-/// NAME:
-///     test
-///
-/// DESCRIPTION:
-///     This is the test command description
-///
-/// OPTIONS:
-///     -v, --version   version of the command.
-///     -a, --author    author of the command.
-///
-/// SUBCOMMANDS:
-///     print   Prints information
-/// ```
 pub trait Help {
-    /// Returns a `String` information about the command.
-    /// - Name, description, options and subcommands.
-    fn help(&self, context: &Context, command: &Command) -> String;
+    /// Provides help information about the command like:
+    /// name, description, options, subcommands and usage
+    fn help(&self, buf: &mut Buffer, context: &Context, command: &Command) -> std::fmt::Result;
 
-    /// Returns a `String` information about the usage of the command.
-    fn usage(&self, context: &Context, command: &Command) -> String;
+    /// Provides information about the usage of the command.
+    ///
+    /// By default this delegates the call to `Help::help`.
+    fn usage(&self, buf: &mut Buffer, context: &Context, command: &Command) -> std::fmt::Result {
+        self.help(buf, context, command)
+    }
 
     /// Type of the `HelpProvider`, the default is `HelpKind::Any`.
     fn kind(&self) -> HelpKind {
@@ -51,8 +31,7 @@ pub trait Help {
         None
     }
 
-    /// Returns the description of this help command, the default is:
-    /// `Provides information about a command`.
+    /// Returns the description of this help command.
     #[inline]
     fn description(&self) -> &str {
         "Provides information about a command"
@@ -74,148 +53,187 @@ pub enum HelpKind {
     Any
 }
 
-/// Default implementation of the `HelpCommand` trait.
 #[derive(Debug, Clone)]
+pub struct Buffer {
+    buffer: Vec<u8>
+}
+
+impl Buffer {
+    pub fn new() -> Self {
+        Buffer {
+            buffer: Vec::new()
+        }
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Buffer {
+            buffer: Vec::with_capacity(capacity)
+        }
+    }
+
+    pub fn reserve(&mut self, additional: usize) {
+        self.buffer.reserve(additional)
+    }
+
+    pub fn buffer(&self) -> &Vec<u8>{
+        &self.buffer
+    }
+
+    pub fn buffer_mut(&mut self) -> &mut Vec<u8>{
+        &mut self.buffer
+    }
+}
+
+impl Write for Buffer {
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        self.buffer.extend_from_slice(s.as_bytes());
+        Ok(())
+    }
+}
+
+impl Display for Buffer {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", std::str::from_utf8(&self.buffer).unwrap())
+    }
+}
+
 pub struct DefaultHelp(pub HelpKind);
+
 impl Default for DefaultHelp {
     fn default() -> Self {
         DefaultHelp(HelpKind::Subcommand)
     }
 }
-impl Help for DefaultHelp {
-    fn help(&self, context: &Context, command: &Command) -> String {
-        let mut writer = HelpWriter::new(context);
 
+impl Help for DefaultHelp {
+    fn help(&self, buf: &mut Buffer, context: &Context, command: &Command) -> std::fmt::Result {
         // Command name
-        writer.writeln(command.get_name());
+        writeln!(buf, "{}", command.get_name())?;
 
         // Command description
         if let Some(description) = command.get_description() {
-            writer.indented(|w| w.writeln(description));
+            write_indent(buf);
+            writeln!(buf, "{}", description)?;
         }
 
         // Command usage
-        if command.take_args()
-            || command.get_options().len() > 0
-            || command.get_children().len() > 0
-        {
-            writer.section("USAGE:", |w| {
-                let mut args_names = Vec::new();
-
-                for arg in command.get_args() {
-                    if arg.get_arg_count().takes_exactly(1) {
-                        args_names.push(format!("<{}>", arg.get_name().to_uppercase()));
-                    } else {
-                        args_names.push(format!("<{}...>", arg.get_name().to_uppercase()));
-                    }
-                }
-
-                // Names of the arguments as: <ARG0> <ARG1> <ARG2...>
-                let args_names: String = args_names.join(" ");
-
-                if command.take_args() {
-                    w.writeln(format!("{} {}", command.get_name(), args_names));
-                }
-
-                if command.get_options().len() > 0 {
-                    let mut result = String::from(command.get_name());
-                    write!(result, " [OPTION]").unwrap();
-
-                    if command.get_options().iter().any(|o| o.take_args()) {
-                        write!(result, " {}", args_names).unwrap();
-                    }
-
-                    w.writeln(result);
-                }
-
-                if command.get_children().len() > 0 {
-                    let mut children = command.get_children();
-
-                    if children.any(|c| c.take_args()) {
-                        w.writeln(format!("{} [SUBCOMMAND] <ARGS>", command.get_name()));
-                    }
-
-                    if children.any(|c| c.get_options().len() > 0) {
-                        let mut result = String::from(command.get_name());
-                        write!(result, " [SUBCOMMAND] [OPTION]").unwrap();
-
-                        if children.any(|c| c.get_options().iter().any(|o| o.take_args())) {
-                            write!(result, " <ARGS>").unwrap();
-                        }
-
-                        w.writeln(result);
-                    }
-                }
-            });
+        if command.take_args() || command.get_options().len() > 0 || command.get_children().len() > 0 {
+            // We check again for args, options and children to add a newline
+            writeln!(buf)?;
+            self.usage(buf, context, command)?;
         }
 
-        // Command options
+        // Options
         if command.get_options().len() > 0 {
-            writer.section("OPTIONS:", |w| {
-                for option in command.get_options() {
-                    w.write_option(option);
-                }
-            });
+            writeln!(buf)?;
+            writeln!(buf, "OPTIONS:")?;
+
+            for option in command.get_options() {
+                write_indent(buf);
+                writeln!(buf, "{}", option_to_string(context, option))?;
+            }
         }
 
-        // Command children
+        // Subcommands
         if command.get_children().len() > 0 {
-            writer.section("SUBCOMMAND:", |w| {
-                for child in command.get_children() {
-                    w.write_command(child);
-                }
-            });
+            writeln!(buf)?;
+            writeln!(buf, "SUBCOMMANDS:")?;
+
+            for command in command.get_children() {
+                write_indent(buf);
+                writeln!(buf, "{}", command_to_string(command))?;
+            }
         }
 
-        // Command about
         if let Some(about) = command.get_about() {
-            writer.writeln("");
-            writer.writeln(about);
+            writeln!(buf)?;
+            writeln!(buf, "{}", about)?;
         }
 
-        writer.into_string()
+        Ok(())
     }
 
-    fn usage(&self, context: &Context, command: &Command) -> String {
-        if command.get_options().is_empty() && command.get_args().is_empty() {
-            return String::default();
+    fn usage(&self, buf: &mut Buffer, _: &Context, command: &Command) -> std::fmt::Result {
+        if command.take_args() || command.get_options().len() > 0 || command.get_children().len() > 0 {
+            writeln!(buf, "USAGE:")?;
+            // command [OPTIONS] [ARGS]...
+            {
+                write_indent(buf);
+                write!(buf, "{}", command.get_name())?;
+
+                if command.get_options().len() > 1 {
+                    write!(buf, " [OPTIONS]")?;
+                } else {
+                    write!(buf, " [OPTION]")?;
+                }
+
+                for arg in command.get_args() {
+                    if arg.get_arg_count().max() > 1 {
+                        write!(buf, " [{}]...", arg.get_name())?;
+                    } else {
+                        write!(buf, " [{}] ", arg.get_name())?;
+                    }
+                }
+
+                writeln!(buf)?;
+            }
+
+            // command [SUBCOMMAND] [OPTIONS] [ARGS]...
+            if command.get_children().len() > 0 {
+                write_indent(buf);
+                write!(buf, "{} [SUBCOMMAND]", command.get_name())?;
+
+                if command.get_children().any(|c| c.get_options().len() > 0) {
+                    write!(buf, " [OPTIONS]")?;
+                }
+
+                if command.get_children().any(|c| c.take_args()) {
+                    write!(buf, " [ARGS]")?;
+                }
+
+                writeln!(buf)?;
+            }
         }
 
-        let mut writer = HelpWriter::new(context);
-        writer.section("USAGE", |w| {
-            let mut args_names = Vec::new();
-
-            for arg in command.get_args() {
-                if arg.get_arg_count().takes_exactly(1) {
-                    args_names.push(format!("<{}>", arg.get_name().to_uppercase()));
-                } else {
-                    args_names.push(format!("<{}...>", arg.get_name().to_uppercase()));
-                }
-            }
-
-            let args_names: String = args_names.join(" ");
-
-            if command.take_args() {
-                w.writeln(format!("{} {}", command.get_name(), args_names));
-            }
-
-            if command.get_options().len() > 0 {
-                let mut result = String::from(command.get_name());
-                write!(result, " [OPTIONS]").unwrap();
-
-                if command.get_options().iter().any(|o| o.take_args()) {
-                    write!(result, " {}", args_names).unwrap();
-                }
-
-                w.writeln(result);
-            }
-        });
-
-        writer.into_string()
+        Ok(())
     }
 
     fn kind(&self) -> HelpKind {
         self.0
+    }
+}
+
+// Add indentation to the buffer
+fn write_indent(buf: &mut Buffer) {
+    // 3 spaces
+    write!(buf, "   ").unwrap()
+}
+
+// -v, --version        Shows the version
+fn option_to_string(context: &Context, option: &CommandOption) -> String {
+    let names = if let Some(alias) = option.get_aliases().next() {
+        let alias_prefix = context.alias_prefixes().next().unwrap();
+        let name_prefix = context.name_prefixes().next().unwrap();
+        format!("{}{}, {}{}", alias_prefix, alias, name_prefix, option.get_name())
+    } else {
+        let name_prefix = context.name_prefixes().next().unwrap();
+        // Normally there is 4 spaces if the `alias prefix` and `name` is 1 char
+        format!("    {}{}", name_prefix, option.get_name())
+    };
+
+    if let Some(description) = option.get_description() {
+        format!("{:25} {}", names, description)
+    } else {
+        format!("{}", names)
+    }
+}
+
+// version              Shows the version
+fn command_to_string(command: &Command) -> String {
+    if let Some(description) = command.get_description() {
+        format!("{:25} {}", command.get_name(), description)
+    } else {
+        format!("{}", command.get_name())
     }
 }
 
@@ -236,361 +254,4 @@ pub(crate) fn to_option<H: Help + ?Sized>(help: &H) -> CommandOption {
                 opt
             }
         })
-}
-
-mod writer {
-    use std::borrow::Borrow;
-
-    /// A writer with indentation.
-        ///
-        /// # Example
-        /// ```rust
-        /// use clapi::help::IndentedWriter;
-        ///
-        /// let mut writer = IndentedWriter::new();
-        /// writer.writeln("Hello");
-        /// writer.indented(|w|{
-        ///     w.writeln("Make the dinner.");
-        ///     w.indented(|w| w.writeln("PS: There are potatoes."))
-        /// });
-        /// writer.writeln("Good bye");
-        ///
-        /// assert_eq!("Hello\n   Make the dinner.\n      PS: There are potatoes.\nGood bye\n",
-        ///     writer.into_string()
-        /// );
-        /// ```
-    #[derive(Debug, Clone)]
-    pub struct IndentedWriter {
-        buffer: String,
-        current_indent: u32,
-        indent: String,
-    }
-
-    impl IndentedWriter {
-        /// Constructs a new `IndentedWriter`.
-        #[inline]
-        pub fn new() -> Self {
-            Self::with_indent(" ".repeat(3))
-        }
-
-        /// Constructs a new `IndentedWriter` with the specified spacing.
-        #[inline]
-        pub fn with_indent(indent: String) -> Self {
-            assert!(!indent.is_empty(), "indent cannot be empty");
-
-            IndentedWriter {
-                buffer: String::new(),
-                current_indent: 0,
-                indent,
-            }
-        }
-
-        /// Returns the indentation level of this writer.
-        pub fn current_indent(&self) -> u32 {
-            self.current_indent
-        }
-
-        /// Returns a reference to this writer buffer.
-        pub fn buffer(&self) -> &String {
-            &self.buffer
-        }
-
-        /// Increment the indentation level by 1.
-        pub fn increment_indent(&mut self) {
-            self.current_indent += 1;
-        }
-
-        /// Decrement the indentation level by 1.
-        pub fn decrement_indent(&mut self) {
-            self.current_indent -= 1;
-        }
-
-        /// Writes the current value in the buffer.
-        pub fn write<S: Borrow<str>>(&mut self, value: S) {
-            self.write_indent();
-            self.buffer.push_str(value.borrow());
-        }
-
-        /// Writes the current value in the buffer with a `newline`.
-        pub fn writeln<S: Borrow<str>>(&mut self, value: S) {
-            self.write_indent();
-            self.buffer.push_str(value.borrow());
-            self.buffer.push('\n');
-        }
-
-        /// Writes the current value in the buffer if the condition is met.
-        #[inline]
-        pub fn write_if<S: Borrow<str>>(&mut self, condition: bool, value: S) {
-            if condition {
-                self.write(value)
-            }
-        }
-
-        /// Writes the current value in the buffer with a `newline` if the condition is met.
-        #[inline]
-        pub fn writeln_if<S: Borrow<str>>(&mut self, condition: bool, value: S) {
-            if condition {
-                self.writeln(value)
-            }
-        }
-
-        /// Increase the level of indentation and pass the writer to the `FnOnce`
-        /// to allow writing with indentation.
-        ///
-        /// ```rust
-        /// use clapi::help::IndentedWriter;
-        ///
-        /// let mut writer = IndentedWriter::new();
-        /// writer.indented(|w| w.write("Hello World"));
-        /// assert_eq!("   Hello World", writer.into_string());
-        /// ```
-        pub fn indented<F: FnOnce(&mut Self)>(&mut self, f: F) {
-            self.current_indent += 1;
-            f(self);
-            self.current_indent -= 1;
-        }
-
-        /// Gets the resulting `String` of this writer.
-        #[inline]
-        pub fn into_string(self) -> String {
-            self.buffer
-        }
-
-        fn write_indent(&mut self) {
-            for _ in 0..self.current_indent {
-                self.buffer.push_str(self.indent.as_str());
-            }
-        }
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-
-        #[test]
-        fn write_test() {
-            let mut writer = IndentedWriter::new();
-            writer.write("Hello World");
-
-            assert_eq!("Hello World", writer.buffer());
-        }
-
-        #[test]
-        fn writeln_test() {
-            let mut writer = IndentedWriter::new();
-            writer.writeln("Hello World");
-
-            assert_eq!("Hello World\n", writer.buffer());
-        }
-
-        #[test]
-        fn indented_test() {
-            let mut writer = IndentedWriter::new();
-            writer.writeln("Hello");
-            writer.indented(|w| {
-                w.writeln("I hope you have a nice day.");
-                w.indented(|w| w.writeln("PS: Cook the dinner."))
-            });
-            writer.writeln("Good bye");
-
-            assert_eq!(
-                writer.buffer(),
-                "Hello\n   I hope you have a nice day.\n      PS: Cook the dinner.\nGood bye\n"
-            )
-        }
-    }
-}
-
-mod help_writer {
-    use std::borrow::Borrow;
-
-    use crate::command::Command;
-    use crate::context::Context;
-    use crate::help::IndentedWriter;
-    use crate::option::CommandOption;
-
-    /// Utilities for write command help.
-    pub struct HelpWriter<'a> {
-        context: &'a Context,
-        writer: IndentedWriter,
-        option_writer: Box<dyn Fn(&Context, &CommandOption) -> String>,
-        command_writer: Box<dyn Fn(&Context, &Command) -> String>,
-    }
-
-    impl<'a> HelpWriter<'a> {
-        #[inline]
-        pub fn new(context: &'a Context) -> Self {
-            HelpWriterBuilder::new().build(context)
-        }
-
-        #[inline]
-        pub fn with_spacing(context: &'a Context, indent: String) -> Self {
-            HelpWriterBuilder::new()
-                .writer(IndentedWriter::with_indent(indent))
-                .build(context)
-        }
-
-        #[inline]
-        pub fn buffer(&self) -> &String {
-            self.writer.buffer()
-        }
-
-        #[inline]
-        pub fn write<S: Borrow<str>>(&mut self, value: S) {
-            self.writer.write(value);
-        }
-
-        #[inline]
-        pub fn writeln<S: Borrow<str>>(&mut self, value: S) {
-            self.writer.writeln(value);
-        }
-
-        #[inline]
-        pub fn write_if<S: Borrow<str>>(&mut self, condition: bool, value: S) {
-            self.writer.write_if(condition, value);
-        }
-
-        #[inline]
-        pub fn writeln_if<S: Borrow<str>>(&mut self, condition: bool, value: S) {
-            self.writer.writeln_if(condition, value);
-        }
-
-        pub fn indented<F: FnOnce(&mut HelpWriter<'_>)>(&mut self, f: F) {
-            self.writer.increment_indent();
-            f(self);
-            self.writer.decrement_indent();
-        }
-
-        pub fn section<F: FnOnce(&mut HelpWriter<'_>)>(&mut self, name: &str, f: F) {
-            self.writeln("");
-            self.writeln(name);
-            self.indented(f)
-        }
-
-        pub fn write_option(&mut self, option: &CommandOption) {
-            let result = self.option_writer.as_ref()(self.context, option);
-            self.writeln(result.as_str());
-        }
-
-        pub fn write_command(&mut self, command: &Command) {
-            let result = self.command_writer.as_ref()(self.context, command);
-            self.writeln(result.as_str());
-        }
-
-        #[inline]
-        pub fn into_string(self) -> String {
-            self.writer.into_string()
-        }
-    }
-
-    /// A `HelpWriter` builder.
-    #[derive(Default)]
-    pub struct HelpWriterBuilder {
-        writer: Option<IndentedWriter>,
-        option_writer: Option<Box<dyn Fn(&Context, &CommandOption) -> String>>,
-        command_writer: Option<Box<dyn Fn(&Context, &Command) -> String>>,
-    }
-
-    impl HelpWriterBuilder {
-        #[inline]
-        pub fn new() -> Self {
-            HelpWriterBuilder::default()
-        }
-
-        pub fn writer(mut self, writer: IndentedWriter) -> Self {
-            self.writer = Some(writer);
-            self
-        }
-
-        pub fn option_writer<F>(mut self, f: F) -> Self
-        where
-            F: Fn(&Context, &CommandOption) -> String + 'static,
-        {
-            self.option_writer = Some(Box::new(f));
-            self
-        }
-
-        pub fn command_writer<F>(mut self, f: F) -> Self
-        where
-            F: Fn(&Context, &Command) -> String + 'static,
-        {
-            self.command_writer = Some(Box::new(f));
-            self
-        }
-
-        pub fn build(self, context: &Context) -> HelpWriter<'_> {
-            HelpWriter {
-                context,
-                writer: self.writer.unwrap_or_else(|| IndentedWriter::new()),
-                option_writer: self
-                    .option_writer
-                    .unwrap_or_else(|| Box::new(write_option)),
-                command_writer: self
-                    .command_writer
-                    .unwrap_or_else(|| Box::new(write_command)),
-            }
-        }
-    }
-
-    fn write_option(context: &Context, option: &CommandOption) -> String {
-        const WIDTH: usize = 25;
-        let name_prefix: &str = context.name_prefixes().next().unwrap();
-        let alias_prefix: &str = context.alias_prefixes().next().unwrap();
-
-        let mut buffer = String::new();
-
-        let mut names = if let Some(alias) = option.get_aliases().next() {
-            format!(
-                "{}{}, {}{}",
-                alias_prefix,
-                alias.as_str(),
-                name_prefix,
-                option.get_name(),
-            )
-        } else {
-            // A width of 2 should be enough to align with the alias prefix
-            // which is expected to be 2 characters as: '-a', '-v', '/b'
-            format!("{:>2}{}", name_prefix, option.get_name())
-        };
-
-        if option.get_args().len() > 0 {
-            let mut args_names = Vec::new();
-
-            for arg in option.get_args() {
-                if arg.get_arg_count().takes_exactly(1) {
-                    args_names.push(format!(" <{}>", arg.get_name().to_uppercase()));
-                } else {
-                    args_names.push(format!(" <{}...>", arg.get_name().to_uppercase()));
-                }
-            }
-
-            names.push_str(&args_names.join(" "));
-        }
-
-        if let Some(description) = option.get_description() {
-            buffer.push_str(&format!("{:width$}{}", names, description, width = WIDTH));
-        } else {
-            buffer.push_str(&format!("{:width$}", names, width = WIDTH));
-        }
-
-        buffer
-    }
-
-    fn write_command(_: &Context, command: &Command) -> String {
-        const WIDTH: usize = 15;
-        let mut buffer = String::new();
-
-        if let Some(description) = command.get_description() {
-            buffer.push_str(&format!(
-                "{:width$}{}",
-                command.get_name(),
-                description,
-                width = WIDTH
-            ))
-        } else {
-            buffer.push_str(&format!("{:width$}", command.get_name(), width = WIDTH))
-        }
-
-        buffer
-    }
 }
