@@ -2,9 +2,9 @@ use std::path::PathBuf;
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::ToTokens;
-use syn::{AttrStyle, Attribute, AttributeArgs, Item, ItemFn, PatType, ReturnType, Stmt, Type};
+use syn::{AttrStyle, Attribute, AttributeArgs, Item, ItemFn, PatType, ReturnType, Stmt, Type, ItemStatic};
 use crate::arg::ArgAttrData;
-use crate::macro_attribute::NameValueAttribute;
+use crate::macro_attribute::{NameValueAttribute, MacroAttribute};
 use crate::option::OptionAttrData;
 use crate::var::{ArgLocalVar, ArgumentType};
 use crate::TypeExtensions;
@@ -40,6 +40,7 @@ pub struct CommandAttrData {
     options: Vec<OptionAttrData>,
     args: Vec<ArgAttrData>,
     vars: Vec<ArgLocalVar>,
+    help: Option<ItemStatic>
 }
 
 impl CommandAttrData {
@@ -56,6 +57,7 @@ impl CommandAttrData {
             options: vec![],
             vars: vec![],
             args: vec![],
+            help: None
         }
     }
 
@@ -116,6 +118,25 @@ impl CommandAttrData {
 
     pub fn set_item_fn(&mut self, item_fn: ItemFn) {
         self.item_fn = Some(item_fn);
+    }
+
+    pub fn set_help(&mut self, help: ItemStatic) {
+        assert!(!self.is_child);
+        self.help = Some(help)
+    }
+
+    pub fn get_mut_recursive(&mut self, name_path: &NamePath) -> Option<&mut CommandAttrData> {
+        if &self.fn_name == name_path {
+            return Some(self);
+        }
+
+        for child in &mut self.children {
+            if let Some(command) = child.get_mut_recursive(name_path) {
+                return Some(command);
+            }
+        }
+
+        None
     }
 
     pub fn expand(&self) -> TokenStream {
@@ -253,6 +274,14 @@ impl CommandAttrData {
             let ret = &self.item_fn.as_ref().unwrap().sig.output;
             let attrs = &self.item_fn.as_ref().unwrap().attrs;
             let items = self.get_body_items();
+            let help = if self.help.is_some() {
+                let help_body = self.get_help();
+                quote!{
+                    .set_help({ #help_body })
+                }
+            } else {
+                quote! { .use_default_help() }
+            };
             let error_handling = match ret {
                 ReturnType::Type(_, ty) if is_clapi_result_type(ty) => quote! {},
                 _ => quote! { .expect("an error occurred"); },
@@ -266,7 +295,7 @@ impl CommandAttrData {
 
                     let command = #command ;
                     clapi::CommandLine::new(command)
-                        .use_default_help()
+                        #help
                         .use_default_suggestions()
                         .run()
                         #error_handling
@@ -275,18 +304,44 @@ impl CommandAttrData {
         }
     }
 
-    pub fn get_mut_recursive(&mut self, name_path: &NamePath) -> Option<&mut CommandAttrData> {
-        if &self.fn_name == name_path {
-            return Some(self);
-        }
+    fn get_help(&self) -> TokenStream {
+        let help = &self.help.as_ref().unwrap().ident;
 
-        for child in &mut self.children {
-            if let Some(command) = child.get_mut_recursive(name_path) {
-                return Some(command);
+        quote! {
+            struct __Help;
+            impl clapi::help::Help for __Help {
+                #[inline]
+                fn help(&self, context: &clapi::Context, command: &clapi::Command) -> String {
+                    #help.help(context, command)
+                }
+
+                #[inline]
+                fn usage(&self, context: &clapi::Context, command: &clapi::Command) -> String {
+                    #help.usage(context, command)
+                }
+
+                #[inline]
+                fn kind(&self) -> clapi::help::HelpKind {
+                    #help.kind()
+                }
+
+                #[inline]
+                fn name(&self) -> &str {
+                    #help.name()
+                }
+
+                #[inline]
+                fn alias(&self) -> Option<&str> {
+                    #help.alias()
+                }
+
+                #[inline]
+                fn description(&self) -> &str {
+                    #help.description()
+                }
             }
+            __Help
         }
-
-        None
     }
 
     fn get_body(&self, vars: &[TokenStream]) -> TokenStream {
@@ -391,13 +446,14 @@ impl PartialEq for CommandAttrData {
 pub struct FnArgData {
     pub arg_name: String,
     pub pat_type: PatType,
-    pub attribute: Option<NameValueAttribute>,
+    pub attribute: Option<MacroAttribute>,
+    pub name_value: Option<NameValueAttribute>,
     pub is_option: bool,
 }
 
 impl FnArgData {
     pub fn drop_attribute(mut self) -> Self {
-        self.attribute = None;
+        self.name_value = None;
         self
     }
 }
@@ -439,11 +495,11 @@ pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {
 }
 
 pub fn is_option_bool_flag(fn_arg: &FnArgData) -> bool {
-    if let Some(attr) = &fn_arg.attribute {
+    if let Some(attribute) = &fn_arg.name_value {
         fn_arg.pat_type.ty.is_bool()
-            && !(attr.contains_name(crate::attr::MIN)
-                || attr.contains_name(crate::attr::MAX)
-                || attr.contains_name(crate::attr::DEFAULT))
+            && !(attribute.contains_name(crate::attr::MIN)
+                || attribute.contains_name(crate::attr::MAX)
+                || attribute.contains_name(crate::attr::DEFAULT))
     } else {
         fn_arg.pat_type.ty.is_bool()
     }
@@ -453,9 +509,7 @@ mod cmd {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use syn::{
-        AttrStyle, Attribute, AttributeArgs, FnArg, Item, ItemFn, PatType, Stmt, Type,
-    };
+    use syn::{AttrStyle, Attribute, AttributeArgs, FnArg, Item, ItemFn, PatType, Stmt, Type, ItemStatic};
 
     use crate::arg::ArgAttrData;
     use crate::command::{drop_command_attributes, is_option_bool_flag, CommandAttrData, FnArgData, assertions};
@@ -536,6 +590,7 @@ mod cmd {
                 command.set_var(ArgLocalVar::new(fn_arg.pat_type.clone(), source));
             } else {
                 if arg_count > 1 {
+                    // todo: All this assertions need a revision
                     let ty = fn_arg.pat_type.ty.as_ref();
                     if ty.is_slice() || ty.is_vec() {
                         panic!("invalid argument type for: `{}`\
@@ -543,17 +598,17 @@ mod cmd {
                                pat_type_to_string(&fn_arg.pat_type));
                     }
 
-                    if let Some(attr) = &fn_arg.attribute {
+                    if let Some(name_value) = &fn_arg.name_value {
                         assert!(
-                            attr.get("default").is_none(),
+                            name_value.get("default").is_none(),
                             "`default` is not supported when multiple arguments are defined"
                         );
                         assert!(
-                            attr.get("min").is_none(),
+                            name_value.get("min").is_none(),
                             "`min` is not supported when multiple arguments are defined"
                         );
                         assert!(
-                            attr.get("max").is_none(),
+                            name_value.get("max").is_none(),
                             "`min` is not supported when multiple arguments are defined"
                         );
                     }
@@ -569,13 +624,7 @@ mod cmd {
         // Add args
         if arg_count > 0 {
             for fn_arg in fn_args.iter().filter(|f| !f.is_option) {
-                let arg = if fn_arg.attribute.is_some() {
-                    ArgAttrData::from_arg_data(fn_arg.clone())
-                } else {
-                    ArgAttrData::with_name(fn_arg.arg_name.clone())
-                };
-
-                command.set_args(arg)
+                command.set_args(ArgAttrData::from_arg_data(fn_arg.clone()));
             }
         }
 
@@ -720,25 +769,30 @@ mod cmd {
         }
 
         for (arg_name, pat_type) in fn_args {
-            let name_value = attributes
+            let (attribute, name_value) = if let Some(data) = attributes
                 .iter()
-                .find_map(|(path, _, name_value)| {
+                .find_map(|(path, attribute, name_value)| {
                 if path == &arg_name {
-                    Some(name_value.clone())
+                    Some((attribute.clone(), name_value.clone()))
                 } else {
                     None
                 }
-            });
+            }) {
+                (Some(data.0), Some(data.1))
+            } else {
+                (None, None)
+            };
 
-            let is_option = name_value
+            let is_option = attribute
                 .as_ref()
-                .map(|att| crate::attr::is_option(att.path()))
+                .map(|attribute| crate::attr::is_option(attribute.path()))
                 .unwrap_or(true);
 
             ret.push(FnArgData {
                 arg_name,
                 pat_type,
-                attribute: name_value,
+                attribute,
+                name_value,
                 is_option,
             });
         }
@@ -802,6 +856,10 @@ mod cmd {
             attribute, item_fn.clone(), false, true
         );
 
+        if let Some(help) = find_help(&root_path) {
+            root.set_help(help)
+        }
+
         let mut subcommands = get_subcommands_data(&root_path);
 
         while let Some((subcommand, path, attribute)) = subcommands.pop() {
@@ -835,9 +893,8 @@ mod cmd {
                 }
 
                 let parent_name = NamePath::from_path(parent_path);
-
                 if parent_name == subcommand.fn_name {
-                    panic!("self reference command parent in `{}`", subcommand.fn_name.name());
+                    panic!("self reference command parent in `{}`", subcommand.attribute);
                 }
 
                 if let Some(parent) = find_command_recursive(&mut root, &parent_name){
@@ -875,6 +932,24 @@ mod cmd {
     fn set_entry_command() -> bool{
         static IS_DEFINED: AtomicBool = AtomicBool::new(false);
         !IS_DEFINED.compare_and_swap(false, true, Ordering::Relaxed)
+    }
+
+    fn find_help(root_path: &Path) -> Option<ItemStatic> {
+        let mut result = crate::query::find_map_items(
+            root_path, true, true, |item| {
+            if let Item::Static(item_static) = item {
+                if item_static.attrs.iter().any(|attribute| attr::is_help(&path_to_string(&attribute.path))) {
+                    return Some(item_static.clone());
+                }
+            }
+            None
+        });
+
+        if result.len() > 1 {
+            panic!("multiple `#[help]` defined");
+        }
+
+        result.pop().map(|item| item.item)
     }
 
     fn find_command_recursive<'a>(command: &'a mut CommandAttrData, name: &'a NamePath) -> Option<&'a mut CommandAttrData> {

@@ -269,9 +269,8 @@ mod tests {
     use crate::{split_into_args, Argument, Command, CommandOption};
 
     fn tokenize(command: Command, value: &str) -> crate::Result<Vec<Token>> {
-        let mut tokenizer = Tokenizer::default();
         let context = Context::new(command);
-        tokenizer.tokenize(&context, split_into_args(value))
+        Tokenizer.tokenize(&context, split_into_args(value))
     }
 
     #[test]

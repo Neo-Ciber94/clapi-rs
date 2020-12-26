@@ -1,7 +1,7 @@
 use crate::arg::ArgAttrData;
 use crate::attr;
 use crate::command::{is_option_bool_flag, FnArgData};
-use crate::macro_attribute::Value;
+use crate::macro_attribute::{Value, MacroAttribute};
 use proc_macro2::{Span, TokenStream};
 use quote::*;
 
@@ -17,6 +17,7 @@ use quote::*;
 #[derive(Debug, Clone)]
 pub struct OptionAttrData {
     name: String,
+    attribute: Option<MacroAttribute>,
     alias: Option<String>,
     description: Option<String>,
     args: Option<ArgAttrData>,
@@ -26,6 +27,7 @@ impl OptionAttrData {
     pub fn new(name: String) -> Self {
         OptionAttrData {
             name,
+            attribute: None,
             alias: None,
             description: None,
             args: None,
@@ -36,7 +38,10 @@ impl OptionAttrData {
         let mut option = OptionAttrData::new(arg_data.arg_name.clone());
         let mut args = ArgAttrData::from_arg_data(arg_data.clone().drop_attribute());
 
-        if let Some(att) = &arg_data.attribute {
+        // Sets the attribute if any
+        option.attribute = arg_data.attribute.clone();
+
+        if let Some(att) = &arg_data.name_value {
             for (key, value) in att {
                 match key.as_str() {
                     attr::ARG => {

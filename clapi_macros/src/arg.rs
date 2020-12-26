@@ -1,5 +1,5 @@
 use crate::command::{is_option_bool_flag, FnArgData};
-use crate::macro_attribute::{lit_to_string, Value};
+use crate::macro_attribute::{lit_to_string, Value, MacroAttribute};
 use crate::utils::pat_type_to_string;
 use crate::var::ArgumentType;
 use crate::{attr, LitExtensions, TypeExtensions};
@@ -19,6 +19,7 @@ use syn::Lit;
 #[derive(Debug, Clone)]
 pub struct ArgAttrData {
     name: String,
+    attribute: MacroAttribute,
     min: Option<usize>,
     max: Option<usize>,
     description: Option<String>,
@@ -27,9 +28,10 @@ pub struct ArgAttrData {
 }
 
 impl ArgAttrData {
-    pub fn with_name(name: String) -> Self {
+    pub fn new(name: String, attribute: MacroAttribute) -> Self {
         ArgAttrData {
             name,
+            attribute,
             min: None,
             max: None,
             description: None,
@@ -40,9 +42,12 @@ impl ArgAttrData {
 
     pub fn from_arg_data(arg_data: FnArgData) -> Self {
         let arg_type = ArgumentType::new(&arg_data.pat_type);
-        let mut args = ArgAttrData::with_name(arg_data.arg_name.clone());
+        let mut args = ArgAttrData::new(
+            arg_data.arg_name.clone(),
+            arg_data.attribute.clone().unwrap()
+        );
 
-        if let Some(attribute) = &arg_data.attribute {
+        if let Some(attribute) = &arg_data.name_value {
             for (key, value) in attribute {
                 match key.as_str() {
                     attr::ARG => {

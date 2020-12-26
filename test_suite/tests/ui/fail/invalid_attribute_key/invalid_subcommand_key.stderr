@@ -4,4 +4,4 @@ error: custom attribute panicked
 3 | #[command]
   | ^^^^^^^^^^
   |
-  = help: message: invalid `subcommand` key `abc`
+  = help: message: invalid `subcommand` key: `abc`

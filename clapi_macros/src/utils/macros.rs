@@ -16,3 +16,11 @@ macro_rules! matches_map {
         }
     };
 }
+
+///// Executes the code if rust is not running in nightly
+// #[cfg(not(nightly))]
+// macro_rules! if_not_nightly {
+//     ($($tt:tt)*) => {
+//         $($tt)*
+//     };
+// }

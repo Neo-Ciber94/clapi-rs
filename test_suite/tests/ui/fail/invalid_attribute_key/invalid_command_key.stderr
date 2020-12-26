@@ -4,4 +4,4 @@ error: custom attribute panicked
 3 | #[command(abc="hello")]
   | ^^^^^^^^^^^^^^^^^^^^^^^
   |
-  = help: message: invalid `command` key `abc`
+  = help: message: invalid `command` key: `abc`
