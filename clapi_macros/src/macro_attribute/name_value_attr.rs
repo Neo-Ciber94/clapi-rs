@@ -78,6 +78,10 @@ impl NameValueAttribute {
         self.args.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.args.is_empty()
+    }
+
     pub fn get(&self, name: &str) -> Option<&Value> {
         self.args.get(name)
     }

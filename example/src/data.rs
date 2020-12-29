@@ -1,11 +1,12 @@
 use super::*;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 static VALUE : AtomicI64 = AtomicI64::new(0);
 
-#[subcommand]
+#[subcommand(parent="echo")]
 pub fn data(){}
 
-#[subcommand]
+#[subcommand(parent="data")]
 pub fn get(){
     println!("{}", VALUE.load(Ordering::Relaxed));
 }

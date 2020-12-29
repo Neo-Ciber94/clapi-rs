@@ -96,6 +96,17 @@ pub use app_macros::*;
 pub mod internal {
     pub extern crate clapi_macros_internal;
 
+    // These macros are used in `app_macros::app!` for declare the command option and args.
+    // This was implemented with `proc_macro` to provide a type aware declaration of the variables,
+    // currently in rust `Vec<$type:ty>` and `$type:ty` could be considered the same.
+    //
+    // In the `app_macros::app!` with declare the variables as:
+    // `let $arg_name : $arg_type = $crate::declare_argument_var!(arguments, $arg_name: $arg_type);`
+    //
+    // We give a name to the variable outside the `proc_macro` to allow the IDE to provide type
+    // information of the actual variable.
+    // (This was only tested in intellij with the rust plugin version `0.3.137.3543-203`)
+
     #[doc(hidden)]
     #[macro_export]
     macro_rules! declare_option_var {
@@ -112,13 +123,14 @@ pub mod internal {
         };
     }
 
-    #[doc(hidden)]
-    #[macro_export]
-    macro_rules! var_type {
-        ($ty:ty) => {
-            $crate::internal::clapi_macros_internal::__var_type!($ty)
-        };
-    }
+    // todo: remove
+    // #[doc(hidden)]
+    // #[macro_export]
+    // macro_rules! var_type {
+    //     ($ty:ty) => {
+    //         $crate::internal::clapi_macros_internal::__var_type!($ty)
+    //     };
+    // }
 }
 
 #[doc(hidden)]

@@ -30,6 +30,7 @@ impl<'de> Deserialize<'de> for ArgCount {
             Min,
             Max,
         }
+
         impl<'de> Deserialize<'de> for Field {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where
@@ -143,7 +144,6 @@ impl Serialize for Argument {
         //state.skip_field("validator")?;
         state.serialize_field("valid_values", &self.get_valid_values())?;
         state.serialize_field("default_values", &self.get_default_values())?;
-        //state.skip_field("values")?;
         state.end()
     }
 }

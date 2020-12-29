@@ -63,13 +63,12 @@ impl CommandAttrData {
 
     pub fn from_fn(args: AttributeArgs, func: ItemFn) -> Self {
         let name = func.sig.ident.to_string();
-        let attr_data =
-            NameValueAttribute::from_attribute_args(name.as_str(), args, AttrStyle::Outer).unwrap();
-        cmd::new_command(attr_data, func, false, true)
+        let attr_data = NameValueAttribute::from_attribute_args(name.as_str(), args, AttrStyle::Outer).unwrap();
+        imp::command_from_fn(attr_data, func, false, true, true)
     }
 
     pub fn from_path(args: AttributeArgs, func: ItemFn, path: PathBuf) -> Self {
-        cmd::new_command_from_path(args, func, path)
+        imp::command_from_path(args, func, path)
     }
 
     pub fn set_version(&mut self, version: String) {
@@ -505,14 +504,14 @@ pub fn is_option_bool_flag(fn_arg: &FnArgData) -> bool {
     }
 }
 
-mod cmd {
+mod imp {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use syn::{AttrStyle, Attribute, AttributeArgs, FnArg, Item, ItemFn, PatType, Stmt, Type, ItemStatic};
+    use syn::{AttrStyle, Attribute, AttributeArgs, FnArg, Item, ItemFn, PatType, Stmt, ItemStatic};
 
     use crate::arg::ArgAttrData;
-    use crate::command::{drop_command_attributes, is_option_bool_flag, CommandAttrData, FnArgData, assertions};
+    use crate::command::{drop_command_attributes, is_option_bool_flag, CommandAttrData, FnArgData, panics};
     use crate::macro_attribute::{MacroAttribute, MetaItem, NameValueAttribute};
     use crate::option::OptionAttrData;
     use crate::utils::{pat_type_to_string, path_to_string, NamePath};
@@ -521,30 +520,32 @@ mod cmd {
     use crate::attr;
     use crate::query::QueryItem;
 
-    // Create a new command from an `ItemFn`
-
-    pub fn new_command(
+    /// Implementation of `CommandAttrData::from_fn`
+    pub fn command_from_fn(
         name_value_attr: NameValueAttribute,
         item_fn: ItemFn,
         is_child: bool,
         get_subcommands: bool,
+        get_help: bool,
     ) -> CommandAttrData {
         let name = item_fn.sig.ident.to_string();
-        new_command_with_name(
+        command_from_fn_with_name(
             NamePath::new(name),
             name_value_attr,
             item_fn,
             is_child,
             get_subcommands,
+            get_help,
         )
     }
 
-    pub fn new_command_with_name(
+    pub fn command_from_fn_with_name(
         name: NamePath,
         name_value_attr: NameValueAttribute,
         item_fn: ItemFn,
         is_child: bool,
         get_subcommands: bool,
+        get_help: bool,
     ) -> CommandAttrData {
         let mut command = CommandAttrData::new(name, name_value_attr.clone(), is_child);
 
@@ -638,17 +639,18 @@ mod cmd {
         if get_subcommands {
             let mut subcommands = Vec::new();
             for (attribute, item_fn) in get_subcommands_from_fn(&item_fn) {
-                let subcommand = new_command(attribute.clone(), item_fn, true, true);
+                let subcommand = command_from_fn(attribute.clone(), item_fn, true, true, false);
                 subcommands.push((subcommand, attribute.clone()));
             }
 
             while let Some((subcommand, attribute)) = subcommands.pop() {
                 if attribute.contains_name(crate::attr::PARENT) {
-                    let name_path = attribute.get(crate::attr::PARENT)
+                    let literal = attribute.get(crate::attr::PARENT)
                         .unwrap()
                         .to_string_literal()
-                        .map(NamePath::new)
                         .expect("`parent` must be a string literal");
+
+                    let name_path = get_parent_path(literal, &subcommand.fn_name);
 
                     if let Some(parent) = command.get_mut_recursive(&name_path) {
                         parent.set_child(subcommand);
@@ -670,6 +672,32 @@ mod cmd {
                 } else {
                     command.set_child(subcommand);
                 }
+            }
+        }
+
+        // Get the `#[help]` static item if any
+        if get_help {
+            let mut result = item_fn.block.stmts.iter()
+                .filter_map(|stmt| {
+                    if let Stmt::Item(Item::Static(item_static)) = &stmt {
+                        if item_static.attrs.iter().any(|attribute| {
+                            let macro_attr = MacroAttribute::new(attribute.clone());
+                            assert!(macro_attr.is_empty(), "`#[help]` takes not params but was `{}`", macro_attr);
+                            attr::is_help(macro_attr.path())
+                        }) {
+                            return Some(item_static.clone());
+                        }
+                    }
+
+                    None
+                }).collect::<Vec<ItemStatic>>();
+
+            if result.len() > 1 {
+                panic!("multiple `#[help]` defined");
+            }
+
+            if result.len() == 1 {
+                command.set_help(result.remove(0));
             }
         }
 
@@ -819,50 +847,34 @@ mod cmd {
         (name, attribute, name_values)
     }
 
-    fn assert_is_non_vec_or_slice(ty: &Type, pat_type: &PatType) {
-        if !ty.is_vec() || !ty.is_slice() {
-            panic!(
-                "invalid argument type for: `{}`\
-                \nwhen multiples `arg` are defined, arguments cannot be declared as `Vec` or `slice`",
-                pat_type_to_string(pat_type)
-            );
-        }
-    }
-
-    // Create a new command from a path
-
-    pub fn new_command_from_path(
+    /// implementation of `CommandAttrData::from_path`
+    pub fn command_from_path(
         args: AttributeArgs,
         item_fn: ItemFn,
         root_path: PathBuf,
     ) -> CommandAttrData {
-        if set_entry_command() == false {
+        static IS_DEFINED: AtomicBool = AtomicBool::new(false);
+        if IS_DEFINED.compare_and_swap(false, true, Ordering::Relaxed) == true {
             panic!("multiple `command` entry points defined: `{}`", item_fn.sig.ident);
         }
-
-        let src = std::fs::read_to_string(&root_path)
-            .unwrap_or_else(|_| panic!("failed to read: {}", root_path.display()));
-        let root_file = syn::parse_file(&src)
-            .unwrap_or_else(|_| panic!("failed to parse: {:?}", root_path.file_name().unwrap()));
-
-        // root `command` must be a top function
-        assertions::is_top_function(&item_fn, &root_file);
 
         let attribute = NameValueAttribute::from_attribute_args(
             crate::attr::COMMAND, args, AttrStyle::Outer
         ).unwrap();
 
-        let mut root = new_command(
-            attribute, item_fn.clone(), false, true
-        );
+        let mut root = command_from_fn(attribute, item_fn.clone(), false, true, true);
 
         if let Some(help) = find_help(&root_path) {
+            if root.help.is_some() {
+                panic!("`#[help]` is already defined in `fn {}`", root.fn_name.name());
+            }
+
             root.set_help(help)
         }
 
         let mut subcommands = get_subcommands_data(&root_path);
 
-        while let Some((subcommand, path, attribute)) = subcommands.pop() {
+        while let Some((subcommand, _, attribute)) = subcommands.pop() {
             if attribute.contains_name(crate::attr::PARENT){
                 let literal = attribute.get(crate::attr::PARENT)
                     .unwrap()
@@ -872,27 +884,8 @@ mod cmd {
                 // If attribute was: #[subcommand(parent="")]
                 assert!(literal.trim().len() > 0, "`parent` was empty in `fn {}`", subcommand.fn_name.name());
 
-                let mut parent_path = literal.split("::")
-                    .map(|s| s.to_owned())
-                    .collect::<Vec<String>>();
+                let parent_name = get_parent_path(literal, &subcommand.fn_name);
 
-                if parent_path[0] == "super" {
-                    // Remove `super::`
-                    parent_path.remove(0);
-                } else {
-                    if parent_path[0] == "self" {
-                        // Remove `self::`
-                        parent_path.remove(0);
-                    }
-
-                    // If the subcommand is not defined in the root command path
-                    // we include the full path of the subcommand.
-                    if root_path != path {
-                        parent_path.splice(0..0, crate::query::get_mod_path(&path));
-                    }
-                }
-
-                let parent_name = NamePath::from_path(parent_path);
                 if parent_name == subcommand.fn_name {
                     panic!("self reference command parent in `{}`", subcommand.attribute);
                 }
@@ -901,7 +894,7 @@ mod cmd {
                     parent.set_child(subcommand);
                 } else {
                     let mut found = false;
-                    for (c, _, _) in &mut subcommands {
+                    for (c, ..) in &mut subcommands {
                         if let Some(parent) = find_command_recursive(c, &parent_name) {
                             parent.set_child(subcommand.clone());
                             found = true;
@@ -929,16 +922,15 @@ mod cmd {
         root
     }
 
-    fn set_entry_command() -> bool{
-        static IS_DEFINED: AtomicBool = AtomicBool::new(false);
-        !IS_DEFINED.compare_and_swap(false, true, Ordering::Relaxed)
-    }
-
     fn find_help(root_path: &Path) -> Option<ItemStatic> {
         let mut result = crate::query::find_map_items(
             root_path, true, true, |item| {
             if let Item::Static(item_static) = item {
-                if item_static.attrs.iter().any(|attribute| attr::is_help(&path_to_string(&attribute.path))) {
+                if item_static.attrs.iter().any(|attribute| {
+                    let macro_attr = MacroAttribute::new(attribute.clone());
+                    assert!(macro_attr.is_empty(), "`#[help]` takes not params but was `{}`", macro_attr);
+                    attr::is_help(macro_attr.path())
+                }){
                     return Some(item_static.clone());
                 }
             }
@@ -966,18 +958,52 @@ mod cmd {
         None
     }
 
+    fn get_parent_path(parent: String, current: &NamePath) -> NamePath {
+        // `self` is not needed
+        let parent_path = parent
+            .split("::")
+            .filter(|s| s != &"self")
+            .map(|s| s.to_owned())
+            .collect::<Vec<String>>();
+
+        // The path of the item ignore its name
+        let mut path = Vec::from(current.item_path());
+
+        // Navigate from the `current` to the `parent`
+        for s in parent_path {
+            if s == "super" {
+                match path.pop() {
+                    None => break,
+                    _ => {}
+                }
+            } else {
+                path.push(s);
+            }
+        }
+
+        if path.is_empty() {
+            panic!("cannot find parent command `{}` for `{}`", parent, current.name());
+        }
+
+        NamePath::from_path(path)
+    }
+
     fn get_subcommands_data(root_path: &Path) -> Vec<(CommandAttrData, PathBuf, NameValueAttribute)>{
         let query_data = get_subcommands_item_fn(root_path);
         let mut subcommands = Vec::new();
 
-        for QueryItem{ path, name_path, file, item: (item_fn, attr) } in query_data {
-            assertions::is_top_function(&item_fn, &file);
-
-            let command = new_command_with_name(
+        for QueryItem {
+            path,
+            name_path,
+            item: (item_fn, attr),
+            ..
+        } in query_data {
+            let command = command_from_fn_with_name(
                 name_path,
                 attr.clone(),
                 item_fn,
                 true,
+                false,
                 false
             );
 
@@ -1009,26 +1035,5 @@ mod cmd {
 
             None
         })
-    }
-}
-
-mod assertions {
-    use syn::{File, Item, ItemFn};
-
-    pub fn is_top_function(item_fn: &ItemFn, file: &File) {
-        let found = file
-            .items
-            .iter()
-            .filter_map(|item| matches_map!(item, Item::Fn(f) => f))
-            // We don't compare attribute because we don't know the order they are expanded
-            .any(|f| f.sig == item_fn.sig && f.vis == item_fn.vis && f.block == item_fn.block);
-
-        if !found {
-            panic!(
-                "`{}` is not a top function.\
-                \n`command` and `subcommand`s must be free functions and be declared outside a module.",
-                item_fn.sig.ident
-            )
-        }
     }
 }

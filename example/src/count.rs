@@ -20,12 +20,11 @@ pub fn count(min: usize, max: usize, closed: bool) {
     }
 }
 
-// #[subcomand(parent="count", description="hello")]
-// pub fn reverse(){
-//
-// }
-//
-// #[subcommand(parent="reverse")]
-// pub fn get(){
-//
-// }
+pub mod internal {
+    use super::*;
+
+    #[subcommand(parent="super::count")]
+    pub fn print10(){
+        println!("Diez = ten = 10");
+    }
+}

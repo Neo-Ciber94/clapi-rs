@@ -7,13 +7,15 @@ pub struct NamePath {
 }
 
 impl NamePath {
+    /// Constructs a new `NamePath` with the given item name.
     pub fn new(name: String) -> Self {
         assert_valid_path(&name);
         NamePath { path: vec![name] }
     }
 
+    /// Constructs a new `NamePath` from the given path.
     pub fn from_path(path: Vec<String>) -> Self {
-        assert!(path.len() > 0, "path is empty");
+        assert!(path.len() > 0, "path is invalid");
 
         for s in &path {
             assert_valid_path(s);
@@ -22,13 +24,22 @@ impl NamePath {
         NamePath { path }
     }
 
+    /// Returns the name of the item
     pub fn name(&self) -> &str {
         self.path.last()
             .map(|s| s.as_str())
             .unwrap()
     }
 
-    pub fn path(&self) -> &[String]{
+    /// Returns the path ignoring the item name.
+    ///
+    /// May be a empty slice if the item is a root item.
+    pub fn item_path(&self) -> &[String]{
+        &self.path[..self.path.len() - 1]
+    }
+
+    /// Returns the full path of the item.
+    pub fn full_path(&self) -> &[String]{
         self.path.as_slice()
     }
 }
@@ -41,7 +52,7 @@ impl Display for NamePath {
 
 fn assert_valid_path(path: &str){
     if path.trim().is_empty() {
-        panic!("path is empty");
+        panic!("path is invalid");
     }
 
     if !path.chars().all(|c|c.is_ascii_alphanumeric() || c == '_') {

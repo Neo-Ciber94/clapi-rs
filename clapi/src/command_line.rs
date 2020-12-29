@@ -376,44 +376,43 @@ pub fn split_into_platform_args(value: &str) -> Vec<String> {
 /// using the specified `quote_escape`.
 #[doc(hidden)]
 pub fn split_into_args_with_quote_escape(value: &str, quote_escape: char) -> Vec<String> {
-    const DOUBLE_QUOTE: char = '"';
+    const DOUBLE_QUOTE : char = '"';
 
     let mut result = Vec::new();
-    let mut iterator = value.chars().peekable();
     let mut buffer = String::new();
+    let mut chars = value.chars().peekable();
+    let mut in_quote = false;
 
-    while let Some(next_char) = iterator.next() {
-        if next_char.is_whitespace() {
-            if !buffer.is_empty() {
+    while let Some(next_char) = chars.next() {
+        match next_char {
+            _ if next_char.is_whitespace() && in_quote => {
+                buffer.push(next_char)
+            },
+            _ if next_char.is_whitespace() => {
+                if buffer.len() > 0 {
+                    result.push(buffer.clone());
+                    buffer.clear();
+                }
+            },
+            DOUBLE_QUOTE if in_quote => {
+                in_quote = false;
                 result.push(buffer.clone());
                 buffer.clear();
+            },
+            DOUBLE_QUOTE => {
+                in_quote = true;
+            },
+            _ if next_char == quote_escape && chars.peek().contains_some(&DOUBLE_QUOTE) => {
+                buffer.push(chars.next().unwrap());
+            },
+            _ => {
+                buffer.push(next_char);
             }
-
-            continue;
-        }
-
-        if next_char == quote_escape && iterator.peek().contains_some(&DOUBLE_QUOTE) {
-            buffer.push(iterator.next().unwrap());
-        } else if next_char == DOUBLE_QUOTE {
-            while let Some(c) = iterator.peek().cloned() {
-                if c == DOUBLE_QUOTE {
-                    iterator.next();
-                    if !buffer.is_empty() {
-                        result.push(buffer.clone());
-                        buffer.clear();
-                    }
-                    break;
-                } else {
-                    iterator.next();
-                    buffer.push(c);
-                }
-            }
-        } else {
-            buffer.push(next_char);
         }
     }
 
-    if !buffer.is_empty() {
+    // Add the rest
+    if buffer.len() > 0 {
         result.push(buffer);
     }
 

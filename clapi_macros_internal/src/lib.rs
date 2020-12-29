@@ -22,6 +22,7 @@ pub fn __declare_argument_var(input: TokenStream) -> TokenStream {
         .into()
 }
 
+// todo: remove
 #[proc_macro]
 pub fn __var_type(input: TokenStream) -> TokenStream {
     use syn::export::ToTokens;

@@ -2,6 +2,7 @@ use std::fmt::{Write, Display, Formatter};
 use crate::{Context, Command, CommandOption, Argument};
 use crate::utils::Then;
 
+/// A trait for provide help information about a `Command`.
 pub trait Help {
     /// Provides help information about the command like:
     /// name, description, options, subcommands and usage
@@ -53,32 +54,38 @@ pub enum HelpKind {
     Any
 }
 
+/// A buffer of bytes to write to.
 #[derive(Debug, Clone)]
 pub struct Buffer {
     buffer: Vec<u8>
 }
 
 impl Buffer {
+    /// Constructs a new `Buffer`.
     pub fn new() -> Self {
         Buffer {
             buffer: Vec::new()
         }
     }
 
+    /// Constructs a new `Buffer` with the specified initial capacity.
     pub fn with_capacity(capacity: usize) -> Self {
         Buffer {
             buffer: Vec::with_capacity(capacity)
         }
     }
 
+    /// Reserve the specified amount of bytes in this buffer.
     pub fn reserve(&mut self, additional: usize) {
         self.buffer.reserve(additional)
     }
 
+    /// Returns a reference to the buffer.
     pub fn buffer(&self) -> &Vec<u8>{
         &self.buffer
     }
 
+    /// Returns a mutable reference to the buffer.
     pub fn buffer_mut(&mut self) -> &mut Vec<u8>{
         &mut self.buffer
     }
@@ -97,6 +104,7 @@ impl Display for Buffer {
     }
 }
 
+/// A default implementation of the `Help` trait.
 pub struct DefaultHelp(pub HelpKind);
 
 impl Default for DefaultHelp {

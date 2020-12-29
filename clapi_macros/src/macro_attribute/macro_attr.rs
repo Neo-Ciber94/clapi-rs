@@ -61,6 +61,10 @@ impl MacroAttribute {
         self.args.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.args.is_empty()
+    }
+
     pub fn get(&self, index: usize) -> Option<&MetaItem> {
         self.args.get(index)
     }
