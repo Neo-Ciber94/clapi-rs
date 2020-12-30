@@ -756,7 +756,7 @@ pub mod validator {
 
         /// Returns the `Type` that is valid for this `Validator`, by default returns `None`.
         ///
-        /// When `None` is returned differents types are valid for the validator,
+        /// When `None` is returned differents types may be valid for the validator,
         /// for example `"1"` can be valid for types like `i32`, `u64`, `f32`, ...
         /// to ensure the validator is only valid for `u64` the implementor must return: `Some(Type::of::<u64>())`.
         ///
@@ -852,7 +852,7 @@ pub mod validator {
     ///
     /// let r#type = Type::of::<i64>();
     /// assert_eq!(r#type.name(), "i64");
-    /// assert_eq!(r#type.id(), &TypeId::of::<i64>());
+    /// assert_eq!(r#type.id(), TypeId::of::<i64>());
     /// ```
     #[derive(Debug, Clone, Copy)]
     pub struct Type {
@@ -874,8 +874,8 @@ pub mod validator {
         }
 
         /// Returns the `TypeId` of this type.
-        pub fn id(&self) -> &TypeId {
-            &self.type_id
+        pub fn id(&self) -> TypeId {
+            self.type_id
         }
     }
 

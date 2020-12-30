@@ -86,7 +86,7 @@ impl ArgAttrData {
                         Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
                         Value::Array(array) => args.set_default_values(array.clone()),
                     },
-                    _ => panic!("invalid `{}` key `{}`", attribute.path(), key),
+                    _ => panic!("invalid arg key `{}`", key),
                 }
             }
         }

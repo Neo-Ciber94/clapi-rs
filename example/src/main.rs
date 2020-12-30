@@ -11,12 +11,6 @@ use clapi::{Context, Command};
 fn main(){
 }
 
-// enum ValidatorType {
-//     U8, U16, U32, U64, U128, USIZE,
-//     I8, I16, I32, I64, I128, ISIZE,
-//     Bool, Char, String, IpAddress, SocketAddress
-// }
-
 #[subcommand]
 #[arg(values, min=1)]
 fn echo(values: Vec<String>){

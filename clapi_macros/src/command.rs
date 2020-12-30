@@ -450,13 +450,6 @@ pub struct FnArgData {
     pub is_option: bool,
 }
 
-impl FnArgData {
-    pub fn drop_attribute(mut self) -> Self {
-        self.name_value = None;
-        self
-    }
-}
-
 fn is_clapi_result_type(ty: &Type) -> bool {
     if ty.is_result() {
         return true;
@@ -511,7 +504,7 @@ mod imp {
     use syn::{AttrStyle, Attribute, AttributeArgs, FnArg, Item, ItemFn, PatType, Stmt, ItemStatic};
 
     use crate::arg::ArgAttrData;
-    use crate::command::{drop_command_attributes, is_option_bool_flag, CommandAttrData, FnArgData, panics};
+    use crate::command::{drop_command_attributes, is_option_bool_flag, CommandAttrData, FnArgData};
     use crate::macro_attribute::{MacroAttribute, MetaItem, NameValueAttribute};
     use crate::option::OptionAttrData;
     use crate::utils::{pat_type_to_string, path_to_string, NamePath};

@@ -35,11 +35,15 @@ impl OptionAttrData {
     }
 
     pub fn from_arg_data(arg_data: FnArgData) -> Self {
-        let mut option = OptionAttrData::new(arg_data.arg_name.clone());
-        let mut args = ArgAttrData::from_arg_data(arg_data.clone().drop_attribute());
+        // The `ArgAttrData` don't need the attributes, these are read and set by the option
+        fn drop_attributes(mut data: FnArgData) -> FnArgData {
+            data.attribute = None;
+            data.name_value = None;
+            data
+        }
 
-        // Sets the attribute if any
-        option.attribute = arg_data.attribute.clone();
+        let mut option = OptionAttrData::new(arg_data.arg_name.clone());
+        let mut args = ArgAttrData::from_arg_data(drop_attributes(arg_data.clone()));
 
         if let Some(att) = &arg_data.name_value {
             for (key, value) in att {
@@ -87,7 +91,7 @@ impl OptionAttrData {
                         Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
                         Value::Array(array) => args.set_default_values(array.clone()),
                     },
-                    _ => panic!("invalid `{}` key `{}`", att.path(), key),
+                    _ => panic!("invalid option key `{}`", key),
                 }
             }
         }
@@ -113,6 +117,8 @@ impl OptionAttrData {
             args.set_max(1);
         }
 
+        // Sets the attribute and the args
+        option.attribute = arg_data.attribute;
         option.set_args(args);
         option
     }
