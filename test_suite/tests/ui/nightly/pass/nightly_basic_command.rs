@@ -11,6 +11,9 @@ fn echo(times: u64, values: Vec<String>){
 #[subcommand(description=r#"Shows the author of the command"#, version=2.1)]
 fn author(){}
 
+#[subcommand(description="list the authors", parent="author")]
+fn list(){}
+
 #[help]
 static HELP : MyHelp = MyHelp;
 

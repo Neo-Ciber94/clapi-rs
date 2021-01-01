@@ -1,0 +1,7 @@
+error: custom attribute panicked
+ --> $DIR/inexistent_parent.rs:3:1
+  |
+3 | #[command]
+  | ^^^^^^^^^^
+  |
+  = help: message: cannot find parent subcommand: `list2` for `sort`

@@ -644,6 +644,9 @@ mod imp {
                         .to_string_literal()
                         .expect("`parent` must be a string literal");
 
+                    // If attribute was: #[subcommand(parent="")]
+                    assert!(literal.trim().len() > 0, "`parent` was empty in `fn {}`", subcommand.fn_name.name());
+
                     let name_path = get_parent_path(literal, &subcommand.fn_name);
 
                     if let Some(parent) = command.get_mut_recursive(&name_path) {

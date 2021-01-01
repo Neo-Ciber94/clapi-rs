@@ -19,12 +19,3 @@ pub fn count(min: usize, max: usize, closed: bool) {
         }
     }
 }
-
-pub mod internal {
-    use super::*;
-
-    #[subcommand(parent="super::count")]
-    pub fn print10(){
-        println!("Diez = ten = 10");
-    }
-}

@@ -6,6 +6,7 @@ fn ui() {
 
     #[cfg(nightly)]
     {
-        t.pass("tests/ui/nightly/*.rs");
+        t.compile_fail("tests/ui/nightly/fail/**/*.rs");
+        t.pass("tests/ui/nightly/pass/*.rs");
     }
 }
