@@ -19,24 +19,24 @@ use syn::Lit;
 #[derive(Debug, Clone)]
 pub struct ArgAttrData {
     name: String,
-    attribute: MacroAttribute,
     min: Option<usize>,
     max: Option<usize>,
     description: Option<String>,
     fn_arg: Option<(FnArgData, ArgumentType)>,
     default_values: Vec<Lit>,
+    attribute: Option<MacroAttribute>,
 }
 
 impl ArgAttrData {
-    pub fn new(name: String, attribute: MacroAttribute) -> Self {
+    pub fn new(name: String, attribute: Option<MacroAttribute>) -> Self {
         ArgAttrData {
             name,
-            attribute,
             min: None,
             max: None,
             description: None,
             fn_arg: None,
             default_values: vec![],
+            attribute,
         }
     }
 
@@ -44,7 +44,7 @@ impl ArgAttrData {
         let arg_type = ArgumentType::new(&arg_data.pat_type);
         let mut args = ArgAttrData::new(
             arg_data.arg_name.clone(),
-            arg_data.attribute.clone().unwrap()
+            arg_data.attribute.clone()
         );
 
         if let Some(attribute) = &arg_data.name_value {
@@ -86,7 +86,7 @@ impl ArgAttrData {
                         Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
                         Value::Array(array) => args.set_default_values(array.clone()),
                     },
-                    _ => panic!("invalid arg key `{}`", key),
+                    _ => panic!("invalid `arg` key `{}`", key),
                 }
             }
         }

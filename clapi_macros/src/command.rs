@@ -501,7 +501,7 @@ mod imp {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use syn::{AttrStyle, Attribute, AttributeArgs, FnArg, Item, ItemFn, PatType, Stmt, ItemStatic};
+    use syn::{AttrStyle, Attribute, AttributeArgs, FnArg, Item, ItemFn, PatType, Stmt, ItemStatic, File};
 
     use crate::arg::ArgAttrData;
     use crate::command::{drop_command_attributes, is_option_bool_flag, CommandAttrData, FnArgData};
@@ -512,6 +512,7 @@ mod imp {
     use crate::TypeExtensions;
     use crate::attr;
     use crate::query::QueryItem;
+    use syn::export::ToTokens;
 
     /// Implementation of `CommandAttrData::from_fn`
     pub fn command_from_fn(
@@ -749,7 +750,7 @@ mod imp {
                 }
             }
 
-            unreachable!("No a function arg")
+            panic!("`{}` is not a valid function arg", fn_arg.to_token_stream().to_string());
         }
 
         let mut ret = Vec::new();
@@ -850,6 +851,10 @@ mod imp {
         if IS_DEFINED.compare_and_swap(false, true, Ordering::Relaxed) == true {
             panic!("multiple `command` entry points defined: `{}`", item_fn.sig.ident);
         }
+
+        let src = std::fs::read_to_string(&root_path).unwrap();
+        let file = syn::parse_file(&src).unwrap();
+        assert_is_top_free_function(&file, &item_fn);
 
         let attribute = NameValueAttribute::from_attribute_args(
             crate::attr::COMMAND, args, AttrStyle::Outer
@@ -991,6 +996,10 @@ mod imp {
             item: (item_fn, attr),
             ..
         } in query_data {
+            let src = std::fs::read_to_string(&path).unwrap();
+            let file = syn::parse_file(&src).unwrap();
+            assert_is_top_free_function(&file, &item_fn);
+
             let command = command_from_fn_with_name(
                 name_path,
                 attr.clone(),
@@ -1028,5 +1037,26 @@ mod imp {
 
             None
         })
+    }
+
+    fn assert_is_top_free_function(file: &File, item_fn: &ItemFn) {
+        fn eq_item_fn(left: &ItemFn, right: &ItemFn) -> bool {
+            left.block == right.block
+                && left.sig == right.sig
+                && left.vis == right.vis
+        }
+
+        for item in &file.items {
+            match item {
+                Item::Fn(cur_fn) => {
+                    if eq_item_fn(cur_fn, item_fn) {
+                        return;
+                    }
+                },
+                _ => {}
+            }
+        }
+
+        panic!("`{}` is not a top free function", item_fn.sig.ident);
     }
 }

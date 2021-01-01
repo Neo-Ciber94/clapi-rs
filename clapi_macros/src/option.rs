@@ -41,7 +41,6 @@ impl OptionAttrData {
             data.name_value = None;
             data
         }
-
         let mut option = OptionAttrData::new(arg_data.arg_name.clone());
         let mut args = ArgAttrData::from_arg_data(drop_attributes(arg_data.clone()));
 
@@ -91,7 +90,7 @@ impl OptionAttrData {
                         Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
                         Value::Array(array) => args.set_default_values(array.clone()),
                     },
-                    _ => panic!("invalid option key `{}`", key),
+                    _ => panic!("invalid `option` key `{}`", key),
                 }
             }
         }

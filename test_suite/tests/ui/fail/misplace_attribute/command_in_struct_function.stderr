@@ -4,5 +4,4 @@ error: custom attribute panicked
 6 |     #[command]
   |     ^^^^^^^^^^
   |
-  = help: message: `app` is not a top function.
-          `command` and `subcommand`s must be free functions and be declared outside a module.
+  = help: message: `app` is not a top free function

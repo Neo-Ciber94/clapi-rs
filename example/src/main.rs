@@ -1,14 +1,13 @@
 use clapi::macros::*;
-use clapi::help::{Help, DefaultHelp, Buffer};
-use clapi::{Context, Command};
+// use clapi::help::{Help, DefaultHelp, Buffer};
+// use clapi::{Context, Command};
 
 // mod count;
 // mod utils;
 // mod data;
 
-/// A command
-#[command(description="A test", version="1.0.1")]
-fn main(){
+#[command]
+pub fn main(){
 }
 
 #[subcommand]
