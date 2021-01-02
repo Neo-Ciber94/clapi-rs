@@ -1,10 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_must_use)]
 
-mod inner_cell;
-mod lazy;
-mod once_cell;
-
 /// Extension methods.
 mod ext;
 pub use ext::*;
