@@ -2,6 +2,6 @@
 members=[
     "clapi",
     "clapi_macros",
-    "clapi_macros_internal",
+    "clapi_internal",
     "test_suite"
 ]

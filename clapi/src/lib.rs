@@ -199,8 +199,8 @@ pub use app_macros::*;
 
 /// Utilities intended for internal use.
 #[doc(hidden)]
-pub mod internal {
-    pub extern crate clapi_macros_internal;
+pub mod private {
+    pub extern crate clapi_internal;
 
     // These macros are used in `app_macros::app!` for declare the command option and args.
     // This was implemented with `proc_macro` to provide a type aware declaration of the variables,
@@ -217,7 +217,7 @@ pub mod internal {
     #[macro_export]
     macro_rules! declare_option_var {
         ($options:ident, $name:ident: $ty:ty) => {
-            $crate::internal::clapi_macros_internal::__declare_option_var!($options, $name: $ty)
+            $crate::private::clapi_internal::__declare_option_var!($options, $name: $ty)
         };
     }
 
@@ -225,19 +225,10 @@ pub mod internal {
     #[macro_export]
     macro_rules! declare_argument_var {
         ($arguments:ident, $name:ident: $ty:ty) => {
-            $crate::internal::clapi_macros_internal::__declare_argument_var!($arguments, $name: $ty)
+            $crate::private::clapi_internal::__declare_argument_var!($arguments, $name: $ty)
         };
     }
-
-    // todo: remove
-    // #[doc(hidden)]
-    // #[macro_export]
-    // macro_rules! var_type {
-    //     ($ty:ty) => {
-    //         $crate::internal::clapi_macros_internal::__var_type!($ty)
-    //     };
-    // }
 }
 
 #[doc(hidden)]
-pub use internal::*;
+pub use private::*;

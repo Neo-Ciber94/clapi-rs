@@ -182,7 +182,8 @@ pub enum VarType {
 }
 
 impl VarType {
-    pub fn inner(&self) -> &Type {
+    #[allow(dead_code)]
+    pub fn get_type(&self) -> &Type {
         match self {
             VarType::Type(ty) => ty.as_ref(),
             VarType::Vec(ty) => ty.as_ref(),
