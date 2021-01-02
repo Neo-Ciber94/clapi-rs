@@ -114,7 +114,8 @@
 //!                 (alias => "t")
 //!                 (@arg times =>
 //!                     (type => u64)
-//!                     (count => 1..)
+//!                     (default => 1)
+//!                     (count => 1)
 //!                 )
 //!             )
 //!             (handler (times: u64, ...values: Vec<String>) => {
