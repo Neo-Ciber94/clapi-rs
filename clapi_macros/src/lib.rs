@@ -31,15 +31,13 @@ mod var;
 /// - `version`: Version of the command-line app.
 ///
 /// # Example:
-/// ```ignore no_run
+/// ```ignore
 /// use clapi::macros::*;
 ///
 /// #[command(description="A sample app", version=1.0)]
 /// fn main(){
 ///     println!("Hello World!");
 /// }
-///
-/// // > cargo run
 /// ```
 #[cfg(not(nightly))]
 #[proc_macro_attribute]
@@ -60,15 +58,13 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - `version`: Version of the command-line app.
 ///
 /// # Example:
-/// ```text
+/// ```ignore
 /// use clapi::macros::*;
 ///
 /// #[command(description="A sample app", version=1.0)]
 /// fn main(){
 ///     println!("Hello World!");
 /// }
-///
-/// // > cargo run
 /// ```
 #[cfg(nightly)]
 #[proc_macro_attribute]
@@ -94,7 +90,7 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - `version`: Version of the subcommand.
 ///
 /// # Example:
-/// ```text
+/// ```ignore
 /// use clapi::macros::*;
 ///
 /// #[command]
@@ -104,8 +100,6 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///         println!("This is a test");
 ///     }
 /// }
-///
-/// // > cargo run -- test
 /// ```
 #[proc_macro_attribute]
 #[allow(unreachable_code)]
@@ -152,7 +146,7 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
 /// - `Option<T>` where `T` implements `FromStr`.
 ///
 /// # Example:
-/// ```text
+/// ```ignore
 /// use clapi::macros::*;
 ///
 /// #[command]
@@ -167,8 +161,6 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
 ///         }
 ///     }
 /// }
-///
-/// // > cargo run -- --repeat -u
 /// ```
 #[proc_macro_attribute]
 pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
@@ -194,7 +186,7 @@ pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
 /// - `Option<T>` where `T` implements `FromStr`.
 ///
 /// # Examples:
-/// ```text
+/// ```ignore
 /// use clapi::macros::*;
 ///
 /// #[command]
@@ -202,8 +194,6 @@ pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
 /// fn main(args: Vec<String>){
 ///     println!("{}", args.join(" "));
 /// }
-///
-/// // > cargo run -- one two three
 /// ```
 #[proc_macro_attribute]
 pub fn arg(_: TokenStream, _: TokenStream) -> TokenStream {
@@ -213,7 +203,7 @@ pub fn arg(_: TokenStream, _: TokenStream) -> TokenStream {
 
 /// Mark a static item as the `Help` provider for the command.
 ///
-/// ```text
+/// ```ignore
 /// use clapi::macros::*;
 /// use clapi::{Context, Command};
 /// use clapi::help::{Help, DefaultHelp};

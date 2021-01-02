@@ -152,11 +152,9 @@ Requires `macros` feature enable.
 ```rust
 use clapi::macros::*;
 
-// Mark the app entry point with `command` attribute
 #[command(version=1.0)]
 fn main(){ }
 
-// Mark a function as a `subcommand` and defines if `option` and `arg`
 #[subcommand]
 #[option(times, alias="t", default=1)]
 #[arg(values, min=1)]
