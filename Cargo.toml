@@ -3,6 +3,5 @@ members=[
     "clapi",
     "clapi_macros",
     "clapi_macros_internal",
-    "test_suite",
-    "example"
+    "test_suite"
 ]
