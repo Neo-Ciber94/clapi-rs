@@ -13,6 +13,7 @@
 //! ## Parsing the arguments
 //! ```no_run
 //! use clapi::{Command, CommandOption, Argument, Parser, Context};
+//! use clapi::help::{DefaultHelp, HelpKind, Help, Buffer};
 //! use clapi::validator::parse_validator;
 //!
 //! let command = Command::root()
@@ -37,7 +38,7 @@
 //!     let times = result.get_option_arg("times")
 //!         .unwrap()
 //!         .convert::<u64>()
-//!         .unwrap(); // This is safe because default is 1
+//!         .unwrap();
 //!
 //!     let values = result.arg().unwrap()
 //!         .convert_all::<String>()
@@ -47,6 +48,13 @@
 //!     for _ in 0..times {
 //!         println!("{}", values);
 //!     }
+//! } else {
+//!     // Fallthrough
+//!     static HELP : DefaultHelp = DefaultHelp(HelpKind::Any);
+//!
+//!     let mut buffer = Buffer::new();
+//!     HELP.help(&mut buffer, &context, result.command()).unwrap();
+//!     println!("{}", buffer);
 //! }
 //! ```
 //!
@@ -182,6 +190,10 @@ pub use self::parser::*;
 pub use self::symbol::*;
 pub use self::tokenizer::*;
 
+/// Clapi macros
+#[macro_use]
+mod app_macros;
+
 /// Macro attributes for create command-line apps. Require `macros` feature enable.
 #[cfg(feature = "macros")]
 pub mod macros {
@@ -192,10 +204,6 @@ pub mod macros {
 #[doc(hidden)]
 #[cfg(feature = "macros")]
 pub use macros::*;
-
-#[macro_use]
-mod app_macros;
-pub use app_macros::*;
 
 /// Utilities intended for internal use.
 #[doc(hidden)]
@@ -229,6 +237,3 @@ pub mod private {
         };
     }
 }
-
-#[doc(hidden)]
-pub use private::*;

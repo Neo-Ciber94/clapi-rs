@@ -18,6 +18,7 @@ See the examples below creating the same app using the 4 methods.
 
 ```rust
 use clapi::{Command, CommandOption, Argument, Parser, Context};
+use clapi::help::{DefaultHelp, HelpKind, Help, Buffer};
 use clapi::validator::parse_validator;
 
 let command = Command::root()
@@ -41,7 +42,7 @@ if result.command().get_name() == "repeat" {
     let times = result.get_option_arg("times")
         .unwrap()
         .convert::<u64>()
-        .unwrap(); // This is safe because default is 1
+        .unwrap();
 
     let values = result.arg().unwrap()
         .convert_all::<String>()
@@ -51,6 +52,13 @@ if result.command().get_name() == "repeat" {
     for _ in 0..times {
         println!("{}", values);
     }
+} else {
+    // Fallthrough
+    static HELP : DefaultHelp = DefaultHelp(HelpKind::Any);
+
+    let mut buffer = Buffer::new();
+    HELP.help(&mut buffer, &context, result.command()).unwrap();
+    println!("{}", buffer);
 }
 ```
 </details>
