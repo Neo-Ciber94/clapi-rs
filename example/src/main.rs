@@ -1,4 +1,5 @@
 use clapi::macros::*;
+//use clapi::{Tokenizer, Context, Command};
 // use clapi::help::{Help, DefaultHelp, Buffer};
 // use clapi::{Context, Command};
 
@@ -6,24 +7,35 @@ use clapi::macros::*;
 // mod utils;
 // mod data;
 
-#[command]
-pub fn main(){
-}
 
-#[subcommand]
-#[arg(values, min=1)]
-fn echo(values: Vec<String>){
-    let mut iter = values.iter().peekable();
-    while let Some(x) = iter.next() {
-        print!("{}", x);
+fn main(){}
+// #[command]
+// pub fn main() -> clapi::Result<()> {
+//     println!("Hello World");
+//
+//     Ok(())
+// }
+//
+// #[subcommand]
+// #[arg(values, max=2)]
+// fn sum(values: Vec<i64>){
+//     println!("{}", values.iter().sum::<i64>());
+// }
 
-        if iter.peek().is_some() {
-            print!(" ");
-        }
-    }
-
-    println!()
-}
+// #[subcommand]
+// #[arg(values, min=1)]
+// fn echo(values: Vec<String>){
+//     let mut iter = values.iter().peekable();
+//     while let Some(x) = iter.next() {
+//         print!("{}", x);
+//
+//         if iter.peek().is_some() {
+//             print!(" ");
+//         }
+//     }
+//
+//     println!()
+// }
 
 // fn _entry(){
 //     let command = Command::root()

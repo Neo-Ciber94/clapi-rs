@@ -170,16 +170,19 @@ impl Help for DefaultHelp {
                 write!(buf, "{}", command.get_name())?;
 
                 if command.get_options().len() > 1 {
-                    write!(buf, " [OPTIONS]")?;
-                } else {
-                    write!(buf, " [OPTION]")?;
+                    if command.get_options().len() == 1 {
+                        write!(buf, " [OPTION]")?;
+                    } else {
+                        write!(buf, " [OPTIONS]")?;
+                    }
                 }
 
                 for arg in command.get_args() {
+                    let arg_name = arg.get_name().to_uppercase();
                     if arg.get_arg_count().max() > 1 {
-                        write!(buf, " [{}]...", arg.get_name())?;
+                        write!(buf, " [{}]...", arg_name)?;
                     } else {
-                        write!(buf, " [{}] ", arg.get_name())?;
+                        write!(buf, " [{}] ", arg_name)?;
                     }
                 }
 

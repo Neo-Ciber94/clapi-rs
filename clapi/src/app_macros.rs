@@ -8,8 +8,6 @@ macro_rules! app {
                 @command ($crate::Command::root()) $($rest)+
             }
         )
-        .use_default_help()
-        .use_default_suggestions()
     }};
 
     ($command_name:ident => $($rest:tt)+) => {{
@@ -18,8 +16,6 @@ macro_rules! app {
                 @command ($crate::Command::new(stringify!($command_name))) $($rest)+
             }
         )
-        .use_default_help()
-        .use_default_suggestions()
     }};
 
     ($command_name:expr => $($rest:tt)+) => {{
@@ -28,8 +24,6 @@ macro_rules! app {
                 @command ($crate::Command::new($command_name)) $($rest)+
             }
         )
-        .use_default_help()
-        .use_default_suggestions()
     }};
 
     // Command
@@ -313,19 +307,31 @@ macro_rules! app {
 #[macro_export]
 macro_rules! run_app {
     ( => $($rest:tt)+) => {
-        $crate::app!( => $($rest)+).run()
+        $crate::app!( => $($rest)+)
+             .use_default_suggestions()
+             .use_default_help()
+             .run()
     };
 
     ($name:ident => $($rest:tt)+) => {
-        $crate::app!($name => $($rest)+).run()
+        $crate::app!($name => $($rest)+)
+             .use_default_suggestions()
+             .use_default_help()
+             .run()
     };
 
     ($name:expr => $($rest:tt)+) => {
-        $crate::app!($name => $($rest)+).run()
+        $crate::app!($name => $($rest)+)
+             .use_default_suggestions()
+             .use_default_help()
+             .run()
     };
 
     ($name:literal => $($rest:tt)+) => {
-        $crate::app!($name => $($rest)+).run()
+        $crate::app!($name => $($rest)+)
+             .use_default_suggestions()
+             .use_default_help()
+             .run()
     };
 }
 
@@ -348,8 +354,6 @@ macro_rules! crate_app {
                 ) $($rest)*
             }
         )
-        .use_default_help()
-        .use_default_suggestions()
     }};
 }
 

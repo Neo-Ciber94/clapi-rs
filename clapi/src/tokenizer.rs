@@ -2,13 +2,14 @@ use crate::context::Context;
 use crate::error::{Error, ErrorKind, Result};
 use crate::utils::Then;
 use std::borrow::Borrow;
+use std::fmt::{Display, Formatter};
 
 /// Represents a command-line token.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Token {
     // A command
     Cmd(String),
-    // An option
+    // An prefix and option
     Opt(String, String),
     // An argument
     Arg(String),
@@ -51,7 +52,7 @@ impl Token {
         }
     }
 
-    /// Converts this `Token` into its `String` value.
+    /// Returns a `String` representation of this `Token`.
     pub fn into_string(self) -> String {
         match self {
             Token::Cmd(s) => s,
@@ -62,12 +63,23 @@ impl Token {
     }
 }
 
+impl Display for Token {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Token::Cmd(name) => write!(f, "{}", name),
+            Token::Opt(prefix, name) => write!(f, "{}{}", prefix, name),
+            Token::Arg(name) => write!(f, "{}", name),
+            Token::EOO => write!(f, "{}", END_OF_OPTIONS)
+        }
+    }
+}
+
 /// A converts a collection of `String`s to `Token`s.
 #[derive(Debug)]
 pub struct Tokenizer;
 
 impl Tokenizer {
-    pub fn tokenize<S, I>(&mut self, context: &Context, args: I) -> Result<Vec<Token>>
+    pub fn tokenize<S, I>(&self, context: &Context, args: I) -> Result<Vec<Token>>
         where S: Borrow<str>,
               I: IntoIterator<Item = S> {
         let mut iterator = args

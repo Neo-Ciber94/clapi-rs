@@ -738,7 +738,7 @@ impl Index<String> for ArgumentList {
     }
 }
 
-/// Provides the `Validator` trait used for validate the values of an `Arguments`.
+/// Provides the `Validator` trait used for validate the values of an `Argument`.
 pub mod validator {
     use crate::error::{Error, ErrorKind, Result};
     use std::any::TypeId;

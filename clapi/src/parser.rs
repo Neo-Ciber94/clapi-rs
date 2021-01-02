@@ -1,14 +1,14 @@
+use std::borrow::Borrow;
+use std::iter::Peekable;
 use crate::args::ArgumentList;
 use crate::command::Command;
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, Result};
+use crate::help::HelpKind;
 use crate::option::{CommandOption, OptionList};
 use crate::parse_result::ParseResult;
 use crate::tokenizer::{Token, Tokenizer};
 use crate::utils::Then;
-use std::borrow::Borrow;
-use crate::help::HelpKind;
-use std::iter::Peekable;
 
 /// A command-line argument parser.
 #[derive(Debug)]
@@ -24,7 +24,7 @@ impl Parser {
         // Gets executing command
         let command = self.get_executing_command(context, &mut iterator)?;
 
-        // Gets the commands options
+        // Gets the commands options and its arguments
         let mut options = self.get_options(context, command, &mut iterator)?;
 
         // Skip next `end of arguments` token (if any)
@@ -63,12 +63,8 @@ impl Parser {
             ));
         }
 
-        // Sets the command options and arguments
-        Ok(ParseResult::new(
-            command.clone(),
-            options,
-            args,
-        ))
+        // Sets the command, options and arguments
+        Ok(ParseResult::new(command.clone(), options, args))
     }
 
     fn get_executing_command<'a, I: Iterator<Item=&'a Token>>(&self, context: &'a Context, iterator: &mut Peekable<I>) -> Result<&'a Command> {
@@ -127,8 +123,8 @@ impl Parser {
                                 // before to the last option as arguments (if any)
                                 if let Some(mut index) = iterator.clone().position(|t| t.is_eoo()) {
                                     while index > 0 {
-                                        let t = iterator.next().unwrap().clone().into_string();
-                                        values.push(t);
+                                        let s = iterator.next().unwrap().clone().into_string();
+                                        values.push(s);
                                         index -= 1;
                                     }
                                 }
@@ -198,8 +194,8 @@ impl Parser {
                 }
             } else {
                 // If there is no `Argument`s left, pass the rest of the tokens as values
-                while let Some(s) = iterator.next().cloned() {
-                    values.push(s.into_string());
+                while let Some(t) = iterator.next().cloned() {
+                    values.push(t.into_string());
                 }
             }
 
@@ -227,21 +223,6 @@ impl Parser {
         Ok(command_args)
     }
 
-    fn set_default_options(&self, command: &Command, options: &mut OptionList) -> Result<()> {
-        let default_options = command
-            .then(|c| c.get_options().iter())
-            .filter(|o| o.get_args().iter().any(|a| a.has_default_values()));
-
-        // Sets the options that takes default arguments
-        for opt in default_options {
-            if !options.contains(opt.get_name()) {
-                options.add(opt.clone()).unwrap();
-            }
-        }
-
-        Ok(())
-    }
-
     fn set_required_options(&self, command: &Command, options: &mut OptionList) -> Result<()> {
         let required_options = command
             .then(|c| c.get_options().iter())
@@ -252,6 +233,21 @@ impl Parser {
                 return Err(Error::from(ErrorKind::MissingOption(
                     opt.get_name().to_owned(),
                 )));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn set_default_options(&self, command: &Command, options: &mut OptionList) -> Result<()> {
+        let default_options = command
+            .then(|c| c.get_options().iter())
+            .filter(|o| o.get_args().iter().any(|a| a.has_default_values()));
+
+        // Sets the options that takes default arguments
+        for opt in default_options {
+            if !options.contains(opt.get_name()) {
+                options.add(opt.clone()).unwrap();
             }
         }
 

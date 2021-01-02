@@ -1,0 +1,7 @@
+error: custom attribute panicked
+ --> $DIR/duplicated_option.rs:3:1
+  |
+3 | #[command]
+  | ^^^^^^^^^^
+  |
+  = help: message: function argument `times` is already used in `#[option(times)]`

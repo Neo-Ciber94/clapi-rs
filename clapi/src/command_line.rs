@@ -162,7 +162,7 @@ impl CommandLine {
         if is_help_option(help.as_ref(), parse_result) {
             // handler for: subcommand --help [ignore args]
             if command.get_parent().is_some() {
-                println!("{}", self.get_message_for_command(command, MessageKind::Help));
+                print!("{}", self.get_message_for_command(command, MessageKind::Help));
                 Ok(())
             } else {
                 // handler for: --help [subcommand]

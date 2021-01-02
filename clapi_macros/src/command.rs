@@ -787,10 +787,11 @@ mod imp {
             }
         }
 
-        // If an `option` or `arg` attribute is defined but there is no function arg
-        if fn_args.is_empty() && attributes.len() > 0 {
-            let fn_arg_name = &attributes[0].0;
-            panic!("`{}` is no defined in `fn {}`", fn_arg_name, item_fn.sig.ident);
+        // Check the argument declared in the `option` or `arg` exists in the function
+        for (path, _, _) in &attributes {
+            if !fn_args.iter().any(|(arg_name, _)| arg_name == path) {
+                panic!("argument `{}` is no defined in `fn {}`", path, item_fn.sig.ident);
+            }
         }
 
         for (arg_name, pat_type) in fn_args {
