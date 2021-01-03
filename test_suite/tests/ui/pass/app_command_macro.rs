@@ -1,6 +1,6 @@
 
 fn main(){
-    let _app : clapi::CommandLine = clapi::app! { MyApp =>
+    let _app : clapi::Command = clapi::app! { @@command MyApp =>
         (description => "Sums a set of numbers")
         (about => "sum 1.0")
         (@option times =>

@@ -87,7 +87,11 @@ macro_rules! crate_version {
 /// ```
 #[macro_export]
 macro_rules! app {
-    // Here start
+    //////////////////////////////////////////////////////////////////////
+    // This is the entry point to create a `CommandLine`                //
+    //////////////////////////////////////////////////////////////////////
+
+    // Create a `CommandLine` with `Command::root()`
     (=> $($rest:tt)+) => {{
         $crate::CommandLine::new(
             $crate::app!{
@@ -96,6 +100,7 @@ macro_rules! app {
         )
     }};
 
+    // Create a `CommandLine` with `Command::new(command_name)`
     ($command_name:ident => $($rest:tt)+) => {{
         $crate::CommandLine::new(
             $crate::app!{
@@ -104,6 +109,7 @@ macro_rules! app {
         )
     }};
 
+    // Create a `CommandLine` with `Command::new(command_name)`
     ($command_name:expr => $($rest:tt)+) => {{
         $crate::CommandLine::new(
             $crate::app!{
@@ -112,41 +118,27 @@ macro_rules! app {
         )
     }};
 
-    // Special case, to just create a `Command` without the `CommandLine`
-    // (@command => $($rest:tt)+) => {{
-    //     $crate::app!{
-    //         @command ($crate::Command::root()) $($rest)+
-    //     }
-    // }};
-    //
-    // (@command $command_name:ident => $($rest:tt)+) => {{
-    //     $crate::app!{
-    //         @command ($crate::Command::new(stringify!($command_name))) $($rest)+
-    //     }
-    // }};
-    //
-    // (@command $command_name:expr => $($rest:tt)+) => {{
-    //     $crate::app!{
-    //         @command ($crate::Command::new($command_name)) $($rest)+
-    //     }
-    // }};
-
-    // Command
+    // Command fallthrough
     (@command ($builder:expr)) => { $builder };
 
+    // Command `description`:
+    // clapi::app! { MyApp => (description => ... ) }
     (@command ($builder:expr) (description => $description:expr) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.description($description)) $($tt)*
         }
     };
 
+    // Command `about`:
+    // clapi::app! { MyApp => (about => ... ) }
     (@command ($builder:expr) (about => $about:expr) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.about($about)) $($tt)*
         }
     };
 
-    // Handler
+    // Command handler with `OptionList` and `ArgumentList` with a block.
+    // clapi::app! { MyApp => (handler (opts, args) => { ... } ) }
     (@command ($builder:expr) (handler ($options:ident, $arguments:ident) => $block:block) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|$options, $arguments|{
@@ -156,6 +148,8 @@ macro_rules! app {
         }
     };
 
+    // Command handler with `OptionList` and `ArgumentList` with a single expression.
+    // clapi::app! { MyApp => (handler (opts, args) => ... ) }
     (@command ($builder:expr) (handler ($options:ident, $arguments:ident) => $expr:expr) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|$options, $arguments|{
@@ -165,6 +159,8 @@ macro_rules! app {
         }
     };
 
+    // Command handler with typed arguments with a block.
+    // clapi::app! { MyApp => (handler (...argument : type) => { ... } ) }
     (@command ($builder:expr) (handler (...$($arg_name:ident: $arg_type:ty),+) => $block:block) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|options, arguments|{
@@ -177,6 +173,8 @@ macro_rules! app {
         }
     };
 
+    // Command handler with typed arguments with a single expression.
+    // clapi::app! { MyApp => (handler (...argument : type) => ... ) }
     (@command ($builder:expr) (handler (...$($arg_name:ident: $arg_type:ty),+) => $expr:expr) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|options, arguments|{
@@ -189,7 +187,9 @@ macro_rules! app {
         }
     };
 
-    (@command ($builder:expr) (handler ($($name:ident : $ty:ty)+ $(,...$($arg_name:ident: $arg_type:ty),+)?) => $block:block) $($tt:tt)*) => {
+    // Command handler with typed options and arguments with a block.
+    // clapi::app! { MyApp => (handler (option : type, ...argument : type) => { ... } ) }
+    (@command ($builder:expr) (handler ($($name:ident : $ty:ty),+ $(,...$($arg_name:ident: $arg_type:ty),+)?) => $block:block) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|options, arguments|{
                 #[cfg(debug_assertions)]
@@ -210,7 +210,9 @@ macro_rules! app {
         }
     };
 
-    (@command ($builder:expr) (handler ($($name:ident : $ty:ty)+ $(,...$($arg_name:ident: $arg_type:ty),+)?) => $expr:expr) $($tt:tt)*) => {
+    // Command handler with typed options and arguments with a single expression.
+    // clapi::app! { MyApp => (handler (option : type, ...argument : type) => ... ) }
+    (@command ($builder:expr) (handler ($($name:ident : $ty:ty),+ $(,...$($arg_name:ident: $arg_type:ty),+)?) => $expr:expr) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|options, arguments|{
                 #[cfg(debug_assertions)]
@@ -231,6 +233,8 @@ macro_rules! app {
         }
     };
 
+    // Command handler with no args with a block.
+    // clapi::app! { MyApp => (handler () => { ... } ) }
     (@command ($builder:expr) (handler () => $block:block) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|_options, _arguments|{
@@ -240,6 +244,8 @@ macro_rules! app {
         }
     };
 
+    // Command handler with no args with a single expression.
+    // clapi::app! { MyApp => (handler () => ... ) }
     (@command ($builder:expr) (handler () => $expr:expr) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|_options, _arguments|{
@@ -249,6 +255,8 @@ macro_rules! app {
         }
     };
 
+    // Command handler with no args with a block.
+    // clapi::app! { MyApp => (handler => { ... } ) }
     (@command ($builder:expr) (handler => $block:block) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|_options, _arguments|{
@@ -258,6 +266,8 @@ macro_rules! app {
         }
     };
 
+    // Command handler with no args with a single expression.
+    // clapi::app! { MyApp => (handler => ...) }
     (@command ($builder:expr) (handler => $expr:expr) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.handler(|_options, _arguments|{
@@ -268,6 +278,7 @@ macro_rules! app {
     };
 
     // Subcommand
+    // clapi::app! { (@subcommand child => ( ... ) }
     (@command ($builder:expr) (@subcommand $command_name:ident $(=> $($rest:tt)+)?) $($tt:tt)*) => {
         $crate::app!{
             @command
@@ -277,6 +288,8 @@ macro_rules! app {
         }
     };
 
+    // Subcommand
+    // clapi::app! { (@subcommand "child" => ( ... ) }
     (@command ($builder:expr) (@subcommand $command_name:expr $(=> $($rest:tt)+)?) $($tt:tt)*) => {
         $crate::app!{
             @command
@@ -287,6 +300,7 @@ macro_rules! app {
     };
 
     // Option
+    // clapi::app! { (@option test => ( ... )) }
     (@command ($builder:expr) (@option $option_name:ident $(=> $($rest:tt)+)?) $($tt:tt)*) => {
         $crate::app!{
             @command
@@ -296,6 +310,8 @@ macro_rules! app {
         }
     };
 
+    // Option
+    // clapi::app! { (@option "test" => ( ... )) }
     (@command ($builder:expr) (@option $option_name:expr $(=> $($rest:tt)+)?) $($tt:tt)*) => {
         $crate::app!{
             @command
@@ -305,8 +321,11 @@ macro_rules! app {
         }
     };
 
+    // Option fallthrough
     (@option ($option_builder:expr)) => { $option_builder };
 
+    // Option argument
+    // clapi::app! { (@option => (@arg value => ( ... )) }
     (@option ($option_builder:expr) (@arg $arg_name:ident $(=> $($rest:tt)+)?) $($tt:tt)*) => {
         $crate::app!{
             @option
@@ -316,6 +335,8 @@ macro_rules! app {
         }
     };
 
+    // Option argument
+    // clapi::app! { (@option => (@arg "value" => ( ... )) }
     (@option ($option_builder:expr) (@arg $arg_name:expr $(=> $($rest:tt)+)?) $($tt:tt)*) => {
         $crate::app!{
             @option
@@ -325,18 +346,24 @@ macro_rules! app {
         }
     };
 
+    // Option description
+    // clapi::app! { (@option => (description => ... ) ) }
     (@option ($option_builder:expr) (description => $description:expr) $($tt:tt)*) => {
         $crate::app!{
             @option ($option_builder.description($description)) $($tt)*
         }
     };
 
+    // Option required
+    // clapi::app! { (@option => (required => ... ) ) }
     (@option ($option_builder:expr) (required => $required:expr) $($tt:tt)*) => {
         $crate::app!{
             @option ($option_builder.required($required)) $($tt)*
         }
     };
 
+    // Option aliases
+    // clapi::app! { (@option => (alias => ... ) ) }
     (@option ($option_builder:expr) (alias => $($alias:expr),+) $($tt:tt)*) => {
         $crate::app!{
             @option
@@ -344,7 +371,8 @@ macro_rules! app {
         }
     };
 
-    // Argument
+    // Command argument
+    // clapi::app! { (@arg value => ( ... ) ) }
     (@command ($builder:expr) (@arg $arg_name:ident $(=> $($rest:tt)+)?) $($tt:tt)*) => {
         $crate::app!{
             @command
@@ -354,52 +382,92 @@ macro_rules! app {
         }
     };
 
+    // Command argument
+    // clapi::app! { (@arg "value" => ( ... ) ) }
     (@command ($builder:expr) (@arg $arg_name:expr $(=> $($rest:tt)+)?) $($tt:tt)*) => {
         $crate::app!{
             @command
             ($builder.arg(
-                $crate::app!{ @arg ($crate::Argument::new($arg_name:expr)) $($($rest)+)? }
+                $crate::app!{ @arg ($crate::Argument::new($arg_name)) $($($rest)+)? }
             )) $($tt)*
         }
     };
 
+    // Argument fallthrough
     (@arg ($arg_builder:expr)) => { $arg_builder };
 
+    // Argument count
+    // clapi::app! { (@arg => (count => 1..) }
     (@arg ($arg_builder:expr) (count => $count:expr) $($tt:tt)*) => {
         $crate::app!{
             @arg ($arg_builder.arg_count($count)) $($tt)*
         }
     };
 
+    // Argument description
+    // clapi::app! { (@arg => (description => ... ) }
     (@arg ($arg_builder:expr) (description => $description:expr) $($tt:tt)*) => {
         $crate::app!{
             @arg ($arg_builder.description($description)) $($tt)*
         }
     };
 
+    // Argument valid values
+    // clapi::app! { (@arg => (values => ... ) }
     (@arg ($arg_builder:expr) (values => $($valid_values:expr),+) $($tt:tt)*) => {
         $crate::app!{
             @arg ($arg_builder.valid_values(&[$($valid_values),+])) $($tt)*
         }
     };
 
+    // Argument default values
+    // clapi::app! { (@arg => (default => ... ) }
     (@arg ($arg_builder:expr) (default => $($default_values:expr),+) $($tt:tt)*) => {
         $crate::app!{
             @arg ($arg_builder.defaults(&[$($default_values),+])) $($tt)*
         }
     };
 
+    // Argument validator
+    // clapi::app! { (@arg => (validator => clapi::validator::parse_validator::<u64>() ) }
     (@arg ($arg_builder:expr) (validator => $validator:expr) $($tt:tt)*) => {
         $crate::app!{
             @arg ($arg_builder.validator($validator)) $($tt)*
         }
     };
 
+    // Argument type
+    // clapi::app! { (@arg => (type => u64 ) }
     (@arg ($arg_builder:expr) (type => $ty:ty) $($tt:tt)*) => {
         $crate::app!{
             @arg ($arg_builder.validator($crate::validator::parse_validator::<$ty>())) $($tt)*
         }
     };
+
+    //////////////////////////////////////////////////////////////////////
+    // Some special cases to only create `Command` and not `CommandLine`//
+    //////////////////////////////////////////////////////////////////////
+
+    // clapi::app! { @@command => ... }
+    (@@command => $($rest:tt)+) => {{
+        $crate::app!{
+            @command ($crate::Command::root()) $($rest)+
+        }
+    }};
+
+    // clapi::app! { @@command MyApp => ... }
+    (@@command $command_name:ident => $($rest:tt)+) => {{
+        $crate::app!{
+            @command ($crate::Command::new(stringify!($command_name))) $($rest)+
+        }
+    }};
+
+    // clapi::app! { @@command "MyApp" => ... }
+    (@@command $command_name:expr => $($rest:tt)+) => {{
+        $crate::app!{
+            @command ($crate::Command::new($command_name)) $($rest)+
+        }
+    }};
 }
 
 /// Constructs and run a `CommandLine` app.
