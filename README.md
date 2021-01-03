@@ -145,8 +145,8 @@ fn main() -> clapi::Result<()> {
     };
 
     cli.use_default_help()
-        .use_default_suggestions()
-        .run()
+       .use_default_suggestions()
+       .run()
 }
 ```
 </details>

@@ -1,4 +1,90 @@
+
+/// Returns this `crate` name.
+///
+/// # Panics
+/// Panics if package `name` is no defined.
+#[macro_export]
+macro_rules! crate_name {
+    () => {
+        option_env!("CARGO_PKG_NAME").expect("package `name` is not defined")
+    };
+}
+
+/// Returns this `crate` description.
+///
+/// # Panics
+/// Panics if package `description` is no defined.
+#[macro_export]
+macro_rules! crate_description {
+    () => {
+        option_env!("CARGO_PKG_DESCRIPTION").expect("package `description` is not defined")
+    };
+}
+
+/// Returns this `crate` version.
+///
+/// # Panics
+/// Panics if package `version` is no defined.
+#[macro_export]
+macro_rules! crate_version {
+    () => {
+        option_env!("CARGO_PKG_VERSION").expect("package `version` is not defined")
+    };
+}
+
 /// Constructs a `CommandLine` app.
+///
+/// You use the `@subcommand`, `@option` and `@arg` tags to create subcommand, option and args
+/// respectively. A list of the tags and its properties:
+/// - `@subcommand` : description, about, handler, @subcommand, @option and @arg.
+/// - `@option` : description, alias, required and @arg.
+/// - `@arg` : description, values, default, count, validator and type,
+///
+/// # Usage
+/// To create the app start with:
+/// * `clapi::app! { => ... }`
+/// * `clapi::app! { AppName => ... }`
+/// * `clapi::app! { "AppName" => ... }`
+///
+/// This is the root of the app where all the tags and properties are declared,
+/// these are declared as `(property => value)`.
+/// * For example:
+/// ```
+/// clapi::app! { MyApp =>
+///     (description => "This is an app")
+/// };
+/// ```
+///
+/// And the tags like `@subcommand`, `@option` and `@arg`,
+/// must contain a name either as an identifier or string literal for example:
+/// * `(@subcommand version => ...)`
+/// * `(@option "enable" => ...)`
+///
+/// Each tag contains its own properties, check the list above.
+///
+/// # Example
+/// ```
+/// clapi::app!{ MyApp =>
+///     (description => "App to sum values")
+///     (about => "MyApp 1.0")
+///     (@arg values =>
+///         (count => 1..)
+///         (type => i64)
+///     )
+///     (@option times =>
+///         (description => "Number of times to sum the values")
+///         (@arg times =>
+///             (type => u64)
+///             (default => 1)
+///         )
+///     )
+///     (handler (times: u64, ...values: Vec<i64>) => {
+///         let times = times as i64;
+///         let total : i64 = values.iter().sum();
+///         println!("{}", total * times);
+///     })
+/// };
+/// ```
 #[macro_export]
 macro_rules! app {
     // Here start
@@ -26,16 +112,35 @@ macro_rules! app {
         )
     }};
 
+    // Special case, to just create a `Command` without the `CommandLine`
+    // (@command => $($rest:tt)+) => {{
+    //     $crate::app!{
+    //         @command ($crate::Command::root()) $($rest)+
+    //     }
+    // }};
+    //
+    // (@command $command_name:ident => $($rest:tt)+) => {{
+    //     $crate::app!{
+    //         @command ($crate::Command::new(stringify!($command_name))) $($rest)+
+    //     }
+    // }};
+    //
+    // (@command $command_name:expr => $($rest:tt)+) => {{
+    //     $crate::app!{
+    //         @command ($crate::Command::new($command_name)) $($rest)+
+    //     }
+    // }};
+
     // Command
     (@command ($builder:expr)) => { $builder };
 
-    (@command ($builder:expr) (description => $description:literal) $($tt:tt)*) => {
+    (@command ($builder:expr) (description => $description:expr) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.description($description)) $($tt)*
         }
     };
 
-    (@command ($builder:expr) (about => $about:literal) $($tt:tt)*) => {
+    (@command ($builder:expr) (about => $about:expr) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.about($about)) $($tt)*
         }
@@ -220,25 +325,19 @@ macro_rules! app {
         }
     };
 
-    (@option ($option_builder:expr) (description => $description:literal) $($tt:tt)*) => {
+    (@option ($option_builder:expr) (description => $description:expr) $($tt:tt)*) => {
         $crate::app!{
             @option ($option_builder.description($description)) $($tt)*
         }
     };
 
-    (@option ($option_builder:expr) (required => true) $($tt:tt)*) => {
+    (@option ($option_builder:expr) (required => $required:expr) $($tt:tt)*) => {
         $crate::app!{
-            @option ($option_builder.required(true)) $($tt)*
+            @option ($option_builder.required($required)) $($tt)*
         }
     };
 
-    (@option ($option_builder:expr) (required => false) $($tt:tt)*) => {
-        $crate::app!{
-            @option ($option_builder.required(false)) $($tt)*
-        }
-    };
-
-    (@option ($option_builder:expr) (alias => $($alias:literal),+) $($tt:tt)*) => {
+    (@option ($option_builder:expr) (alias => $($alias:expr),+) $($tt:tt)*) => {
         $crate::app!{
             @option
             ($option_builder$(.alias($alias))+) $($tt)*
@@ -272,7 +371,7 @@ macro_rules! app {
         }
     };
 
-    (@arg ($arg_builder:expr) (description => $description:literal) $($tt:tt)*) => {
+    (@arg ($arg_builder:expr) (description => $description:expr) $($tt:tt)*) => {
         $crate::app!{
             @arg ($arg_builder.description($description)) $($tt)*
         }
@@ -304,6 +403,14 @@ macro_rules! app {
 }
 
 /// Constructs and run a `CommandLine` app.
+///
+/// This is equivalent to:
+/// ```ignore
+/// clapi::app!(/*...*/)
+///     .use_default_suggestions()
+///     .use_default_help()
+///     .run()
+/// ```
 #[macro_export]
 macro_rules! run_app {
     ( => $($rest:tt)+) => {
@@ -321,13 +428,6 @@ macro_rules! run_app {
     };
 
     ($name:expr => $($rest:tt)+) => {
-        $crate::app!($name => $($rest)+)
-             .use_default_suggestions()
-             .use_default_help()
-             .run()
-    };
-
-    ($name:literal => $($rest:tt)+) => {
         $crate::app!($name => $($rest)+)
              .use_default_suggestions()
              .use_default_help()
@@ -380,37 +480,4 @@ macro_rules! run_crate_app {
         .use_default_suggestions()
         .run()
     }};
-}
-
-/// Returns this `crate` name.
-///
-/// # Panics
-/// Panics if package `name` is no defined.
-#[macro_export]
-macro_rules! crate_name {
-    () => {
-        option_env!("CARGO_PKG_NAME").expect("package `name` is not defined")
-    };
-}
-
-/// Returns this `crate` description.
-///
-/// # Panics
-/// Panics if package `description` is no defined.
-#[macro_export]
-macro_rules! crate_description {
-    () => {
-        option_env!("CARGO_PKG_DESCRIPTION").expect("package `description` is not defined")
-    };
-}
-
-/// Returns this `crate` version.
-///
-/// # Panics
-/// Panics if package `version` is no defined.
-#[macro_export]
-macro_rules! crate_version {
-    () => {
-        option_env!("CARGO_PKG_VERSION").expect("package `version` is not defined")
-    };
 }

@@ -1,5 +1,3 @@
-#![allow(dead_code, unused_imports)]
-
 use std::path::PathBuf;
 use proc_macro2::TokenStream;
 use quote::*;
@@ -537,9 +535,8 @@ mod imp {
     use crate::command::{drop_command_attributes, is_option_bool_flag, CommandAttrData, FnArgData};
     use crate::macro_attribute::{MacroAttribute, MetaItem, NameValueAttribute};
     use crate::option::OptionAttrData;
-    use crate::utils::{pat_type_to_string, path_to_string, NamePath};
+    use crate::utils::{path_to_string, NamePath};
     use crate::var::{ArgLocalVar, VarSource};
-    use crate::TypeExtensions;
     use crate::attr;
     use crate::query::QueryItem;
     use syn::export::ToTokens;
@@ -614,32 +611,6 @@ mod imp {
                 };
                 command.set_var(ArgLocalVar::new(fn_arg.pat_type.clone(), source));
             } else {
-                if arg_count > 1 {
-                    // todo: Allow a runtime error or a compile error?
-                    // todo: All this assertions need a revision
-                    // let ty = fn_arg.pat_type.ty.as_ref();
-                    // if ty.is_slice() || ty.is_vec() {
-                    //     panic!("invalid argument type for: `{}`\
-                    //     \nwhen multiples `arg` are defined, arguments cannot be declared as `Vec` or `slice`",
-                    //            pat_type_to_string(&fn_arg.pat_type));
-                    // }
-                    //
-                    // if let Some(name_value) = &fn_arg.name_value {
-                    //     assert!(
-                    //         name_value.get("default").is_none(),
-                    //         "`default` is not supported when multiple arguments are defined"
-                    //     );
-                    //     assert!(
-                    //         name_value.get("min").is_none(),
-                    //         "`min` is not supported when multiple arguments are defined"
-                    //     );
-                    //     assert!(
-                    //         name_value.get("max").is_none(),
-                    //         "`min` is not supported when multiple arguments are defined"
-                    //     );
-                    // }
-                }
-
                 command.set_var(ArgLocalVar::new(
                     fn_arg.pat_type.clone(),
                     VarSource::Args(fn_arg.arg_name.clone()),
