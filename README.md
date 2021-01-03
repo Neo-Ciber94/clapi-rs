@@ -1,6 +1,10 @@
 # Clapi
-
-Clapi (Command-Line API) is a framework for create command line applications.
+<blockquote>
+    <p>
+        Clapi (<strong>C</strong>ommand-<strong>L</strong>ine <strong>API</strong>)
+        is a framework for create command line applications.
+    </p>
+</blockquote>
 
 Currently clapi provides several methods for create command line applications:
 
@@ -8,6 +12,14 @@ Currently clapi provides several methods for create command line applications:
 - Function handlers
 - Macros
 - Macros attributes
+
+<blockquote>
+Minimun rust version: 1.48
+</blockquote>
+
+## Features
+- macros : Enable the used of `proc_macro` attributes
+- serde : Enable Serialize and Deserialize using the `serde` crate.
 
 ## Examples
 
@@ -175,3 +187,47 @@ fn repeat(times: u32, values: Vec<String>){
 }
 ```
 </details>
+
+## Serde
+
+Any `Command`, `CommandOption` and `Argument` can be serialize/deserialize using the `serde` feature.
+
+This allow you to read or write your command line apps to files.
+
+```rust
+use clapi::Command;
+
+fn main(){
+    let command = serde_json::from_str::<Command>(r#"
+    {
+        "name" : "MyApp",
+        "description" : "An app to sum numbers",
+        "options" : [
+            {
+                "name" : "times",
+                "description" : "Number of times to sum the values",
+                "args" : [
+                    {
+                        "name" : "times",
+                        "type" : "u64"
+                    }
+                ]
+            }
+        ],
+        "args" : [
+            {
+                "name" : "numbers",
+                "description" : "Numbers to sum",
+                "type" : "i64",
+                "min_count" : 1
+            }
+        ]
+    }
+    "#).unwrap();
+
+    assert_eq!(command.get_name(), "MyApp");
+    assert_eq!(command.get_description(), Some("An app to sum numbers"));
+    assert!(command.get_options().get("times").is_some());
+    assert!(command.get_args().get("numbers").is_some());
+}
+```

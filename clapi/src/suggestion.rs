@@ -214,6 +214,7 @@ pub fn compute_levenshtein_distance(x: &str, y: &str, ignore_case: bool) -> usiz
         std::cmp::min(std::cmp::min(a, b), c)
     }
 
+    // This could be expensive, a better implementation is needed
     let mut distance = vec![vec![0; len_y + 1]; len_x + 1];
 
     for i in 0..=len_x {
