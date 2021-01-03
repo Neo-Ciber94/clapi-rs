@@ -1,10 +1,11 @@
 # Clapi
-<blockquote>
-    <p>
-        Clapi (<strong>C</strong>ommand-<strong>L</strong>ine <strong>API</strong>)
-        is a framework for create command line applications.
-    </p>
-</blockquote>
+
+> Clapi (**C**ommand-**L**ine **API**) is a framework for create command line applications.
+
+[![Apache-2.0]][license]
+
+[Apache-2.0]: https://img.shields.io/badge/LICENSE-Apache--2.0-blue
+[license]: https://github.com/Neo-Ciber94/clapi-rs/blob/master/LICENSE
 
 Currently clapi provides several methods for create command line applications:
 
@@ -13,13 +14,11 @@ Currently clapi provides several methods for create command line applications:
 - Macros
 - Macros attributes
 
-<blockquote>
-Minimun rust version: 1.48
-</blockquote>
+> Minimum rust version: 1.48
 
 ## Features
-- macros : Enable the used of `proc_macro` attributes
-- serde : Enable Serialize and Deserialize using the `serde` crate.
+- `macros` : Enable the used of macro attributes.
+- `serde` : Enable Serialize and Deserialize using the `serde` crate.
 
 ## Examples
 
