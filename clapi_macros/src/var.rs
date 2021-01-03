@@ -40,6 +40,16 @@ impl ArgLocalVar {
             VarSource::OptBool => {
                 // Handles an option `bool` flag, which returns `true`
                 // if the option exists or if the passed value is `true` otherwise `false`.
+                //
+                // Example:
+                // #[command]
+                // fn main(enable: bool) {}
+                //
+                // The parameter `enable` will takes the next value:
+                // - `true` : If passing `--enable`
+                // - `true` : If passing `--enable=true`
+                // - `false`: If passing `--enable=false`
+                // - `false`: If passing nothing
                 let option_name = quote_expr!(self.var_name);
                 quote! {
                     match opts.get(#option_name) {

@@ -1,3 +1,5 @@
+#![allow(dead_code, unused_imports)]
+
 use std::path::PathBuf;
 use proc_macro2::TokenStream;
 use quote::*;
@@ -461,6 +463,22 @@ fn is_clapi_result_type(ty: &Type) -> bool {
     }
 }
 
+/// Check the statements of the `ItemFn` and returns `true`
+/// if there is not expression declared.
+///
+/// The next is considered empty:
+/// ```text
+/// fn main(){
+///     static VALUE: i64 = 0;
+/// }
+/// ```
+///
+/// Where the next don't
+/// ```text
+/// fn main(){
+///     let value = 0;
+/// }
+/// ```
 pub fn contains_expressions(item_fn: &ItemFn) -> bool {
     use std::ops::Not;
 
@@ -472,6 +490,8 @@ pub fn contains_expressions(item_fn: &ItemFn) -> bool {
         .not()
 }
 
+/// Remove all the `clapi` macro attributes like `command`, `subcommand`, `option` and `arg`
+/// from a `ItemFn`.
 pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {
     item_fn.attrs = item_fn
         .attrs
@@ -486,6 +506,15 @@ pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {
     item_fn
 }
 
+/// Checks if a function argument is an option bool flag like: `--enable`
+///
+/// In the next example, `enable` is considered an option bool flag when passing: `--enable`
+/// the parameter enable will have the value of `true` and `false` if absent.
+///
+/// ```text
+/// #[command]
+/// fn main(enable: bool){}
+/// ```
 pub fn is_option_bool_flag(fn_arg: &FnArgData) -> bool {
     if let Some(attribute) = &fn_arg.name_value {
         fn_arg.pat_type.ty.is_bool()
@@ -585,28 +614,29 @@ mod imp {
                 command.set_var(ArgLocalVar::new(fn_arg.pat_type.clone(), source));
             } else {
                 if arg_count > 1 {
+                    // todo: Allow a runtime error or a compile error?
                     // todo: All this assertions need a revision
-                    let ty = fn_arg.pat_type.ty.as_ref();
-                    if ty.is_slice() || ty.is_vec() {
-                        panic!("invalid argument type for: `{}`\
-                        \nwhen multiples `arg` are defined, arguments cannot be declared as `Vec` or `slice`",
-                               pat_type_to_string(&fn_arg.pat_type));
-                    }
-
-                    if let Some(name_value) = &fn_arg.name_value {
-                        assert!(
-                            name_value.get("default").is_none(),
-                            "`default` is not supported when multiple arguments are defined"
-                        );
-                        assert!(
-                            name_value.get("min").is_none(),
-                            "`min` is not supported when multiple arguments are defined"
-                        );
-                        assert!(
-                            name_value.get("max").is_none(),
-                            "`min` is not supported when multiple arguments are defined"
-                        );
-                    }
+                    // let ty = fn_arg.pat_type.ty.as_ref();
+                    // if ty.is_slice() || ty.is_vec() {
+                    //     panic!("invalid argument type for: `{}`\
+                    //     \nwhen multiples `arg` are defined, arguments cannot be declared as `Vec` or `slice`",
+                    //            pat_type_to_string(&fn_arg.pat_type));
+                    // }
+                    //
+                    // if let Some(name_value) = &fn_arg.name_value {
+                    //     assert!(
+                    //         name_value.get("default").is_none(),
+                    //         "`default` is not supported when multiple arguments are defined"
+                    //     );
+                    //     assert!(
+                    //         name_value.get("min").is_none(),
+                    //         "`min` is not supported when multiple arguments are defined"
+                    //     );
+                    //     assert!(
+                    //         name_value.get("max").is_none(),
+                    //         "`min` is not supported when multiple arguments are defined"
+                    //     );
+                    // }
                 }
 
                 command.set_var(ArgLocalVar::new(
@@ -758,7 +788,7 @@ mod imp {
 
         let mut ret = Vec::new();
 
-        // We takes all the attribute that are `[arg(...)]` or `[option(...)]`
+        // We takes all the attributes that are `[arg(...)]` or `[option(...)]`
         let attributes = item_fn
             .attrs
             .iter()
@@ -768,6 +798,7 @@ mod imp {
             .map(|attribute| split_attr_path_and_name_values(attribute))
             .collect::<Vec<(String, MacroAttribute, NameValueAttribute)>>();
 
+        // Get all the function params and the name of the params
         let fn_args = item_fn
             .sig
             .inputs

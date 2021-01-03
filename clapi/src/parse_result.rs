@@ -317,7 +317,8 @@ mod tests {
             .arg(Argument::one_or_more("args"))
             .option(CommandOption::new("A").alias("a"))
             .option(CommandOption::new("B").alias("b"))
-            .option(CommandOption::new("C").alias("c"));
+            .option(CommandOption::new("C").alias("c"))
+            .option(CommandOption::new("D").alias("d").arg(Argument::one_or_more("d")));
 
         let result1 = parse_with("--A --B -- --C", command.clone()).unwrap();
         assert_eq!(result1.options().len(), 2);
@@ -340,6 +341,17 @@ mod tests {
         assert!(result3.arg().unwrap().contains("-a"));
         assert!(result3.arg().unwrap().contains("-b"));
         assert!(result3.arg().unwrap().contains("-c"));
+
+        let result4 = parse_with("--D 1 2 3 -- hello world", command.clone()).unwrap();
+        assert_eq!(result4.options().len(), 1);
+        assert!(result4.get_option_arg("D").unwrap().contains("1"));
+        assert!(result4.get_option_arg("D").unwrap().contains("2"));
+        assert!(result4.get_option_arg("D").unwrap().contains("3"));
+        assert!(result4.arg().unwrap().contains("hello"));
+        assert!(result4.arg().unwrap().contains("world"));
+
+        let result5 = parse_with("1 2 3 -- hello world", command.clone());
+        assert!(result5.is_err());
     }
 
     #[test]
@@ -464,51 +476,24 @@ mod tests {
                 .clone()
         };
 
-        assert!(matches!(
-            err_kind("version 1 2 3"),
-            ErrorKind::InvalidArgumentCount
-        ));
-        assert!(matches!(
-            err_kind("-- 1 2 3 4 5"),
-            ErrorKind::InvalidArgumentCount
-        ));
-        assert!(matches!(
-            err_kind("--range 0"),
-            ErrorKind::InvalidArgumentCount
-        ));
-        assert!(matches!(
-            err_kind("--range 1 2 3 -- "),
-            ErrorKind::InvalidArgumentCount
-        ));
+        assert!(matches!(err_kind("version 1 2 3"), ErrorKind::InvalidArgumentCount));
+        assert!(matches!(err_kind("-- 1 2 3 4 5"), ErrorKind::InvalidArgumentCount));
+        assert!(matches!(err_kind("--range 0"), ErrorKind::InvalidArgumentCount));
+        assert!(matches!(err_kind("--range 1 2 3 -- "),ErrorKind::InvalidArgumentCount));
         assert!(matches!(err_kind("-r:0:1"), ErrorKind::InvalidExpression));
         assert!(matches!(err_kind("--range 10 b"), ErrorKind::InvalidArgument(x) if x == "b"));
-        assert!(
-            matches!(err_kind("--C"), ErrorKind::UnrecognizedOption(p, o) if p == "--" && o == "C")
-        );
-        assert!(
-            matches!(err_kind("data write"), ErrorKind::UnrecognizedCommand(x) if x == "write")
-        );
+        assert!(matches!(err_kind("--C"), ErrorKind::UnrecognizedOption(p, o) if p == "--" && o == "C"));
+        assert!(matches!(err_kind("data write"), ErrorKind::UnrecognizedCommand(x) if x == "write"));
         assert!(matches!(err_kind("read"), ErrorKind::MissingOption(x) if x == "mode"));
         assert!(matches!(err_kind("read --mode lo"), ErrorKind::InvalidArgument(x) if x == "lo"));
-        assert!(matches!(
-            err_kind("read --mode low mid"),
-            ErrorKind::InvalidArgumentCount
-        ));
-        assert!(
-            matches!(err_kind("data clear"), ErrorKind::UnrecognizedCommand(x) if x == "clear")
-        );
-        assert!(matches!(
-            err_kind("data get 0"),
-            ErrorKind::InvalidArgumentCount
-        ));
-        assert!(matches!(
-            err_kind("data set \"Hello World\" Bye"),
-            ErrorKind::InvalidArgumentCount
-        ));
+        assert!(matches!(err_kind("read --mode low mid"),ErrorKind::InvalidArgumentCount));
+        assert!(matches!(err_kind("data clear"), ErrorKind::UnrecognizedCommand(x) if x == "clear"));
+        assert!(matches!(err_kind("data get 0"), ErrorKind::InvalidArgumentCount));
+        assert!(matches!(err_kind("data set \"Hello World\" Bye"),ErrorKind::InvalidArgumentCount));
     }
 
     #[test]
-    fn parse_result_option_bool_flag() {
+    fn parse_result_option_bool_flag_test() {
         let command = Command::new("My App").option(
             CommandOption::new("enable").arg(
                 Argument::new("enable")
@@ -542,5 +527,69 @@ mod tests {
 
         let res4 = parse_with("", command.clone()).unwrap();
         assert!(!res4.contains_option("enable"));
+    }
+
+    #[test]
+    fn parse_result_arg_default_values_test1(){
+        let command = Command::new("MyApp")
+            .arg(Argument::new("min").default(1))
+            .arg(Argument::new("max"));
+
+        let result1 = parse_with("10", command.clone()).unwrap();
+        assert!(result1.args.get("min").unwrap().contains("1"));
+        assert!(result1.args.get("max").unwrap().contains("10"));
+
+        let result2 = parse_with("5 12", command.clone()).unwrap();
+        assert!(result2.args.get("min").unwrap().contains("5"));
+        assert!(result2.args.get("max").unwrap().contains("12"));
+    }
+
+    #[test]
+    #[should_panic]
+    fn parse_result_arg_default_values_test2(){
+        let _command = Command::new("MyApp")
+            .arg(Argument::new("min").default(1))
+            .arg(Argument::new("max").default(10));
+    }
+
+    #[test]
+    fn parse_result_option_default_values_test1(){
+        let command = Command::new("MyApp")
+            .option(CommandOption::new("range")
+                .arg(Argument::new("start").default(1))
+                .arg(Argument::new("end")));
+
+        let result1 = parse_with("--range 22", command.clone()).unwrap();
+        assert!(result1.get_option_args("range")
+            .unwrap()
+            .get("start")
+            .unwrap()
+            .contains("1"));
+        assert!(result1.get_option_args("range")
+            .unwrap()
+            .get("end")
+            .unwrap()
+            .contains("22"));
+
+        let result2 = parse_with("--range 10 25", command.clone()).unwrap();
+        assert!(result2.get_option_args("range")
+            .unwrap()
+            .get("start")
+            .unwrap()
+            .contains("10"));
+        assert!(result2.get_option_args("range")
+            .unwrap()
+            .get("end")
+            .unwrap()
+            .contains("25"));
+    }
+
+    #[test]
+    #[should_panic]
+    fn parse_result_option_default_values_test2(){
+        let _command = Command::new("MyApp")
+            .option(CommandOption::new("range")
+                .arg(Argument::new("start").default(1))
+                .arg(Argument::new("end").default(20)));
     }
 }

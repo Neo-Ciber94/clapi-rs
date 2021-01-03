@@ -31,9 +31,12 @@ impl Parser {
         if let Some(index) = iterator.clone().position(|t| t.is_eoo()) {
             // If there is arguments before `--` (end of arguments)
             // values are being passed to the last option which not exist.
+            //
+            // For example: 1 2 3 -- Hello World
+            // This is a error because there is no option to pass 1 2 3
             if index > 0 {
-                // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html
                 // Check Guide 10
+                // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html
 
                 // We get the last argument to provide a hint of the error
                 let value = iterator.next().cloned().unwrap().into_string();
@@ -67,7 +70,7 @@ impl Parser {
         Ok(ParseResult::new(command.clone(), options, args))
     }
 
-    fn get_executing_command<'a, I: Iterator<Item=&'a Token>>(&self, context: &'a Context, iterator: &mut Peekable<I>) -> Result<&'a Command> {
+    fn get_executing_command<'a, I>(&self, context: &'a Context, iterator: &mut Peekable<I>) -> Result<&'a Command> where I: Iterator<Item=&'a Token> {
         let mut command = context.root();
         while let Some(Token::Cmd(name)) = iterator.peek() {
             command = command.find_subcommand(name.as_str()).ok_or_else(|| {
@@ -87,7 +90,7 @@ impl Parser {
         Ok(command)
     }
 
-    fn get_options<'a, I: Iterator<Item=&'a Token> + Clone>(&self, context: &Context, command: &Command, iterator: &mut Peekable<I>) -> Result<OptionList> {
+    fn get_options<'a, I>(&self, context: &Context, command: &Command, iterator: &mut Peekable<I>) -> Result<OptionList> where I: Iterator<Item=&'a Token> + Clone {
         let mut options = OptionList::new();
 
         while let Some(Token::Opt(prefix, s)) = iterator.peek() {
@@ -97,9 +100,24 @@ impl Parser {
 
                 if option.take_args() {
                     let mut option_args = ArgumentList::new();
-                    let mut option_args_iter = option.get_args().iter().peekable();
+                    let mut option_args_iter = option.get_args().iter().cloned().peekable();
+                    let require_default_values = self.require_default_values(option.get_args(), iterator);
+                    let mut default_value_is_set = false;
 
-                    while let Some(arg) = option_args_iter.next() {
+                    while let Some(mut arg) = option_args_iter.next() {
+                        // We take the first `Argument` that required a default values.
+                        // Only 1 because multiple arguments with default values is no allowed.
+                        if require_default_values && !default_value_is_set {
+                            if arg.has_default_values() {
+                                option_args.add(arg).unwrap();
+
+                                // This is just a flag, `Argument`S with default values already have
+                                // the default value set
+                                default_value_is_set = true;
+                                continue;
+                            }
+                        }
+
                         let mut values = Vec::new();
                         let max_count = arg.get_arg_count().max();
                         let mut count = 0;
@@ -114,13 +132,16 @@ impl Parser {
                             }
                         }
 
-                        // If there is no more args, check if there is an `end of arguments`
+                        // If there is no more option args, check if there is an `end of arguments`
                         if option_args_iter.peek().is_none() {
                             if iterator.peek().map_or(false, |t| !t.is_option()) {
-                                // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html
                                 // Check Guide 10
+                                // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html
                                 // If there is an `--` (end of arguments) we pass all the values
-                                // before to the last option as arguments (if any)
+                                // before it to the last option as arguments (if any)
+                                //
+                                // Example: --numbers 1 2 3 -- hello world
+                                // 1 2 3 are passed to the option `--numbers`
                                 if let Some(mut index) = iterator.clone().position(|t| t.is_eoo()) {
                                     while index > 0 {
                                         let s = iterator.next().unwrap().clone().into_string();
@@ -132,9 +153,8 @@ impl Parser {
                         }
 
                         // Sets the argument values
-                        let mut arg = arg.clone();
                         arg.set_values(values).or_else(|error| {
-                            // We add the last option
+                            // We add the last option to the error
                             let mut options = options.clone();
                             options.add(option.clone()).unwrap();
 
@@ -172,12 +192,27 @@ impl Parser {
         Ok(options)
     }
 
-    fn get_args<'a, I: Iterator<Item=&'a Token> + Clone>(&self, command: &Command, options: &OptionList, iterator: &mut Peekable<I>) -> Result<ArgumentList> {
+    fn get_args<'a, I>(&self, command: &Command, options: &OptionList, iterator: &mut Peekable<I>) -> Result<ArgumentList> where I: Iterator<Item=&'a Token> + Clone {
         let mut command_args = ArgumentList::new();
         let mut args_iter = command.get_args().iter().cloned().peekable();
+        let require_default_values = self.require_default_values(command.get_args(), iterator);
+        let mut default_value_is_set = false;
 
         while let Some(mut arg) = args_iter.next() {
             let mut values = Vec::new();
+
+            // We take the first `Argument` that required a default values.
+            // Only 1 because multiple arguments with default values is no allowed.
+            if require_default_values && !default_value_is_set {
+                if arg.has_default_values() {
+                    command_args.add(arg).unwrap();
+
+                    // This is just a flag, `Argument`S with default values already have
+                    // the default value set
+                    default_value_is_set = true;
+                    continue;
+                }
+            }
 
             if args_iter.peek().is_some() {
                 let max_count = arg.get_arg_count().max();
@@ -200,8 +235,7 @@ impl Parser {
             }
 
             // Sets the argument values
-            // We attempt to set them even if the values is empty
-            // to return an `invalid argument count` error.
+            // We attempt to set the values even if empty to return `invalid argument count` error.
             if values.len() > 0 || (values.is_empty() && !arg.has_default_values()) {
                 arg.set_values(values).or_else(|error| {
                     // We add the last arg
@@ -252,6 +286,33 @@ impl Parser {
         }
 
         Ok(())
+    }
+
+    /// Returns `true` if one of the arguments need to have a default value.
+    ///
+    /// This is true when there is no enough values for the arguments.
+    /// For example: the arguments `min` (default 0) and `max` are declared
+    /// and `20` is pass as a value, because there is only 1 value and 2 arguments,
+    /// `min` must have its default value and `max` must receive the `20`.
+    fn require_default_values<'a, I>(&self, args: &ArgumentList, iterator: &I) -> bool
+        where I: Iterator<Item=&'a Token> + Clone {
+        let contains_default_args = args.iter().any(|a| a.has_default_values());
+        if contains_default_args {
+            let available_values = iterator.clone().into_iter().take_while(|t| t.is_arg()).count();
+            let mut required_values: usize = 0;
+
+            for arg in args {
+                // To avoid overflow
+                match required_values.checked_add(arg.get_arg_count().max()) {
+                    None => return false,
+                    Some(n) => required_values = n
+                }
+            }
+
+            return available_values < required_values;
+        }
+
+        false
     }
 }
 

@@ -498,17 +498,13 @@ impl ArgumentList {
     /// # Panics:
     /// Panics if there is multiples options with default values.
     pub fn add(&mut self, arg: Argument) -> std::result::Result<(), Argument> {
-        if self.len() > 0 {
-            // When multiple arguments with default values are defined
-            // is not possible know to what argument a value is being passed to
-            self.assert_no_default_args();
-        }
-
         if self.inner.contains(&arg) {
             Err(arg)
         } else {
-            let was_added = self.inner.insert(arg);
-            debug_assert!(was_added);
+            self.inner.insert(arg);
+            // When multiple arguments with default values are defined
+            // is not possible know to what argument a value is being passed to
+            self.check_default_args();
             Ok(())
         }
     }
@@ -638,10 +634,54 @@ impl ArgumentList {
         }
     }
 
-    fn assert_no_default_args(&self) {
-        if let Some(index) = self.inner.iter().rposition(|a| a.has_default_values()) {
-            let arg = self.inner.iter().nth(index).unwrap();
+    fn check_default_args(&self) {
+        if self.len() == 1{
+            return;
+        }
+
+        // Check if there more than 1 argument with default values.
+        //
+        // This is not allowed because is no possible to know
+        // to what argument a value is being passed to.
+        // For example: we have 2 argument with default values: `min` (default 0) `max` (default 10)
+        // If we pass: `25` is no possible to know if assign the `25` to `min` or `max`.
+        if self.inner.iter().filter(|a| a.has_default_values()).count() > 1 {
+            let arg = self.iter()
+                .filter(|a| a.has_default_values())
+                .nth(1)
+                .unwrap();
+
             panic!("multiple arguments with default values is not allowed: `{}` contains default values", arg.name);
+        }
+
+        // Check if there is an argument with variable arguments when there is default values
+        //
+        // This is not allowed because is no possible to know if a value is being passed
+        // to the argument with default value.
+        // For example: we have 2 arguments: `prefix` (default "hello") and `words` that takes
+        // a variable amount of values.
+        // If we pass: `Peter Parker` is no possible to know if `Peter` is being passed to `prefix`
+        if self.inner.iter().any(|a| a.has_default_values()) {
+            if let Some(arg) = self.inner.iter()
+                .filter(|arg| !arg.has_default_values())
+                .find(|arg| !arg.arg_count.is_exact()) {
+                panic!("arguments is variable values is no allowed if there is default values: `{}` contains variable values", arg.name)
+            }
+        }
+
+        // Check if there is more than 1 argument that take variable values.
+        //
+        // This is not allowed because is no possible because the values may overlap.
+        // For example: we have 2 arguments: `numbers` (takes 1 to 3) and `ages` (takes 1 to 10)
+        // if we pass: -1 0 2 25 10, is no possible to know to what argument the values are being
+        // passed
+        if self.inner.iter().filter(|a| !a.get_arg_count().is_exact()).count() > 1 {
+            let arg = self.inner
+                .iter()
+                .filter(|a| !a.get_arg_count().is_exact())
+                .nth(1)
+                .unwrap();
+            panic!("multiple arguments that takes variable arguments is not allowed: `{}` contains variable values", arg.name);
         }
     }
 }
@@ -982,5 +1022,37 @@ mod tests {
                 "3".to_owned()
             ]
         );
+    }
+
+    #[test]
+    #[should_panic]
+    fn argument_list_with_default_values_test(){
+        let mut args = ArgumentList::new();
+        assert!(args.add(Argument::new("min").default(0)).is_ok());
+        assert!(args.add(Argument::new("max").default(i64::max_value())).is_ok());
+    }
+
+    #[test]
+    #[should_panic]
+    fn argument_list_with_default_values_and_variable_args_test(){
+        let mut args = ArgumentList::new();
+        assert!(args.add(Argument::new("greeting").default("Hello")).is_ok());
+        assert!(args.add(Argument::new("words").arg_count(1..)).is_ok());
+    }
+
+    #[test]
+    fn argument_list_with_default_values_and_exact_args_test(){
+        let mut args = ArgumentList::new();
+        assert!(args.add(Argument::new("greeting").default("Hello")).is_ok());
+        assert!(args.add(Argument::new("words").arg_count(3)).is_ok());
+    }
+
+
+    #[test]
+    #[should_panic]
+    fn argument_list_with_variable_args_test(){
+        let mut args = ArgumentList::new();
+        assert!(args.add(Argument::new("numbers").arg_count(1..10)).is_ok());
+        assert!(args.add(Argument::new("characters").arg_count(1..4)).is_ok());
     }
 }
