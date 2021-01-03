@@ -358,8 +358,9 @@ impl CommandAttrData {
             let inputs = self.vars.iter().map(|var| {
                 let var_name = var.name().parse::<TokenStream>().unwrap();
                 let is_ref = match var.arg_type() {
-                    ArgumentType::Slice(_) => quote! { & },
-                    ArgumentType::MutSlice(_) => quote! { &mut },
+                    ArgumentType::Slice(ty) => {
+                        if ty.mutability { quote! { &mut } } else { quote! { & } }
+                    }
                     _ => quote! {},
                 };
 

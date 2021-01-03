@@ -102,7 +102,7 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_attribute]
-#[allow(unreachable_code)]
+#[allow(unreachable_code, unused_mut)]
 pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
     let mut item_fn = syn::parse_macro_input!(item as ItemFn);
 
@@ -228,6 +228,7 @@ pub fn arg(_: TokenStream, _: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_attribute]
+#[allow(unused_variables, unreachable_code)]
 pub fn help(_: TokenStream, item: TokenStream) -> TokenStream {
     #[cfg(not(nightly))]
     {

@@ -185,24 +185,24 @@ impl ArgAttrData {
         fn max_arg_count_for_type(arg_type: &ArgumentType) -> usize {
             match arg_type {
                 ArgumentType::Type(_) | ArgumentType::Option(_) => 1,
-                ArgumentType::Vec(_) | ArgumentType::Slice(_) | ArgumentType::MutSlice(_) => {
+                ArgumentType::Vec(_) | ArgumentType::Slice(_) | ArgumentType::Array(_) => {
                     usize::max_value()
                 }
             }
         }
 
-        let (arg, arg_type) = if let Some(named_arg) = self.fn_arg.as_ref() {
-            named_arg
-        } else {
-            let min = self.min.expect("`min` argument count is not defined");
-            let max = self.max.expect("`max` argument count is not defined");
-            assert!(
-                min <= max,
-                "invalid arguments range `min` cannot be greater than `max`"
-            );
-            return (min, max);
+        let (arg, arg_type) = match self.fn_arg.as_ref() {
+            Some((arg, arg_type)) => (arg, arg_type),
+            None => {
+                let min = self.min.expect("`min` argument count is not defined");
+                let max = self.max.expect("`max` argument count is not defined");
+                assert!(min <= max, "invalid arguments range `min` cannot be greater than `max`");
+                // Return from the function
+                return (min, max);
+            }
         };
 
+        // Get the `min` and `max` number of values for this argument.
         let (min, max) = match (self.min, self.max) {
             (Some(min), Some(max)) => (min, max),
             (Some(min), None) => (min, max_arg_count_for_type(arg_type)),
@@ -210,61 +210,14 @@ impl ArgAttrData {
             (None, None) => match arg_type {
                 ArgumentType::Type(_) => (1, 1),
                 ArgumentType::Option(_) => (0, 1),
-                ArgumentType::Vec(_) | ArgumentType::Slice(_) | ArgumentType::MutSlice(_) => {
-                    (0, usize::max_value())
-                }
+                ArgumentType::Vec(_) | ArgumentType::Slice(_) => (0, usize::max_value()),
+                ArgumentType::Array(array) => (array.len, array.len)
             },
         };
 
-        assert!(
-            min <= max,
-            "invalid arguments range `min` cannot be greater than `max`"
-        );
-
-        match arg_type {
-            ArgumentType::Type(_) => {
-                // bool flag don't need check because are handler internally in `command`
-                if !is_option_bool_flag(arg) {
-                    if min != 1 {
-                        panic!(
-                            "invalid `min` number of arguments for `{}` expected 1 but was {}",
-                            pat_type_to_string(&arg.pat_type),
-                            min
-                        );
-                    }
-
-                    if max != 1 {
-                        panic!(
-                            "invalid `max` number of arguments for `{}` expected 1 but was {}",
-                            pat_type_to_string(&arg.pat_type),
-                            max
-                        );
-                    }
-                }
-
-                (min, max)
-            }
-            ArgumentType::Option(_) => {
-                if min != 0 {
-                    panic!(
-                        "invalid `min` number of arguments for `{}` expected 0 but was {}",
-                        pat_type_to_string(&arg.pat_type),
-                        min
-                    );
-                }
-
-                if max != 1 {
-                    panic!(
-                        "invalid `max` number of arguments for `{}` expected 1 but was {}",
-                        pat_type_to_string(&arg.pat_type),
-                        max
-                    );
-                }
-
-                (min, max)
-            }
-            ArgumentType::Vec(_) | ArgumentType::Slice(_) | ArgumentType::MutSlice(_) => (min, max),
-        }
+        assert!(min <= max, "invalid arguments range `min` cannot be greater than `max`");
+        check_valid_arg_count(&arg, arg_type, min, max);
+        (min, max)
     }
 }
 
@@ -363,5 +316,59 @@ fn check_same_type<'a>(left: &'a Lit, right: &'a [Lit]) -> Result<(), &'a Lit> {
         }
 
         Ok(())
+    }
+}
+
+fn check_valid_arg_count(arg: &&FnArgData, arg_type: &ArgumentType, min: usize, max: usize) {
+    match arg_type {
+        ArgumentType::Type(_) => {
+            // If the argument is an option bool flag, `min` and `max` will be 0 and 1.
+            // Check `option.rs`
+            if !is_option_bool_flag(arg) {
+                if min != 1 {
+                    panic!(
+                        "invalid `min` number of arguments for `{}` expected 1 but was {}",
+                        pat_type_to_string(&arg.pat_type),
+                        min
+                    );
+                }
+
+                if max != 1 {
+                    panic!(
+                        "invalid `max` number of arguments for `{}` expected 1 but was {}",
+                        pat_type_to_string(&arg.pat_type),
+                        max
+                    );
+                }
+            }
+        }
+        ArgumentType::Option(_) => {
+            if min != 0 {
+                panic!(
+                    "invalid `min` number of arguments for `{}` expected 0 but was {}",
+                    pat_type_to_string(&arg.pat_type),
+                    min
+                );
+            }
+
+            if max != 1 {
+                panic!(
+                    "invalid `max` number of arguments for `{}` expected 1 but was {}",
+                    pat_type_to_string(&arg.pat_type),
+                    max
+                );
+            }
+        }
+        ArgumentType::Vec(_) | ArgumentType::Slice(_) => { /* Nothing */ },
+        ArgumentType::Array(_) => {
+            if min != max {
+                panic!(
+                    "invalid `min` and `max` number of arguments for `{}`, expected the `min == max` but was: `{}` and `{}`",
+                    pat_type_to_string(&arg.pat_type),
+                    min,
+                    max
+                );
+            }
+        }
     }
 }

@@ -4,7 +4,7 @@ use quote::*;
 use syn::export::fmt::Display;
 use syn::export::{Formatter, ToTokens};
 use syn::spanned::Spanned;
-use syn::{GenericArgument, Pat, PatType, Type};
+use syn::{GenericArgument, Pat, PatType, Type, Expr};
 
 #[derive(Debug, Clone)]
 pub struct ArgLocalVar {
@@ -66,12 +66,17 @@ impl ArgLocalVar {
         };
 
         match self.ty {
-            ArgumentType::Slice(_) | ArgumentType::MutSlice(_) => {
+            ArgumentType::Slice(_) => {
                 let concat = format!("tmp_{}", var_name);
                 let temp = syn::Ident::new(&concat, var_name.span());
                 let as_slice = match &self.ty {
-                    ArgumentType::Slice(_) => quote! { .as_slice() },
-                    ArgumentType::MutSlice(_) => quote! { .as_mut_slice() },
+                    ArgumentType::Slice(slice) => {
+                        if slice.mutability {
+                            quote! { .as_mut_slice() }
+                        } else {
+                            quote! { .as_slice() }
+                        }
+                    }
                     _ => unreachable!(),
                 };
 
@@ -96,7 +101,11 @@ impl ArgLocalVar {
             ArgumentType::Type(ty) => {
                 quote! { opts.get(#option_name).unwrap().get_args().get(#arg_name).unwrap().convert::<#ty>()? }
             }
-            ArgumentType::Vec(ty) | ArgumentType::Slice(ty) | ArgumentType::MutSlice(ty) => {
+            ArgumentType::Vec(ty) => {
+                quote! { opts.get(#option_name).unwrap().get_args().get(#arg_name).unwrap().convert_all::<#ty>()? }
+            }
+            ArgumentType::Slice(slice) => {
+                let ty = &slice.ty;
                 quote! { opts.get(#option_name).unwrap().get_args().get(#arg_name).unwrap().convert_all::<#ty>()? }
             }
             ArgumentType::Option(ty) => {
@@ -108,6 +117,22 @@ impl ArgLocalVar {
                             0 => None,
                             _ => Some(#option_arg.convert::<#ty>()?)
                         }
+                    }
+                }
+            }
+            ArgumentType::Array(array) => {
+                let ty = &array.ty;
+                let len = &array.len;
+                quote! {
+                    {
+                        let temp = opts.get(#option_name)
+                            .unwrap()
+                            .get_args()
+                            .get(#arg_name)
+                            .unwrap()
+                            .convert_all<#ty>()?;
+
+                        std::convert::TryInto::<[#ty; #len]>::try_into(temp).unwrap()
                     }
                 }
             }
@@ -123,7 +148,11 @@ impl ArgLocalVar {
                     unreachable!()
                 }
             }
-            ArgumentType::Vec(ty) | ArgumentType::Slice(ty) | ArgumentType::MutSlice(ty) => {
+            ArgumentType::Vec(ty) => {
+                quote! { args.get(#arg_name).unwrap().convert_all::<#ty>()? }
+            }
+            ArgumentType::Slice(slice) => {
+                let ty = &slice.ty;
                 quote! { args.get(#arg_name).unwrap().convert_all::<#ty>()? }
             }
             ArgumentType::Option(ty) => {
@@ -135,6 +164,16 @@ impl ArgLocalVar {
                             0 => None,
                             _ => Some(#arg_temp.convert::<#ty>()?)
                         }
+                    }
+                }
+            }
+            ArgumentType::Array(array) => {
+                let ty = &array.ty;
+                let len = &array.len;
+                quote! {
+                    {
+                        let temp = args.get(#arg_name).unwrap().convert_all::<#ty>()?;
+                        std::convert::TryInto::<[#ty; #len]>::try_into(temp).unwrap()
                     }
                 }
             }
@@ -170,9 +209,21 @@ pub enum VarSource {
 pub enum ArgumentType {
     Type(Box<Type>),
     Vec(Box<Type>),
-    Slice(Box<Type>),
-    MutSlice(Box<Type>),
     Option(Box<Type>),
+    Slice(SliceType),
+    Array(ArrayType),
+}
+
+#[derive(Debug, Clone)]
+pub struct SliceType {
+    pub ty: Box<Type>,
+    pub mutability: bool
+}
+
+#[derive(Debug, Clone)]
+pub struct ArrayType {
+    pub ty: Box<Type>,
+    pub len: usize
 }
 
 impl ArgumentType {
@@ -184,9 +235,9 @@ impl ArgumentType {
         match self {
             ArgumentType::Type(ty) => ty.as_ref(),
             ArgumentType::Vec(ty) => ty.as_ref(),
-            ArgumentType::Slice(ty) => ty.as_ref(),
-            ArgumentType::MutSlice(ty) => ty.as_ref(),
             ArgumentType::Option(ty) => ty.as_ref(),
+            ArgumentType::Slice(slice) => slice.ty.as_ref(),
+            ArgumentType::Array(array) => array.ty.as_ref(),
         }
     }
 
@@ -203,7 +254,14 @@ impl ArgumentType {
     }
 
     pub fn is_mut_slice(&self) -> bool {
-        matches!(self, ArgumentType::MutSlice(_))
+        match self {
+            ArgumentType::Slice(slice) => slice.mutability,
+            _ => false
+        }
+    }
+
+    pub fn is_array(&self) -> bool {
+        matches!(self, ArgumentType::Array(_))
     }
 
     pub fn is_option(&self) -> bool {
@@ -246,17 +304,33 @@ fn get_argument_type(pat_type: &PatType) -> ArgumentType {
         }
         Type::Reference(type_ref) => {
             return if let Type::Slice(array) = type_ref.elem.as_ref() {
-                match type_ref.mutability {
-                    Some(_) => ArgumentType::MutSlice(array.elem.clone()),
-                    None => ArgumentType::Slice(array.elem.clone()),
-                }
+                ArgumentType::Slice(SliceType {
+                    ty: array.elem.clone(),
+                    mutability: type_ref.mutability.is_some()
+                })
             } else {
                 panic!(
                     "expected slice found reference: `{}`",
                     pat_type.to_token_stream().to_string()
                 );
             }
-        }
+        },
+        Type::Array(type_array) => {
+            ArgumentType::Array(ArrayType{
+                ty: type_array.elem.clone(),
+                len: {
+                    if let Expr::Lit(expr) = &type_array.len {
+                        if let syn::Lit::Int(int) = &expr.lit {
+                            int.base10_parse::<usize>().unwrap()
+                        } else {
+                            panic!("array len must be a literal: `{}`", pat_type.to_token_stream().to_string())
+                        }
+                    } else {
+                        panic!("array len must be a literal: `{}`", pat_type.to_token_stream().to_string())
+                    }
+                }
+            })
+        },
         _ => panic_invalid_argument_type(pat_type),
     }
 }
@@ -275,23 +349,6 @@ fn generic_type(pat_type: &PatType) -> Box<Type> {
     } else {
         panic_invalid_argument_type(pat_type)
     }
-
-    // if let Type::Path(type_path) = pat_type.ty.as_ref() {
-    //     let segment = type_path.path.segments
-    //         .last()
-    //         .unwrap_or_else(|| panic_invalid_argument_type(pat_type));
-    //
-    //     if let PathArguments::AngleBracketed(angle_bracketed_generics) = &segment.arguments {
-    //         let generic = angle_bracketed_generics.args
-    //             .iter()
-    //             .single()
-    //             .unwrap_or_else(|| panic!("multiple generics defined: `{}`", pat_type.to_token_stream().to_string()));
-    //
-    //         if let GenericArgument::Type(ty) = generic {
-    //             return Box::new(ty.clone())
-    //         }
-    //     }
-    // }
 }
 
 fn panic_invalid_argument_type(pat_type: &PatType) -> ! {
