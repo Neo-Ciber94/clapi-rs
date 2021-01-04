@@ -89,12 +89,10 @@ impl SuggestionProvider for DefaultSuggestionProvider {
             .then_apply(|mut result| {
                 if result.is_empty() {
                     None
+                } else if result.len() == 1 {
+                    Some(SuggestionResult::Value(result.swap_remove(0)))
                 } else {
-                    if result.len() == 1 {
-                        Some(SuggestionResult::Value(result.swap_remove(0)))
-                    } else {
-                        Some(SuggestionResult::List(result))
-                    }
+                    Some(SuggestionResult::List(result))
                 }
             })
     }
@@ -185,6 +183,7 @@ pub fn compute_levenshtein_distance_ignore_case(x: &str, y: &str) -> usize {
 /// # See
 /// https://en.wikipedia.org/wiki/Levenshtein_distance
 #[doc(hidden)]
+#[allow(clippy::needless_range_loop)]
 pub fn compute_levenshtein_distance(x: &str, y: &str, ignore_case: bool) -> usize {
     if x == y {
         return 0;

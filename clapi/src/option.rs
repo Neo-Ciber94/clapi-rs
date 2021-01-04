@@ -1,3 +1,4 @@
+#![allow(clippy::len_zero)]
 use crate::args::{Argument, ArgumentList};
 use linked_hash_set::LinkedHashSet;
 use std::fmt::Debug;

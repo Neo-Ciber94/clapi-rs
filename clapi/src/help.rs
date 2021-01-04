@@ -1,3 +1,4 @@
+#![allow(clippy::len_zero)]
 use std::fmt::{Write, Display, Formatter};
 use crate::{Context, Command, CommandOption, Argument};
 use crate::utils::Then;
@@ -55,7 +56,7 @@ pub enum HelpKind {
 }
 
 /// A buffer of bytes to write to.
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct Buffer {
     buffer: Vec<u8>
 }
@@ -64,7 +65,7 @@ impl Buffer {
     /// Constructs a new `Buffer`.
     pub fn new() -> Self {
         Buffer {
-            buffer: Vec::new()
+            buffer: Default::default()
         }
     }
 
@@ -235,7 +236,7 @@ fn option_to_string(context: &Context, option: &CommandOption) -> String {
     if let Some(description) = option.get_description() {
         format!("{:25} {}", names, description)
     } else {
-        format!("{}", names)
+        names
     }
 }
 
@@ -244,7 +245,7 @@ fn command_to_string(command: &Command) -> String {
     if let Some(description) = command.get_description() {
         format!("{:25} {}", command.get_name(), description)
     } else {
-        format!("{}", command.get_name())
+        command.get_name().to_owned()
     }
 }
 

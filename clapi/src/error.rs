@@ -61,10 +61,7 @@ impl Error {
 
     /// Returns `true` if this is a `ParseError`.
     pub fn is_parse_error(&self) -> bool {
-        match self.inner {
-            Inner::Parsed(_) => true,
-            _ => false,
-        }
+        matches!(self.inner, Inner::Parsed(_))
     }
 
     /// Try converts this `Error` into a `ParseError`.

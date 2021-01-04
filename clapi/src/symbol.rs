@@ -17,17 +17,11 @@ impl Symbol {
 
     /// Checks if this symbol is a command.
     pub fn is_command(&self) -> bool {
-        match self {
-            Symbol::Cmd(_) => true,
-            _ => false,
-        }
+        matches!(self, Symbol::Cmd(_))
     }
 
     /// Checks if this symbol is an option.
     pub fn is_option(&self) -> bool {
-        match self {
-            Symbol::Opt(_) => true,
-            _ => false,
-        }
+        matches!(self, Symbol::Opt(_))
     }
 }

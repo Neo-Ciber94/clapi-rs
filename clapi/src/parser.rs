@@ -1,3 +1,4 @@
+#![allow(clippy::collapsible_if, clippy::len_zero)]
 use std::borrow::Borrow;
 use std::iter::Peekable;
 use crate::args::ArgumentList;
@@ -153,17 +154,16 @@ impl Parser {
                         }
 
                         // Sets the argument values
-                        arg.set_values(values).or_else(|error| {
+                        arg.set_values(values).map_err(|error| {
                             // We add the last option to the error
                             let mut options = options.clone();
                             options.add(option.clone()).unwrap();
-
-                            Err(Error::new_parse_error(
+                            Error::new_parse_error(
                                 error,
                                 ParseResult::new(
                                     command.clone(), options, ArgumentList::default()
                                 ),
-                            ))
+                            )
                         })?;
 
                         option_args.add(arg).unwrap();
@@ -182,7 +182,7 @@ impl Parser {
                     Error::from(ErrorKind::UnrecognizedOption(prefix.clone(), s.clone())),
                     ParseResult::new(
                         command.clone(),
-                        options.clone(),
+                        options,
                         ArgumentList::default(),
                     ),
                 ));
@@ -237,17 +237,16 @@ impl Parser {
             // Sets the argument values
             // We attempt to set the values even if empty to return `invalid argument count` error.
             if values.len() > 0 || (values.is_empty() && !arg.has_default_values()) {
-                arg.set_values(values).or_else(|error| {
+                arg.set_values(values).map_err(|error| {
                     // We add the last arg
                     let mut args = command_args.clone();
                     args.add(arg.clone()).unwrap();
-
-                    Err(Error::new_parse_error(
+                    Error::new_parse_error(
                         error,
                         ParseResult::new(
                             command.clone(), options.clone(), args
                         ),
-                    ))
+                    )
                 })?;
             }
 

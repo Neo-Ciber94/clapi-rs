@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity, clippy::len_zero)]
 use crate::args::{Argument, ArgumentList};
 use crate::error::Result;
 use crate::option::{CommandOption, OptionList};
@@ -64,12 +65,12 @@ impl Command {
 
     /// Returns a short description of the command, or `None` if is not set.
     pub fn get_description(&self) -> Option<&str> {
-        self.description.as_ref().map(|s| s.as_str())
+        self.description.as_deref()
     }
 
     /// Returns additional information about this command like authors, usage, examples, etc...
     pub fn get_about(&self) -> Option<&str> {
-        self.about.as_ref().map(|s| s.as_str())
+        self.about.as_deref()
     }
 
     /// Returns an `ExactSizeIterator` over the children of this command.

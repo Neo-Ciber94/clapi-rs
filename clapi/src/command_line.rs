@@ -1,3 +1,4 @@
+#![allow(clippy::len_zero)]
 use crate::command::Command;
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, ParseError, Result};
@@ -150,7 +151,7 @@ impl CommandLine {
                     ));
                 }
 
-                return Err(error);
+                Err(error)
             }
         }
     }
@@ -201,8 +202,7 @@ impl CommandLine {
         fn find_command<'a>(root: &'a Command, children: &[String]) -> Result<&'a Command> {
             let mut current = root;
 
-            for i in 0..children.len() {
-                let child_name = children[i].as_str();
+            for child_name in children {
                 if let Some(cmd) = current.find_subcommand(child_name) {
                     current = cmd;
                 } else {

@@ -1,3 +1,5 @@
+#![allow(clippy::len_zero)]
+
 use crate::error::Result;
 use crate::{ArgCount, Error, ErrorKind};
 use linked_hash_set::LinkedHashSet;
@@ -75,7 +77,7 @@ impl Argument {
 
     /// Returns the description of this argument.
     pub fn get_description(&self) -> Option<&str> {
-        self.description.as_ref().map(|s| s.as_str())
+        self.description.as_deref()
     }
 
     /// Returns the number of values this argument takes.
@@ -334,7 +336,7 @@ impl Argument {
         if self.values.is_empty() {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
-                format!("expected at least 1 argument value"),
+                "expected at least 1 argument value",
             ));
         }
 
@@ -366,7 +368,7 @@ impl Argument {
         if self.values.is_empty() {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
-                format!("expected at least 1 argument value"),
+                "expected at least 1 argument value",
             ));
         }
 

@@ -17,39 +17,27 @@ pub enum Token {
     EOO,
 }
 
-const END_OF_OPTIONS: &'static str = "--";
+const END_OF_OPTIONS: &str = "--";
 
 impl Token {
     /// Returns `true` if the token is a command.
     pub fn is_command(&self) -> bool {
-        match self {
-            Token::Cmd(_) => true,
-            _ => false,
-        }
+        matches!(self, Token::Cmd(_))
     }
 
     /// Returns `true` if the token is an option.
     pub fn is_option(&self) -> bool {
-        match self {
-            Token::Opt(_, _) => true,
-            _ => false,
-        }
+        matches!(self, Token::Opt(_, _))
     }
 
     /// Returns `true` if the token is an argument.
     pub fn is_arg(&self) -> bool {
-        match self {
-            Token::Arg(_) => true,
-            _ => false,
-        }
+        matches!(self, Token::Arg(_))
     }
 
     /// Returns `true` if the token represents an `end of options`.
     pub fn is_eoo(&self) -> bool {
-        match self {
-            Token::EOO => true,
-            _ => false,
-        }
+        matches!(self, Token::EOO)
     }
 
     /// Returns a `String` representation of this `Token`.
@@ -142,27 +130,25 @@ impl Tokenizer {
                 iterator.next();
 
                 if let Some(args) = args {
-                    tokens.extend(args.into_iter().map(|t| Token::Arg(t)));
-                } else {
-                    if let Some(opt) = current_command.get_options().get(option.as_str()) {
-                        for arg in opt.get_args() {
-                            let max_arg_count = arg.get_arg_count().max();
-                            let mut count = 0;
-                            while count < max_arg_count {
-                                if let Some(value) = iterator.peek() {
-                                    let s: &str = value.borrow();
-                                    // If the token is prefixed as an option: exit
-                                    if context.is_option_prefixed(s) || s == END_OF_OPTIONS {
-                                        break;
-                                    } else {
-                                        // Adds the next argument
-                                        tokens.push(Token::Arg(s.to_string()));
-                                        iterator.next();
-                                        count += 1;
-                                    }
-                                } else {
+                    tokens.extend(args.into_iter().map(Token::Arg));
+                } else if let Some(opt) = current_command.get_options().get(option.as_str()) {
+                    for arg in opt.get_args() {
+                        let max_arg_count = arg.get_arg_count().max();
+                        let mut count = 0;
+                        while count < max_arg_count {
+                            if let Some(value) = iterator.peek() {
+                                let s: &str = value.borrow();
+                                // If the token is prefixed as an option: exit
+                                if context.is_option_prefixed(s) || s == END_OF_OPTIONS {
                                     break;
+                                } else {
+                                    // Adds the next argument
+                                    tokens.push(Token::Arg(s.to_string()));
+                                    iterator.next();
+                                    count += 1;
                                 }
+                            } else {
+                                break;
                             }
                         }
                     }
@@ -245,7 +231,7 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
             if args.iter().any(|s| s.is_empty()) {
                 return Err(Error::new(
                     ErrorKind::InvalidExpression,
-                    format!("{}", value),
+                    value,
                 ));
             }
 
