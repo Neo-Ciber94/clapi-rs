@@ -13,8 +13,8 @@ impl Serialize for ArgCount {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct("ArgCount", 2)?;
-        state.serialize_field("min_count", &self.min())?;
-        state.serialize_field("max_count", &self.max())?;
+        state.serialize_field("min_count", &self.min_count())?;
+        state.serialize_field("max_count", &self.max_count())?;
         state.end()
     }
 }
@@ -92,15 +92,16 @@ impl<'de> Deserialize<'de> for ArgCount {
                 let max = seq
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(1, &self))?;
-                Ok(ArgCount::new(min, max))
+
+                Ok(ArgCount::new_checked(min, max).expect("min < max"))
             }
 
             fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
             where
                 A: MapAccess<'de>,
             {
-                let mut min = None;
-                let mut max = None;
+                let mut min : Option<Option<usize>> = None;
+                let mut max : Option<Option<usize>> = None;
 
                 while let Some(key) = map.next_key()? {
                     match key {
@@ -120,9 +121,7 @@ impl<'de> Deserialize<'de> for ArgCount {
                     }
                 }
 
-                let min = min.ok_or_else(|| de::Error::missing_field("min_count"))?;
-                let max = max.ok_or_else(|| de::Error::missing_field("max_count"))?;
-                Ok(ArgCount::new(min, max))
+                Ok(ArgCount::new_checked(min.flatten(),max.flatten()).expect("min < max"))
             }
         }
 
@@ -152,8 +151,8 @@ impl Serialize for Argument {
         let mut state = serializer.serialize_struct("Argument", 7)?;
         state.serialize_field("name", &self.get_name())?;
         state.serialize_field("description", &self.get_description())?;
-        state.serialize_field("min_count", &self.get_arg_count().min())?;
-        state.serialize_field("max_count", &self.get_arg_count().max())?;
+        state.serialize_field("min_count", &self.get_arg_count().min_count())?;
+        state.serialize_field("max_count", &self.get_arg_count().max_count())?;
         state.serialize_field("type", &get_valid_type(self.get_validator()))?;
         state.serialize_field("valid_values", &self.get_valid_values())?;
         state.serialize_field("default_values", &self.get_default_values())?;
@@ -259,11 +258,11 @@ impl<'de> Deserialize<'de> for Argument {
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(1, &self))?;
 
-                let min_count: usize = seq
+                let min_count: Option<usize> = seq
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(2, &self))?;
 
-                let max_count: usize = seq
+                let max_count: Option<usize> = seq
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(3, &self))?;
 
@@ -279,8 +278,20 @@ impl<'de> Deserialize<'de> for Argument {
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(6, &self))?;
 
-                let mut argument =
-                    Argument::new(name).arg_count(ArgCount::new(min_count, max_count));
+                let mut argument = Argument::new(name);
+
+                match (min_count, max_count) {
+                    (Some(min), Some(max)) => {
+                        argument = argument.arg_count(ArgCount::new(min, max));
+                    },
+                    (Some(min), None) => {
+                        argument = argument.arg_count(ArgCount::more_than(min));
+                    },
+                    (None, Some(max)) => {
+                        argument = argument.arg_count(ArgCount::less_than(max));
+                    }
+                    (None, None) => { /*By default an `Argument` takes 1 value */ }
+                }
 
                 if let Some(description) = description {
                     argument = argument.description(description);
@@ -307,8 +318,8 @@ impl<'de> Deserialize<'de> for Argument {
             {
                 let mut name: Option<String> = None;
                 let mut description: Option<Option<String>> = None;
-                let mut min_count: Option<usize> = None;
-                let mut max_count: Option<usize> = None;
+                let mut min_count: Option<Option<usize>> = None;
+                let mut max_count: Option<Option<usize>> = None;
                 let mut valid_type : Option<Option<ValidType>> = None;
                 let mut valid_values: Option<Vec<String>> = None;
                 let mut default_values: Option<Vec<String>> = None;
@@ -384,18 +395,18 @@ impl<'de> Deserialize<'de> for Argument {
                     argument = argument.description(description);
                 }
 
-                match (min_count, max_count) {
+                match (min_count.flatten(), max_count.flatten()) {
                     (Some(min), Some(max)) => {
                         argument = argument.arg_count(ArgCount::new(min, max));
-                    }
+                    },
                     (Some(min), None) => {
                         argument = argument.arg_count(ArgCount::more_than(min));
-                    }
+                    },
                     (None, Some(max)) => {
                         argument = argument.arg_count(ArgCount::less_than(max));
                     }
-                    (None, None) => {}
-                };
+                    (None, None) => { /*By default an `Argument` takes 1 value */ }
+                }
 
                 if let Some(Some(valid_type)) = valid_type {
                     argument = valid_type.set_validator(argument);
@@ -1158,7 +1169,7 @@ mod tests {
         use serde_test::Token;
 
         #[test]
-        fn arg_count_test() {
+        fn arg_count_test1() {
             let arg_count = ArgCount::new(2, 10);
             serde_test::assert_tokens(
                 &arg_count,
@@ -1168,9 +1179,50 @@ mod tests {
                         len: 2,
                     },
                     Token::Str("min_count"),
+                    Token::Some,
                     Token::U64(2),
                     Token::Str("max_count"),
+                    Token::Some,
                     Token::U64(10),
+                    Token::StructEnd,
+                ],
+            )
+        }
+
+        #[test]
+        fn arg_count_test2() {
+            let arg_count = ArgCount::less_than(10);
+            serde_test::assert_tokens(
+                &arg_count,
+                &[
+                    Token::Struct {
+                        name: "ArgCount",
+                        len: 2,
+                    },
+                    Token::Str("min_count"),
+                    Token::None,
+                    Token::Str("max_count"),
+                    Token::Some,
+                    Token::U64(10),
+                    Token::StructEnd,
+                ],
+            )
+        }
+
+        #[test]
+        fn arg_count_test3() {
+            let arg_count = ArgCount::any();
+            serde_test::assert_tokens(
+                &arg_count,
+                &[
+                    Token::Struct {
+                        name: "ArgCount",
+                        len: 2,
+                    },
+                    Token::Str("min_count"),
+                    Token::None,
+                    Token::Str("max_count"),
+                    Token::None,
                     Token::StructEnd,
                 ],
             )
@@ -1198,8 +1250,8 @@ mod tests {
                 &args_tokens(
                     "numbers",
                     Some("A set of numbers"),
-                    1,
-                    10,
+                    Some(1),
+                    Some(10),
                     Some(ValidType::I64),
                     vec!["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
                     vec!["1", "2", "3"],
@@ -1211,7 +1263,15 @@ mod tests {
         fn argument_missing_fields_test1() {
             let arg = Argument::new("numbers");
 
-            serde_test::assert_tokens(&arg, &args_tokens("numbers", None, 1, 1, None, vec![], vec![]));
+            serde_test::assert_tokens(&arg, &args_tokens(
+                "numbers",
+                None,
+                Some(1),
+                Some(1),
+                None,
+                vec![],
+                vec![]
+            ));
         }
 
         #[test]
@@ -1222,7 +1282,15 @@ mod tests {
 
             serde_test::assert_tokens(
                 &arg,
-                &args_tokens("numbers", None, 1, 1, None, vec!["0", "1", "2", "3"], vec!["0"]),
+                &args_tokens(
+                    "numbers",
+                    None,
+                    Some(1),
+                    Some(1),
+                    None,
+                    vec!["0", "1", "2", "3"],
+                    vec!["0"]
+                ),
             );
         }
 
@@ -1260,9 +1328,9 @@ mod tests {
 
             let mut tokens = Vec::new();
             tokens.push(Token::Seq { len: Some(3) });
-            tokens.extend(args_tokens("A", Some("a"), 1, 1, None, vec![], vec![]));
-            tokens.extend(args_tokens("B", None, 2, 2, None, vec![], vec![]));
-            tokens.extend(args_tokens("C", None, 1, 1, None, vec!["a", "b", "c"], vec![]));
+            tokens.extend(args_tokens("A", Some("a"), Some(1), Some(1), None, vec![], vec![]));
+            tokens.extend(args_tokens("B", None, Some(2), Some(2), None, vec![], vec![]));
+            tokens.extend(args_tokens("C", None, Some(1), Some(1), None, vec!["a", "b", "c"], vec![]));
             tokens.push(Token::SeqEnd);
 
             serde_test::assert_tokens(&args, tokens.as_slice());
@@ -1285,7 +1353,15 @@ mod tests {
                 .arg(Argument::new("N"));
 
             let mut args = Vec::new();
-            args.extend(args_tokens("N", None, 1, 1, None, vec![], vec![]));
+            args.extend(args_tokens(
+                "N",
+                None,
+                Some(1),
+                Some(1),
+                None,
+                vec![],
+                vec![]
+            ));
 
             serde_test::assert_tokens(
                 &opt,
@@ -1308,8 +1384,8 @@ mod tests {
             let args = Vec::from(args_tokens(
                 "color",
                 None,
-                1,
-                1,
+                Some(1),
+                Some(1),
                 None,
                 vec!["red", "blue", "green"],
                 vec![],
@@ -1386,7 +1462,15 @@ mod tests {
                 vec!["b"],
                 None,
                 false,
-                (1, args_tokens("value", None, 1, 1, None, vec![], vec![])),
+                (1, args_tokens(
+                    "value",
+                    None,
+                    Some(1),
+                    Some(1),
+                    None,
+                    vec![],
+                    vec![]
+                )),
             ));
             tokens.push(Token::SeqEnd);
 
@@ -1427,11 +1511,27 @@ mod tests {
                 false,
                 (
                     1,
-                    args_tokens("color", None, 1, 1, None, vec!["red", "green", "blue"], vec![]),
+                    args_tokens(
+                        "color",
+                        None,
+                        Some(1),
+                        Some(1),
+                        None,
+                        vec!["red", "green", "blue"],
+                        vec![]
+                    ),
                 ),
             ));
 
-            let args = args_tokens("values", None, 1, u64::max_value(), None, vec![], vec![]);
+            let args = args_tokens(
+                "values",
+                None,
+                Some(1),
+                None,
+                None,
+                vec![],
+                vec![]
+            );
 
             serde_test::assert_ser_tokens(
                 &command,
@@ -1450,7 +1550,15 @@ mod tests {
         fn command_missing_fields_test() {
             let command = Command::new("echo").arg(Argument::new("value"));
 
-            let arg = args_tokens("value", None, 1, 1, None, vec![], vec![]);
+            let arg = args_tokens(
+                "value",
+                None,
+                Some(1),
+                Some(1),
+                None,
+                vec![],
+                vec![]
+            );
 
             serde_test::assert_tokens(
                 &command,
@@ -1525,8 +1633,8 @@ mod tests {
     fn args_tokens(
         name: &'static str,
         description: Option<&'static str>,
-        min_count: u64,
-        max_count: u64,
+        min_count: Option<u64>,
+        max_count: Option<u64>,
         valid_type: Option<ValidType>,
         valid_values: Vec<&'static str>,
         default_values: Vec<&'static str>,
@@ -1549,10 +1657,20 @@ mod tests {
         }
 
         tokens.push(Token::Str("min_count"));
-        tokens.push(Token::U64(min_count));
+        if let Some(min_count) = min_count {
+            tokens.push(Token::Some);
+            tokens.push(Token::U64(min_count))
+        } else {
+            tokens.push(Token::None);
+        }
 
         tokens.push(Token::Str("max_count"));
-        tokens.push(Token::U64(max_count));
+        if let Some(max_count) = max_count {
+            tokens.push(Token::Some);
+            tokens.push(Token::U64(max_count))
+        } else {
+            tokens.push(Token::None);
+        }
 
         tokens.push(Token::Str("type"));
         if let Some(valid_type) = valid_type {

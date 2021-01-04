@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
-use std::ops::{Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive, Sub};
+use std::ops::{Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive, Sub, RangeBounds};
+use std::collections::Bound;
 
 /**
 Represents the number of arguments a option or command can take.
@@ -7,119 +8,152 @@ Numeric signed, unsigned and ranges of these types implements `Into<ArgCount>`.
 */
 #[derive(Debug, Default, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct ArgCount {
-    min: usize,
-    max: usize,
+    min: Option<usize>,
+    max: Option<usize>,
 }
 
 impl ArgCount {
     /// Constructs a new `ArgCount` with the specified `min` and `max` argument count.
+    #[inline]
     pub fn new(min: usize, max: usize) -> Self {
-        assert!(min <= max);
-        Self::new_unchecked(min, max)
+        Self::new_checked(Some(min), Some(max)).expect("min < max")
+    }
+
+    /// Constructs a new `ArgCount` or returns `None` if min > max
+    #[inline]
+    pub fn new_checked(min: Option<usize>, max: Option<usize>) -> Option<Self> {
+        match (min, max) {
+            (Some(min), Some(max)) if min > max => None,
+            _ => unsafe { Some(Self::new_unchecked(min, max)) }
+        }
     }
 
     #[inline(always)]
-    const fn new_unchecked(min: usize, max: usize) -> Self {
+    const unsafe fn new_unchecked(min: Option<usize>, max: Option<usize>) -> Self {
         ArgCount { min, max }
     }
 
     /// Constructs a new `ArgCount` for not arguments.
     #[inline]
     pub const fn zero() -> Self {
-        Self::new_unchecked(0, 0)
+        unsafe { Self::new_unchecked(Some(0), Some(0)) }
     }
 
     /// Constructs a new `ArgCount` for exactly 1 argument.
     #[inline]
     pub const fn one() -> Self {
-        Self::new_unchecked(1, 1)
+        unsafe { Self::new_unchecked(Some(1), Some(1)) }
     }
 
     /// Constructs a new `ArgCount` for any number of arguments.
     #[inline]
     pub const fn any() -> Self {
-        Self::new_unchecked(0, usize::max_value())
+        unsafe { Self::new_unchecked(None, None) }
     }
 
     /// Constructs a new `ArgCount` for the specified number of arguments.
     #[inline]
-    pub fn exactly(count: usize) -> Self {
-        Self::new(count, count)
+    pub const fn exactly(count: usize) -> Self {
+        unsafe { Self::new_unchecked(Some(count), Some(count)) }
     }
 
     /// Constructs a new `ArgCount` for more than the specified number of arguments.
     #[inline]
     pub fn more_than(min: usize) -> Self {
-        Self::new(min, usize::max_value())
+        unsafe { Self::new_unchecked(Some(min), None) }
     }
 
     /// Constructs a new `ArgCount` for less than the specified number of arguments.
     #[inline]
     pub fn less_than(max: usize) -> Self {
-        Self::new(0, max)
+        unsafe { Self::new_unchecked(None, Some(max)) }
     }
 
     /// Returns the min number of arguments can takes.
     #[inline]
     pub const fn min(&self) -> usize {
-        self.min
+        match self.min {
+            Some(n) => n,
+            None => 0
+        }
     }
 
     /// Returns the max number of arguments can takes.
     #[inline]
     pub const fn max(&self) -> usize {
+        match self.max {
+            Some(n) => n,
+            None => usize::max_value()
+        }
+    }
+
+    /// Returns the `min` number of arguments or `None` if unbounded.
+    #[inline]
+    pub const fn min_count(&self) -> Option<usize> {
+        self.min
+    }
+
+    /// Returns the `max` number of arguments of `None` if unbounded.
+    #[inline]
+    pub const fn max_count(&self) -> Option<usize> {
         self.max
     }
 
     /// Returns `true` if this takes the provided number of arguments.
     #[inline]
     pub const fn takes(&self, count: usize) -> bool {
-        count >= self.min && count <= self.max
+        count >= self.min() && count <= self.max()
     }
 
     /// Returns `true` if this takes arguments.
     #[inline]
     pub const fn takes_args(&self) -> bool {
-        self.max != 0
+        self.max() != 0
     }
 
     /// Returns `true` if this takes no arguments.
     #[inline]
     pub const fn takes_no_args(&self) -> bool {
-        self.min == 0 && self.max == 0
+        self.min() == 0 && self.max() == 0
     }
 
     /// Returns `true` if this takes an exact number of arguments.
     #[inline]
     pub const fn is_exact(&self) -> bool {
-        self.min == self.max
+        self.min() == self.max()
     }
 
     /// Returns `true` if this takes exactly the specified number of arguments.
     #[inline]
     pub const fn takes_exactly(&self, count: usize) -> bool {
-        self.min == count && self.max == count
+        self.min() == count && self.max() == count
     }
 }
 
 impl Display for ArgCount {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.is_exact() {
-            write!(
-                f,
-                "{} argument{}",
-                self.min,
-                if self.takes_exactly(1) { "" } else { "s" }
-            )
-        } else {
-            write!(f, "{} to {} arguments", self.min, self.max)
+            return if self.takes_exactly(0){
+                write!(f, "no arguments")
+            } else if self.takes_exactly(1){
+                write!(f, "1 argument")
+            } else {
+                write!(f, "{} arguments", self.min())
+            };
+        }
+
+        match (self.min, self.max) {
+            (Some(min), Some(max)) => write!(f, "{} to {} arguments", min, max),
+            (Some(min), None) => write!(f, "{} or more arguments", min),
+            (None, Some(max)) => write!(f, "{} or less arguments", max),
+            (None, None) => write!(f, "any number of arguments")
         }
     }
 }
 
 impl Into<RangeInclusive<usize>> for ArgCount {
     fn into(self) -> RangeInclusive<usize> {
-        self.min..=self.max
+        self.min()..=self.max()
     }
 }
 
@@ -127,6 +161,22 @@ impl Into<ArgCount> for RangeFull {
     #[inline]
     fn into(self) -> ArgCount {
         ArgCount::any()
+    }
+}
+
+impl RangeBounds<usize> for ArgCount {
+    fn start_bound(&self) -> Bound<&usize> {
+        match self.min {
+            Some(ref n) => Bound::Included(n),
+            None => Bound::Unbounded
+        }
+    }
+
+    fn end_bound(&self) -> Bound<&usize> {
+        match self.max {
+            Some(ref n) => Bound::Included(n),
+            None => Bound::Unbounded
+        }
     }
 }
 

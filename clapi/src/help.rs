@@ -159,6 +159,11 @@ impl Help for DefaultHelp {
             writeln!(buf, "{}", about)?;
         }
 
+        // Help usage message
+        if let Some(msg) = use_help_for_more_info_msg(context){
+            writeln!(buf, "{}", msg)?;
+        }
+
         Ok(())
     }
 
@@ -246,6 +251,24 @@ fn command_to_string(command: &Command) -> String {
         format!("{:25} {}", command.get_name(), description)
     } else {
         command.get_name().to_owned()
+    }
+}
+
+// Use '' for see more information about a command
+fn use_help_for_more_info_msg(context: &Context) -> Option<String> {
+    if let Some(help) = context.help() {
+        match help.kind() {
+            HelpKind::Any | HelpKind::Subcommand => {
+                Some(format!("Use '{} <subcommand>' for more information about a command.", help.name()))
+            }
+            HelpKind::Option => {
+                // SAFETY: `name_prefixes` is never empty
+                let prefix = context.name_prefixes().next().unwrap();
+                Some(format!("Use '<subcommand> {}{}' for more information about a command.", prefix, help.name()))
+            }
+        }
+    } else {
+        None
     }
 }
 

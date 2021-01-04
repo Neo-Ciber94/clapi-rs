@@ -35,7 +35,7 @@ impl OptionAttrData {
     }
 
     pub fn from_arg_data(arg_data: FnArgData) -> Self {
-        // The `ArgAttrData` don't need the attributes, these are read and set by the option
+        // The `ArgAttrData` don't need the attributes, these are set by the option
         fn drop_attributes(mut data: FnArgData) -> FnArgData {
             data.attribute = None;
             data.name_value = None;

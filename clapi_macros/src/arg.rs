@@ -23,77 +23,73 @@ pub struct ArgAttrData {
     min: Option<usize>,
     max: Option<usize>,
     description: Option<String>,
-    fn_arg: Option<(FnArgData, ArgumentType)>,
+    fn_arg: (FnArgData, ArgumentType),
     default_values: Vec<Lit>,
     attribute: Option<MacroAttribute>,
 }
 
 impl ArgAttrData {
-    pub fn new(name: String, attribute: Option<MacroAttribute>) -> Self {
-        ArgAttrData {
-            name,
+    pub fn from_arg_data(arg_data: FnArgData) -> Self {
+        // Deconstruct the `FnArgData`
+        let FnArgData {
+            arg_name,
+            pat_type,
+            attribute,
+            name_value,
+            ..
+        } = arg_data.clone();
+
+        let mut arg = ArgAttrData {
+            name: arg_name,
             min: None,
             max: None,
             description: None,
-            fn_arg: None,
+            fn_arg: (arg_data, ArgumentType::new(&pat_type)),
             default_values: vec![],
-            attribute,
-        }
-    }
+            attribute
+        };
 
-    pub fn from_arg_data(arg_data: FnArgData) -> Self {
-        let arg_type = ArgumentType::new(&arg_data.pat_type);
-        let mut args = ArgAttrData::new(
-            arg_data.arg_name.clone(),
-            arg_data.attribute.clone()
-        );
-
-        if let Some(attribute) = &arg_data.name_value {
+        if let Some(attribute) = name_value {
             for (key, value) in attribute {
                 match key.as_str() {
                     attr::ARG => {
                         let name = value
-                            .clone()
                             .to_string_literal()
                             .expect("arg `arg` must be a string literal");
 
-                        args.set_name(name);
+                        arg.set_name(name);
                     }
                     attr::MIN => {
                         let min = value
-                            .clone()
                             .to_integer_literal::<usize>()
                             .expect("arg `min` must be an integer literal");
 
-                        args.set_min(min);
+                        arg.set_min(min);
                     }
                     attr::MAX => {
                         let max = value
-                            .clone()
                             .to_integer_literal::<usize>()
                             .expect("arg `max` must be an integer literal");
 
-                        args.set_max(max);
+                        arg.set_max(max);
                     }
                     attr::DESCRIPTION => {
                         let description = value
-                            .clone()
                             .to_string_literal()
                             .expect("arg `description` is expected to be a string literal");
 
-                        args.set_description(description);
+                        arg.set_description(description);
                     }
                     attr::DEFAULT => match value {
-                        Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
-                        Value::Array(array) => args.set_default_values(array.clone()),
+                        Value::Literal(lit) => arg.set_default_values(vec![lit]),
+                        Value::Array(array) => arg.set_default_values(array),
                     },
                     _ => panic!("invalid `arg` key `{}`", key),
                 }
             }
         }
 
-        args.fn_arg = Some((arg_data, arg_type));
-        args
+        arg
     }
 
     pub fn name(&self) -> &str {
@@ -136,29 +132,24 @@ impl ArgAttrData {
 
     pub fn expand(&self) -> TokenStream {
         if self.has_default_values() {
-            if let Some(arg) = self.fn_arg.as_ref() {
-                assert_arg_and_default_values_same_type(arg, &self.default_values);
-            }
+            assert_arg_and_default_values_same_type(&self.fn_arg, &self.default_values);
         }
 
         let (min, max) = self.arg_count();
 
-        if !self.default_values.is_empty() {
-            assert!(
-                (min..=max).contains(&self.default_values.len()),
-                "invalid default values count, expected from `{}` to `{}` values",
-                min,
-                max
-            );
-        }
+        // Assertions
+        self.assert_min_max(min, max);
+        self.assert_default_values_range(min, max);
 
-        let min = quote! { #min };
-        let max = quote! { #max };
+        // Argument count
+        let min = quote_option!(min);
+        let max = quote_option!(max);
 
         let arg_count = quote! {
-            .arg_count(#min..=#max)
+            .arg_count(clapi::ArgCount::new_checked(#min, #max).expect("min < max"))
         };
 
+        // Argument default values
         let default_values = if self.default_values.is_empty() {
             quote! {}
         } else {
@@ -166,12 +157,14 @@ impl ArgAttrData {
             quote! { .defaults(&[#(#tokens),*]) }
         };
 
+        // Argument description
         let description = self
             .description
             .as_ref()
             .map(|s| quote! { .description(#s)})
             .unwrap_or_else(|| quote! {});
 
+        // Argument name
         let name = quote_expr!(self.name);
 
         quote! {
@@ -182,43 +175,51 @@ impl ArgAttrData {
         }
     }
 
-    fn arg_count(&self) -> (usize, usize) {
-        fn max_arg_count_for_type(arg_type: &ArgumentType) -> usize {
-            match arg_type {
-                ArgumentType::Type(_) | ArgumentType::Option(_) => 1,
-                ArgumentType::Vec(_) | ArgumentType::Slice(_) | ArgumentType::Array(_) => {
-                    usize::max_value()
-                }
-            }
-        }
-
-        let (arg, arg_type) = match self.fn_arg.as_ref() {
-            Some((arg, arg_type)) => (arg, arg_type),
-            None => {
-                let min = self.min.expect("`min` argument count is not defined");
-                let max = self.max.expect("`max` argument count is not defined");
-                assert!(min <= max, "invalid arguments range `min` cannot be greater than `max`");
-                // Return from the function
-                return (min, max);
-            }
-        };
+    fn arg_count(&self) -> (Option<usize>, Option<usize>) {
+        let (arg, arg_type) = &self.fn_arg;
 
         // Get the `min` and `max` number of values for this argument.
         let (min, max) = match (self.min, self.max) {
-            (Some(min), Some(max)) => (min, max),
-            (Some(min), None) => (min, max_arg_count_for_type(arg_type)),
-            (None, Some(max)) => (0, max),
-            (None, None) => match arg_type {
-                ArgumentType::Type(_) => (1, 1),
-                ArgumentType::Option(_) => (0, 1),
-                ArgumentType::Vec(_) | ArgumentType::Slice(_) => (0, usize::max_value()),
-                ArgumentType::Array(array) => (array.len, array.len)
+            (min, max) if min.is_some() | max.is_none() => (min, max),
+            _ => match arg_type {
+                ArgumentType::Type(_) => (Some(1), Some(1)),
+                ArgumentType::Option(_) => (Some(0), Some(1)),
+                ArgumentType::Vec(_) | ArgumentType::Slice(_) => (Some(0), None),
+                ArgumentType::Array(array) => (Some(array.len), Some(array.len))
             },
         };
 
-        assert!(min <= max, "invalid arguments range `min` cannot be greater than `max`");
-        check_valid_arg_count(&arg, arg_type, min, max);
+        assert_valid_arg_count(&arg, arg_type, min, max);
         (min, max)
+    }
+
+    fn assert_min_max(&self, min: Option<usize>, max: Option<usize>) {
+        if let (Some(min), Some(max)) = (min, max) {
+            if min > max {
+                panic!("invalid argument count `min` cannot be greater than `max`")
+            }
+        }
+    }
+
+    fn assert_default_values_range(&self, min: Option<usize>, max: Option<usize>) {
+        if self.default_values.is_empty() {
+            return;
+        }
+
+        let len = self.default_values.len();
+
+        match (min, max) {
+            (Some(min), Some(max)) if !(min..=max).contains(&len) => {
+                panic!("invalid default values count, expected from {} to {} values but was {}", min, max, len);
+            },
+            (Some(min), None) if !(min..).contains(&len) => {
+                panic!("invalid default values count, expected {} or more values but was {}", min, len);
+            },
+            (None, Some(max)) if !(..=max).contains(&len) => {
+                panic!("invalid default values count, expected {} or less values but was {}", max, len);
+            }
+            _ => {}
+        }
     }
 }
 
@@ -233,6 +234,33 @@ impl Eq for ArgAttrData {}
 impl PartialEq for ArgAttrData {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
+    }
+}
+
+fn lit_variant_to_string(lit: &Lit) -> &'static str {
+    match lit {
+        Lit::Str(_) => "string",
+        Lit::ByteStr(_) => "string",
+        Lit::Byte(_) => "byte",
+        Lit::Char(_) => "char",
+        Lit::Int(_) => "integer",
+        Lit::Float(_) => "float",
+        Lit::Bool(_) => "bool",
+        Lit::Verbatim(_) => "verbatim",
+    }
+}
+
+fn check_same_type<'a>(left: &'a Lit, right: &'a [Lit]) -> Result<(), &'a Lit> {
+    if right.len() <= 1 {
+        Ok(())
+    } else {
+        for value in right {
+            if std::mem::discriminant(left) != std::mem::discriminant(value) {
+                return Err(value);
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -293,81 +321,42 @@ fn assert_arg_and_default_values_same_type(
     }
 }
 
-fn lit_variant_to_string(lit: &Lit) -> &'static str {
-    match lit {
-        Lit::Str(_) => "string",
-        Lit::ByteStr(_) => "string",
-        Lit::Byte(_) => "byte",
-        Lit::Char(_) => "char",
-        Lit::Int(_) => "integer",
-        Lit::Float(_) => "float",
-        Lit::Bool(_) => "bool",
-        Lit::Verbatim(_) => "verbatim",
+fn assert_valid_arg_count(arg: &FnArgData, arg_type: &ArgumentType, min: Option<usize>, max: Option<usize>) {
+    // We don't check if there is no `min` and `max`
+    if min.is_none() && max.is_none() {
+        return;
     }
-}
 
-fn check_same_type<'a>(left: &'a Lit, right: &'a [Lit]) -> Result<(), &'a Lit> {
-    if right.len() <= 1 {
-        Ok(())
-    } else {
-        for value in right {
-            if std::mem::discriminant(left) != std::mem::discriminant(value) {
-                return Err(value);
-            }
-        }
+    let min = min.unwrap_or(0);
+    let max = max.unwrap_or(usize::max_value());
 
-        Ok(())
-    }
-}
-
-fn check_valid_arg_count(arg: &&FnArgData, arg_type: &ArgumentType, min: usize, max: usize) {
     match arg_type {
         ArgumentType::Type(_) => {
             // If the argument is an option bool flag, `min` and `max` will be 0 and 1.
             // Check `option.rs`
             if !is_option_bool_flag(arg) {
-                if min != 1 {
+                if min != 1 || max != 1{
                     panic!(
-                        "invalid `min` number of arguments for `{}` expected 1 but was {}",
-                        pat_type_to_string(&arg.pat_type),
-                        min
-                    );
-                }
-
-                if max != 1 {
-                    panic!(
-                        "invalid `max` number of arguments for `{}` expected 1 but was {}",
-                        pat_type_to_string(&arg.pat_type),
-                        max
+                        "invalid number of arguments for `{}` expected 1",
+                        pat_type_to_string(&arg.pat_type)
                     );
                 }
             }
         }
         ArgumentType::Option(_) => {
-            if min != 0 {
+            if min != 0 || max != 1{
                 panic!(
-                    "invalid `min` number of arguments for `{}` expected 0 but was {}",
+                    "invalid number of arguments for `{}` expected from 0 to 1",
                     pat_type_to_string(&arg.pat_type),
-                    min
-                );
-            }
-
-            if max != 1 {
-                panic!(
-                    "invalid `max` number of arguments for `{}` expected 1 but was {}",
-                    pat_type_to_string(&arg.pat_type),
-                    max
                 );
             }
         }
         ArgumentType::Vec(_) | ArgumentType::Slice(_) => { /* Nothing */ },
-        ArgumentType::Array(_) => {
+        ArgumentType::Array(array) => {
             if min != max {
-                panic!(
-                    "invalid `min` and `max` number of arguments for `{}`, expected the `min == max` but was: `{}` and `{}`",
+                panic!("invalid number of arguments for `{}` expected {}",
                     pat_type_to_string(&arg.pat_type),
-                    min,
-                    max
+                    array.len
                 );
             }
         }

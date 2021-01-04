@@ -4,4 +4,4 @@ error: custom attribute panicked
 3 | #[command]
   | ^^^^^^^^^^
   |
-  = help: message: invalid `min` and `max` number of arguments for `values : [u32 ; 3]`, expected the `min == max` but was: `0` and `3`
+  = help: message: invalid number of arguments for `values : [u32 ; 3]` expected 3
