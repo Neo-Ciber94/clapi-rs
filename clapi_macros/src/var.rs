@@ -294,7 +294,7 @@ fn new_arg_local_var(pat_type: PatType, source: VarSource) -> ArgLocalVar {
 fn get_argument_type(pat_type: &PatType) -> ArgumentType {
     match pat_type.ty.as_ref() {
         Type::Path(_) => {
-            return if pat_type.ty.is_vec() {
+            if pat_type.ty.is_vec() {
                 ArgumentType::Vec(generic_type(pat_type))
             } else if pat_type.ty.is_option() {
                 ArgumentType::Option(generic_type(pat_type))
@@ -303,7 +303,7 @@ fn get_argument_type(pat_type: &PatType) -> ArgumentType {
             }
         }
         Type::Reference(type_ref) => {
-            return if let Type::Slice(array) = type_ref.elem.as_ref() {
+            if let Type::Slice(array) = type_ref.elem.as_ref() {
                 ArgumentType::Slice(SliceType {
                     ty: array.elem.clone(),
                     mutability: type_ref.mutability.is_some()
@@ -345,7 +345,7 @@ fn generic_type(pat_type: &PatType) -> Box<Type> {
     );
 
     if let GenericArgument::Type(ty) = generic_arguments.pop().unwrap() {
-        return Box::new(ty.clone());
+        Box::new(ty)
     } else {
         panic_invalid_argument_type(pat_type)
     }

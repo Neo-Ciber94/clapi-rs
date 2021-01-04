@@ -1,3 +1,4 @@
+#![allow(clippy::len_zero)]
 use std::fmt::{Display, Formatter};
 
 /// The path of an `Item`.

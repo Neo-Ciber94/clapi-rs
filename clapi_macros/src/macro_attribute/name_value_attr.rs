@@ -204,52 +204,28 @@ impl Value {
 
     pub fn is_string(&self) -> bool {
         match self {
-            Value::Literal(lit) => match lit {
-                Lit::Str(_) | Lit::ByteStr(_) => true,
-                _ => false,
-            },
+            Value::Literal(lit) => matches!(lit, Lit::Str(_) | Lit::ByteStr(_)),
             _ => false,
         }
     }
 
     pub fn is_char(&self) -> bool {
-        match self {
-            Value::Literal(lit) => match lit {
-                Lit::Char(_) => true,
-                _ => false,
-            },
-            _ => false,
-        }
+        matches!(self, Value::Literal(Lit::Char(_)))
     }
 
     pub fn is_bool(&self) -> bool {
-        match self {
-            Value::Literal(lit) => match lit {
-                Lit::Bool(_) => true,
-                _ => false,
-            },
-            _ => false,
-        }
+        matches!(self, Value::Literal(Lit::Bool(_)))
     }
 
     pub fn is_integer(&self) -> bool {
         match self {
-            Value::Literal(lit) => match lit {
-                Lit::Int(_) | Lit::Byte(_) => true,
-                _ => false,
-            },
+            Value::Literal(lit) => matches!(lit, Lit::Int(_) | Lit::Byte(_)),
             _ => false,
         }
     }
 
     pub fn is_float(&self) -> bool {
-        match self {
-            Value::Literal(lit) => match lit {
-                Lit::Float(_) => true,
-                _ => false,
-            },
-            _ => false,
-        }
+        matches!(self, Value::Literal(Lit::Float(_)))
     }
 
     pub fn is_numeric(&self) -> bool {
@@ -325,10 +301,7 @@ impl Value {
         N::Err: Display,
     {
         match self {
-            Value::Literal(lit) => match lit {
-                Lit::Float(n) => n.base10_parse().ok(),
-                _ => None,
-            },
+            Value::Literal(Lit::Float(n)) => n.base10_parse().ok(),
             _ => None,
         }
     }

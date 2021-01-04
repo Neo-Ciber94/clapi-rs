@@ -1,3 +1,4 @@
+#![allow(clippy::len_zero, clippy::redundant_closure)]
 use std::path::PathBuf;
 use proc_macro2::TokenStream;
 use quote::*;
@@ -456,10 +457,7 @@ fn is_clapi_result_type(ty: &Type) -> bool {
         return true;
     }
 
-    match ty.path().unwrap().as_str() {
-        "clapi::Result" | "clapi::error::Result" => true,
-        _ => false,
-    }
+    matches!(ty.path().unwrap().as_str(), "clapi::Result" | "clapi::error::Result")
 }
 
 /// Check the statements of the `ItemFn` and returns `true`
@@ -533,7 +531,7 @@ mod imp {
 
     use crate::arg::ArgAttrData;
     use crate::command::{drop_command_attributes, is_option_bool_flag, CommandAttrData, FnArgData};
-    use crate::macro_attribute::{MacroAttribute, MetaItem, NameValueAttribute};
+    use crate::macro_attribute::{MacroAttribute, NameValueAttribute};
     use crate::option::OptionAttrData;
     use crate::utils::{path_to_string, NamePath};
     use crate::var::{ArgLocalVar, VarSource};
@@ -679,6 +677,7 @@ mod imp {
             let mut result = item_fn.block.stmts.iter()
                 .filter_map(|stmt| {
                     if let Stmt::Item(Item::Static(item_static)) = &stmt {
+                        #[allow(clippy::blocks_in_if_conditions)]
                         if item_static.attrs.iter().any(|attribute| {
                             let macro_attr = MacroAttribute::new(attribute.clone());
                             assert!(macro_attr.is_empty(), "`#[help]` takes not params but was `{}`", macro_attr);
@@ -708,38 +707,36 @@ mod imp {
         let mut ret = Vec::new();
 
         for stmt in &item_fn.block.stmts {
-            if let Stmt::Item(item) = stmt {
-                if let Item::Fn(item_fn) = item {
-                    let subcommands = item_fn
-                        .attrs
-                        .iter()
-                        .filter(|att| crate::attr::is_subcommand(path_to_string(&att.path).as_str()))
-                        .cloned()
-                        .collect::<Vec<Attribute>>();
+            if let Stmt::Item(Item::Fn(item_fn)) = stmt {
+                let subcommands = item_fn
+                    .attrs
+                    .iter()
+                    .filter(|att| crate::attr::is_subcommand(path_to_string(&att.path).as_str()))
+                    .cloned()
+                    .collect::<Vec<Attribute>>();
 
-                    if subcommands.len() > 0 {
-                        assert_eq!(
-                            subcommands.len(),
-                            1,
-                            "multiples `subcommand` attributes defined in `{}`",
-                            item_fn.sig.ident.to_string()
-                        );
+                if subcommands.len() > 0 {
+                    assert_eq!(
+                        subcommands.len(),
+                        1,
+                        "multiples `subcommand` attributes defined in `{}`",
+                        item_fn.sig.ident.to_string()
+                    );
 
-                        let mut inner_fn = item_fn.clone();
+                    let mut inner_fn = item_fn.clone();
 
-                        let name_value_attr =
-                            if let Some(index) = inner_fn.attrs.iter().position(|att| {
-                                crate::attr::is_subcommand(path_to_string(&att.path).as_str())
-                            }) {
-                                MacroAttribute::new(inner_fn.attrs.swap_remove(index))
-                                    .into_name_values()
-                                    .unwrap()
-                            } else {
-                                unreachable!()
-                            };
+                    let name_value_attr =
+                        if let Some(index) = inner_fn.attrs.iter().position(|att| {
+                            crate::attr::is_subcommand(path_to_string(&att.path).as_str())
+                        }) {
+                            MacroAttribute::new(inner_fn.attrs.swap_remove(index))
+                                .into_name_values()
+                                .unwrap()
+                        } else {
+                            unreachable!()
+                        };
 
-                        ret.push((name_value_attr, inner_fn))
-                    }
+                    ret.push((name_value_attr, inner_fn))
                 }
             }
         }
@@ -765,9 +762,9 @@ mod imp {
             .attrs
             .iter()
             .cloned()
-            .map(|attribute| MacroAttribute::new(attribute))
+            .map(MacroAttribute::new)
             .filter(|attribute| crate::attr::is_option(attribute.path()) || crate::attr::is_arg(attribute.path()))
-            .map(|attribute| split_attr_path_and_name_values(attribute))
+            .map(split_attr_path_and_name_values)
             .collect::<Vec<(String, MacroAttribute, NameValueAttribute)>>();
 
         // Get all the function params and the name of the params
@@ -783,9 +780,7 @@ mod imp {
         // #[option(x)]
         for index in 0..attributes.len() {
             let (name, attribute, _) = &attributes[index];
-            if let Some(_) = attributes[(index + 1)..]
-                .iter()
-                .find(|(arg, ..)| arg == name) {
+            if attributes[(index + 1)..].iter().any(|(arg, ..)| arg == name) {
                 panic!("function argument `{}` is already used in `{}`", name, attribute);
             }
         }
@@ -841,7 +836,7 @@ mod imp {
         let name_values = if attribute.len() == 1 {
             NameValueAttribute::empty(attribute.path().to_owned(), AttrStyle::Outer)
         } else {
-            let meta_items = attribute[1..].iter().cloned().collect::<Vec<MetaItem>>();
+            let meta_items = attribute[1..].to_vec();
             NameValueAttribute::new(attribute.path(), meta_items, AttrStyle::Outer).unwrap()
         };
 
@@ -855,7 +850,7 @@ mod imp {
         root_path: PathBuf,
     ) -> CommandAttrData {
         static IS_DEFINED: AtomicBool = AtomicBool::new(false);
-        if IS_DEFINED.compare_and_swap(false, true, Ordering::Relaxed) == true {
+        if let Ok(true) = IS_DEFINED.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed) {
             panic!("multiple `command` entry points defined: `{}`", item_fn.sig.ident);
         }
 
@@ -867,7 +862,7 @@ mod imp {
             crate::attr::COMMAND, args, AttrStyle::Outer
         ).unwrap();
 
-        let mut root = command_from_fn(attribute, item_fn.clone(), false, true, true);
+        let mut root = command_from_fn(attribute, item_fn, false, true, true);
 
         if let Some(help) = find_help(&root_path) {
             if root.help.is_some() {
@@ -931,11 +926,13 @@ mod imp {
         let mut result = crate::query::find_map_items(
             root_path, true, true, |item| {
             if let Item::Static(item_static) = item {
-                if item_static.attrs.iter().any(|attribute| {
+                let is_help = item_static.attrs.iter().any(|attribute| {
                     let macro_attr = MacroAttribute::new(attribute.clone());
                     assert!(macro_attr.is_empty(), "`#[help]` takes not params but was `{}`", macro_attr);
                     attr::is_help(macro_attr.path())
-                }){
+                });
+
+                if is_help {
                     return Some(item_static.clone());
                 }
             }
@@ -977,9 +974,8 @@ mod imp {
         // Navigate from the `current` to the `parent`
         for s in parent_path {
             if s == "super" {
-                match path.pop() {
-                    None => break,
-                    _ => {}
+                if path.pop().is_none() {
+                    break
                 }
             } else {
                 path.push(s);
@@ -1054,13 +1050,10 @@ mod imp {
         }
 
         for item in &file.items {
-            match item {
-                Item::Fn(cur_fn) => {
-                    if eq_item_fn(cur_fn, item_fn) {
-                        return;
-                    }
-                },
-                _ => {}
+            if let Item::Fn(cur_fn) = item {
+                if eq_item_fn(cur_fn, item_fn) {
+                    return;
+                }
             }
         }
 

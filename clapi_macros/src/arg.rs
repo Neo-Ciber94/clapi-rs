@@ -1,3 +1,4 @@
+#![allow(clippy::len_zero, clippy::redundant_closure)]
 use crate::command::{is_option_bool_flag, FnArgData};
 use crate::macro_attribute::{lit_to_string, Value, MacroAttribute};
 use crate::utils::pat_type_to_string;

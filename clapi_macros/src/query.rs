@@ -121,7 +121,7 @@ fn find_items_internal<T, F>(file_path: &Path, is_root: bool, visit_mods: bool, 
 }
 
 fn find_item_mod_path(mod_path: &Path, item_mod: &ItemMod) -> Option<PathBuf> {
-    assert!(item_mod.content.is_none(), "expected `mod m` but was `mod m { ... }`");
+    assert!(item_mod.content.is_none(), "{}", "expected `mod m` but was `mod m { ... }`");
     let mod_name = item_mod.ident.to_string();
     find_item_mod_path_internal(mod_path, &mod_name)
 }
@@ -130,10 +130,8 @@ fn find_item_mod_path_internal(mod_path: &Path, mod_name: &str) -> Option<PathBu
     let mut current_path = mod_path;
 
     // Quick path
-    if current_path.is_file() {
-        if current_path.file_name().unwrap() == mod_name {
-            return Some(mod_path.to_path_buf());
-        }
+    if current_path.is_file() && current_path.file_name().unwrap() == mod_name {
+        return Some(mod_path.to_path_buf());
     }
 
     while let Some(parent) = current_path.parent() {
@@ -259,19 +257,16 @@ struct ItemVisitor<'ast, T, F> {
 
 impl<'ast, T, F> Visit<'ast> for ItemVisitor<'ast, T, F> where F : Fn(&'ast Item) -> Option<T> {
     fn visit_item(&mut self, i: &'ast Item) {
-        match (self.f)(i){
-            Some(item) => {
-                let mut path = self.path.clone();
-                let item_name = get_item_name(i)
-                    .unwrap_or_else(|| panic!(
-                        "unable to get the ident name of the `Item`: `{}`",
-                        i.to_token_stream().to_string())
-                    );
+        if let Some(item) = (self.f)(i) {
+            let mut path = self.path.clone();
+            let item_name = get_item_name(i)
+                .unwrap_or_else(|| panic!(
+                    "unable to get the ident name of the `Item`: `{}`",
+                    i.to_token_stream().to_string())
+                );
 
-                path.push(item_name);
-                self.items.push((NamePath::from_path(path), item));
-            },
-            None => {}
+            path.push(item_name);
+            self.items.push((NamePath::from_path(path), item));
         }
 
         if let Item::Mod(item_mod) = i {

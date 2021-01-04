@@ -26,7 +26,7 @@ impl MacroAttribute {
         let style = Some(attribute.style);
 
         MacroAttribute {
-            path: path.to_string(),
+            path,
             args,
             style,
         }
@@ -197,7 +197,7 @@ impl MetaItem {
         }
     }
 
-    pub fn as_nested(&self) -> Option<&Box<MacroAttribute>> {
+    pub fn as_nested(&self) -> Option<&MacroAttribute> {
         match self {
             MetaItem::Nested(x) => Some(x),
             _ => None,
@@ -304,7 +304,8 @@ impl AttributeArgsVisitor {
             iter.next();
         }
 
-        debug_assert!(values.len() >= 1);
+        debug_assert!(!values.is_empty());
+
         match values.len() {
             1 => {
                 let value = Value::Literal(values.remove(0));
@@ -323,7 +324,7 @@ fn get_attribute_args(attr: &Attribute) -> syn::Result<AttributeArgs> {
     if let Some(proc_macro2::TokenTree::Group(group)) = token_tree.next() {
         use syn::parse_macro_input::ParseMacroInput;
         let tokens = group.stream();
-        return syn::parse::Parser::parse2(AttributeArgs::parse, tokens);
+        syn::parse::Parser::parse2(AttributeArgs::parse, tokens)
     } else {
         Ok(AttributeArgs::new())
     }
@@ -345,13 +346,12 @@ pub fn meta_item_to_string(data: &MetaItem) -> String {
             Value::Literal(x) => format!("{} = {}", data.name, lit_to_string(x)),
             Value::Array(x) => {
                 let s = x.iter().map(lit_to_string).collect::<Vec<String>>();
-
                 format!("{} = {:?}", data.name, s)
             }
         },
         MetaItem::Nested(data) => {
             if data.len() > 0 {
-                format!("{}", data.path.clone())
+                data.path.clone()
             } else {
                 format!("{}(...)", data.clone().path)
             }
