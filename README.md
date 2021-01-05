@@ -57,7 +57,7 @@ if result.command().get_name() == "repeat" {
 
     let values = result.arg().unwrap()
         .convert_all::<String>()
-        .expect("not values specify")
+        .expect("error")
         .join(" ");
 
     for _ in 0..times {

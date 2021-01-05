@@ -160,7 +160,8 @@ impl Help for DefaultHelp {
         }
 
         // Help usage message
-        if let Some(msg) = use_help_for_more_info_msg(context){
+        if let Some(msg) = use_help_for_more_info_msg(context) {
+            writeln!(buf)?;
             writeln!(buf, "{}", msg)?;
         }
 
@@ -255,7 +256,7 @@ fn command_to_string(command: &Command) -> String {
 }
 
 // Use '' for see more information about a command
-fn use_help_for_more_info_msg(context: &Context) -> Option<String> {
+pub(crate) fn use_help_for_more_info_msg(context: &Context) -> Option<String> {
     if let Some(help) = context.help() {
         match help.kind() {
             HelpKind::Any | HelpKind::Subcommand => {

@@ -122,38 +122,49 @@ impl CommandLine {
     }
 
     fn handle_error(&self, error: Error) -> Result<()> {
-        // Special case, the caller can returns `ErrorKind::FallthroughHelp`
-        // to indicates the `CommandLine` to show a help message.
-        if error.kind() == &ErrorKind::FallthroughHelp {
-            return self.display_help(None);
+        match error.kind() {
+            // Special case, the caller can returns `ErrorKind::FallthroughHelp`
+            // to indicates the `CommandLine` to show a help message.
+            ErrorKind::FallthroughHelp => {
+                return self.display_help(None)
+            },
+
+            // Special case, if is an invalid argument count error, we display a help message
+            ErrorKind::InvalidArgumentCount => {
+                use std::error::Error as StdError;
+
+                // Adds an `Use '' for see more information about a command` if any
+                fn format_error(context: &Context, error: &dyn StdError, message: String) -> String {
+                    if let Some(help) = crate::help::use_help_for_more_info_msg(context) {
+                        format!("{}.\n\n{}\n{}", error, message, help)
+                    } else {
+                        format!("{}.\n\n{}", error, message)
+                    }
+                }
+
+                let message = self.get_message(None, MessageKind::Usage)?;
+                let source = match StdError::source(&error) {
+                    Some(source) => format_error(&self.context, source, message),
+                    None => format_error(&self.context, &error, message)
+                };
+
+                Err(Error::new(error.kind().clone(), source))
+            },
+            _ => {}
         }
 
-        match error.try_into_parse_error() {
-            Ok(parse_error) => {
-                if self.contains_help(parse_error.parse_result()) {
-                    return self.handle_help(parse_error.parse_result())
-                }
+        // Handle a `ParseError`
+        let parse_error = error.try_into_parse_error()?;
 
-                if self.suggestions().is_some() {
-                    return Err(self.display_suggestions(parse_error));
-                }
-
-                Err(Error::from(parse_error))
-            }
-            Err(error) => {
-                // If is a parse error and `InvalidArgumentCount`
-                // we show a message about the usage of the command
-                if error.kind() == &ErrorKind::InvalidArgumentCount {
-                    let message = self.get_message(None, MessageKind::Usage)?;
-                    return Err(Error::new(
-                        error.kind().clone(),
-                        format!("{}\n{}", error, message),
-                    ));
-                }
-
-                Err(error)
-            }
+        if self.contains_help(parse_error.parse_result()) {
+            return self.handle_help(parse_error.parse_result())
         }
+
+        if self.suggestions().is_some() {
+            return Err(self.display_suggestions(parse_error));
+        }
+
+        Err(Error::from(parse_error))
     }
 
     fn handle_help(&self, parse_result: &ParseResult) -> Result<()> {

@@ -77,7 +77,15 @@ impl Error {
     }
 }
 
-impl std::error::Error for Error {}
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self.inner {
+            Simple(_) => None,
+            Custom(ref custom) => Some(custom.error.as_ref()),
+            Parsed(ref parsed) => parsed.inner.source()
+        }
+    }
+}
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
