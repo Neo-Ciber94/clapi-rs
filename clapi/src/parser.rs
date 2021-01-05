@@ -54,7 +54,7 @@ impl Parser {
         self.set_required_options(command, &mut options)?;
 
         // Check and set options with default values (if any)
-        self.set_default_options(command, &mut options)?;
+        self.set_default_options(command, &mut options);
 
         // Gets the command arguments
         let args = self.get_args(command, &options, &mut iterator)?;
@@ -272,7 +272,7 @@ impl Parser {
         Ok(())
     }
 
-    fn set_default_options(&self, command: &Command, options: &mut OptionList) -> Result<()> {
+    fn set_default_options(&self, command: &Command, options: &mut OptionList) {
         let default_options = command
             .then(|c| c.get_options().iter())
             .filter(|o| o.get_args().iter().any(|a| a.has_default_values()));
@@ -280,11 +280,9 @@ impl Parser {
         // Sets the options that takes default arguments
         for opt in default_options {
             if !options.contains(opt.get_name()) {
-                options.add(opt.clone()).unwrap();
+                options.add(opt.clone()).expect("duplicated option");
             }
         }
-
-        Ok(())
     }
 
     /// Returns `true` if one of the arguments need to have a default value.

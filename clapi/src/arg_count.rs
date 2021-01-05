@@ -1,4 +1,4 @@
-#![warn(clippy::manual_unwrap_or)]
+#![allow(clippy::manual_unwrap_or)]
 use std::fmt::{Display, Formatter};
 use std::ops::{Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive, Sub, RangeBounds};
 use std::collections::Bound;
