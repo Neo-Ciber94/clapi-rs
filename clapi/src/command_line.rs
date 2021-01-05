@@ -148,7 +148,7 @@ impl CommandLine {
                     None => format_error(&self.context, &error, message)
                 };
 
-                Err(Error::new(error.kind().clone(), source))
+               return Err(Error::new(error.kind().clone(), source));
             },
             _ => {}
         }
