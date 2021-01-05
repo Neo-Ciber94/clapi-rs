@@ -21,8 +21,7 @@ pub struct Argument {
     validator: Option<Rc<dyn Validator>>,
     default_values: Vec<String>,
     valid_values: Vec<String>,
-    values: Vec<String>,
-    is_set: bool
+    values: Option<Vec<String>>,
 }
 
 impl Argument {
@@ -40,8 +39,7 @@ impl Argument {
             validator: None,
             default_values: vec![],
             valid_values: vec![],
-            values: vec![],
-            is_set: false,
+            values: None,
         }
     }
 
@@ -104,12 +102,16 @@ impl Argument {
 
     /// Returns the values of this argument or a 0-length slice if none.
     pub fn get_values(&self) -> &[String] {
-        self.values.as_slice()
+        // Returns the `default_values` if `values` was not set in `set_values`
+        match &self.values {
+            Some(n) => n,
+            None => self.default_values.as_slice()
+        }
     }
 
     /// Returns `true` if this argument contains the specified value, `false` otherwise.
     pub fn contains<S: AsRef<str>>(&self, value: S) -> bool {
-        self.values.iter().any(|s| s == value.as_ref())
+        self.get_values().iter().any(|s| s == value.as_ref())
     }
 
     /// Returns `true` if this argument have default values.
@@ -135,7 +137,7 @@ impl Argument {
     /// Returns `true` if this `Argument` contains values, or false if don't contains values
     /// or only contains default values.
     pub fn is_set(&self) -> bool {
-        self.is_set
+        self.values.is_some()
     }
 
     /// Sets the number of values this argument takes.
@@ -182,7 +184,7 @@ impl Argument {
             "validator cannot be set if there is valid values"
         );
         assert!(
-            self.values.is_empty(),
+            self.values.is_none(),
             "validator cannot be set if there is values"
         );
         self.validator = Some(Rc::new(validator));
@@ -275,7 +277,6 @@ impl Argument {
         }
 
         self.default_values = values.clone();
-        self.values = values;
         self
     }
 
@@ -319,8 +320,7 @@ impl Argument {
             }
         }
 
-        self.values = values;
-        self.is_set = true;
+        self.values = Some(values);
         Ok(())
     }
 
