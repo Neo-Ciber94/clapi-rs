@@ -334,13 +334,11 @@ fn assert_valid_arg_count(arg: &FnArgData, arg_type: &ArgumentType, min: Option<
         ArgumentType::Type(_) => {
             // If the argument is an option bool flag, `min` and `max` will be 0 and 1.
             // Check `option.rs`
-            if !is_option_bool_flag(arg) {
-                if min != 1 || max != 1{
-                    panic!(
-                        "invalid number of arguments for `{}` expected 1",
-                        pat_type_to_string(&arg.pat_type)
-                    );
-                }
+            if !is_option_bool_flag(arg) && min != 1 || max != 1 {
+                panic!(
+                    "invalid number of arguments for `{}` expected 1",
+                    pat_type_to_string(&arg.pat_type)
+                );
             }
         }
         ArgumentType::Option(_) => {

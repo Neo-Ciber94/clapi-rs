@@ -1,3 +1,4 @@
+#![warn(clippy::manual_unwrap_or)]
 use std::fmt::{Display, Formatter};
 use std::ops::{Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive, Sub, RangeBounds};
 use std::collections::Bound;
@@ -151,15 +152,14 @@ impl Display for ArgCount {
     }
 }
 
-impl Into<RangeInclusive<usize>> for ArgCount {
-    fn into(self) -> RangeInclusive<usize> {
-        self.min()..=self.max()
+impl From<ArgCount> for RangeInclusive<usize> {
+    fn from(arg_count: ArgCount) -> Self {
+        arg_count.min()..=arg_count.max()
     }
 }
 
-impl Into<ArgCount> for RangeFull {
-    #[inline]
-    fn into(self) -> ArgCount {
+impl From<RangeFull> for ArgCount {
+    fn from(_: RangeFull) -> Self {
         ArgCount::any()
     }
 }
@@ -180,62 +180,69 @@ impl RangeBounds<usize> for ArgCount {
     }
 }
 
-macro_rules! impl_into_for_unsigned_int {
+macro_rules! impl_arg_count_from_unsigned_int {
     ($($target:ident),*) => {
         $(
-            impl Into<ArgCount> for $target{
-                fn into(self) -> ArgCount {
-                    ArgCount::exactly(self as usize)
+            impl From<$target> for ArgCount {
+                fn from(value: $target) -> ArgCount {
+                    ArgCount::exactly(value as usize)
                 }
             }
 
-            impl Into<ArgCount> for RangeInclusive<$target>{
-                fn into(self) -> ArgCount {
-                    ArgCount::new(*self.start() as usize, *self.end() as usize)
+            impl From<RangeInclusive<$target>> for ArgCount {
+                fn from(value: RangeInclusive<$target>) -> ArgCount {
+                    let start = *value.start();
+                    let end = *value.end();
+                    ArgCount::new(start as usize, end as usize)
                 }
             }
 
-            impl Into<ArgCount> for Range<$target>{
-                fn into(self) -> ArgCount {
-                    ArgCount::new(self.start as usize, self.end.sub(1) as usize)
+            impl From<Range<$target>> for ArgCount {
+                fn from(value: Range<$target>) -> ArgCount {
+                    let start = value.start;
+                    let end = value.end.sub(1);
+                    ArgCount::new(start as usize, end as usize)
                 }
             }
 
-            impl Into<ArgCount> for RangeFrom<$target>{
-                fn into(self) -> ArgCount {
-                    ArgCount::more_than(self.start as usize)
+            impl From<RangeFrom<$target>> for ArgCount {
+                fn from(value: RangeFrom<$target>) -> ArgCount {
+                    let start = value.start;
+                    ArgCount::more_than(start as usize)
                 }
             }
 
-            impl Into<ArgCount> for RangeTo<$target>{
-                fn into(self) -> ArgCount {
-                    ArgCount::less_than(self.end.sub(1) as usize)
+            impl From<RangeTo<$target>> for ArgCount {
+                fn from(value: RangeTo<$target>) -> ArgCount {
+                    let end = value.end.sub(1);
+                    ArgCount::less_than(end as usize)
                 }
             }
 
-            impl Into<ArgCount> for RangeToInclusive<$target>{
-                fn into(self) -> ArgCount {
-                    ArgCount::less_than(self.end as usize)
+            impl From<RangeToInclusive<$target>> for ArgCount {
+                fn from(value: RangeToInclusive<$target>) -> ArgCount {
+                    let end = value.end;
+                    ArgCount::less_than(end as usize)
                 }
             }
         )*
     };
 }
 
-macro_rules! impl_into_for_signed_int {
+macro_rules! impl_arg_count_from_signed_int {
     ($($target:ident),*) => {
         $(
-            impl Into<ArgCount> for $target{
-                fn into(self) -> ArgCount {
-                    assert!(self >= 0, "argument count cannot be negative: {}", self);
-                    ArgCount::exactly(self as usize)
+            impl From<$target> for ArgCount {
+                fn from(value: $target) -> ArgCount {
+                    assert!(value >= 0, "argument count cannot be negative: {}", value);
+                    ArgCount::exactly(value as usize)
                 }
             }
 
-            impl Into<ArgCount> for RangeInclusive<$target>{
-                fn into(self) -> ArgCount {
-                    let start = *self.start();
-                    let end = *self.end();
+            impl From<RangeInclusive<$target>> for ArgCount {
+                fn from(value: RangeInclusive<$target>) -> ArgCount {
+                    let start = *value.start();
+                    let end = *value.end();
 
                     assert!(start >= 0, "start cannot be negative");
                     assert!(end >= 0, "end cannot be negative");
@@ -244,10 +251,10 @@ macro_rules! impl_into_for_signed_int {
                 }
             }
 
-            impl Into<ArgCount> for Range<$target>{
-                fn into(self) -> ArgCount {
-                    let start = self.start;
-                    let end = self.end.sub(1);
+            impl From<Range<$target>> for ArgCount {
+                fn from(value: Range<$target>) -> ArgCount {
+                    let start = value.start;
+                    let end = value.end.sub(1);
 
                     assert!(start >= 0, "start cannot be negative");
                     assert!(end >= 0, "end cannot be negative");
@@ -256,25 +263,25 @@ macro_rules! impl_into_for_signed_int {
                 }
             }
 
-            impl Into<ArgCount> for RangeFrom<$target>{
-                fn into(self) -> ArgCount {
-                    let start = self.start;
+            impl From<RangeFrom<$target>> for ArgCount {
+                fn from(value: RangeFrom<$target>) -> ArgCount {
+                    let start = value.start;
                     assert!(start >= 0, "start cannot be negative");
                     ArgCount::more_than(start as usize)
                 }
             }
 
-            impl Into<ArgCount> for RangeTo<$target>{
-                fn into(self) -> ArgCount {
-                    let end = self.end.sub(1);
+            impl From<RangeTo<$target>> for ArgCount {
+                fn from(value: RangeTo<$target>) -> ArgCount {
+                    let end = value.end.sub(1);
                     assert!(end >= 0, "end cannot be negative");
                     ArgCount::less_than(end as usize)
                 }
             }
 
-            impl Into<ArgCount> for RangeToInclusive<$target>{
-                fn into(self) -> ArgCount {
-                    let end = self.end;
+            impl From<RangeToInclusive<$target>> for ArgCount {
+                fn from(value: RangeToInclusive<$target>) -> ArgCount {
+                    let end = value.end;
                     assert!(end >= 0, "end cannot be negative");
                     ArgCount::less_than(end as usize)
                 }
@@ -283,9 +290,9 @@ macro_rules! impl_into_for_signed_int {
     };
 }
 
-impl_into_for_unsigned_int! { u8, u16, u32, u64, u128, usize }
+impl_arg_count_from_unsigned_int! { u8, u16, u32, u64, u128, usize }
 
-impl_into_for_signed_int! { i8, i16, i32, i64, i128, isize }
+impl_arg_count_from_signed_int! { i8, i16, i32, i64, i128, isize }
 
 #[cfg(test)]
 mod tests {

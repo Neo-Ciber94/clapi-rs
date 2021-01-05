@@ -248,6 +248,7 @@ impl CommandLine {
     }
 
     fn display_help(&self, args: Option<&Argument>) -> Result<()> {
+        // `print` to avoid adding other `\n` to the help message
         print!("{}", self.get_message(args, MessageKind::Help)?);
         Ok(())
     }
