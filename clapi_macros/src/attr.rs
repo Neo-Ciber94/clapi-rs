@@ -14,6 +14,7 @@ pub const ABOUT: &str = "about";
 pub const MIN: &str = "min";
 pub const MAX: &str = "max";
 pub const DEFAULT: &str = "default";
+pub const VALUES: &str = "values";
 
 pub fn is_clapi_attribute(path: &str) -> bool {
     is_command(path) || is_subcommand(path) || is_option(path) || is_arg(path) || is_help(path)

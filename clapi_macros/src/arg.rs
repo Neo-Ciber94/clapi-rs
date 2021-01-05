@@ -1,6 +1,6 @@
 #![allow(clippy::len_zero, clippy::redundant_closure)]
 use crate::command::{is_option_bool_flag, FnArgData};
-use crate::macro_attribute::{lit_to_string, Value, MacroAttribute};
+use crate::macro_attribute::{Value, MacroAttribute, display_lit};
 use crate::utils::pat_type_to_string;
 use crate::var::ArgumentType;
 use crate::{attr, LitExtensions, TypeExtensions};
@@ -25,6 +25,7 @@ pub struct ArgAttrData {
     description: Option<String>,
     fn_arg: (FnArgData, ArgumentType),
     default_values: Vec<Lit>,
+    valid_values: Vec<Lit>,
     attribute: Option<MacroAttribute>,
 }
 
@@ -36,7 +37,7 @@ impl ArgAttrData {
             pat_type,
             attribute,
             name_value,
-            ..
+            is_option
         } = arg_data.clone();
 
         let mut arg = ArgAttrData {
@@ -45,46 +46,54 @@ impl ArgAttrData {
             max: None,
             description: None,
             fn_arg: (arg_data, ArgumentType::new(&pat_type)),
+            valid_values: vec![],
             default_values: vec![],
             attribute
         };
 
-        if let Some(attribute) = name_value {
-            for (key, value) in attribute {
-                match key.as_str() {
-                    attr::ARG => {
-                        let name = value
-                            .to_string_literal()
-                            .expect("arg `arg` must be a string literal");
+        // If is an option, we delegates reading the attribute to it
+        if !is_option {
+            if let Some(attribute) = name_value {
+                for (key, value) in attribute {
+                    match key.as_str() {
+                        attr::ARG => {
+                            let name = value
+                                .to_string_literal()
+                                .expect("arg `arg` must be a string literal");
 
-                        arg.set_name(name);
-                    }
-                    attr::MIN => {
-                        let min = value
-                            .to_integer_literal::<usize>()
-                            .expect("arg `min` must be an integer literal");
+                            arg.set_name(name);
+                        }
+                        attr::MIN => {
+                            let min = value
+                                .to_integer_literal::<usize>()
+                                .expect("arg `min` must be an integer literal");
 
-                        arg.set_min(min);
-                    }
-                    attr::MAX => {
-                        let max = value
-                            .to_integer_literal::<usize>()
-                            .expect("arg `max` must be an integer literal");
+                            arg.set_min(min);
+                        }
+                        attr::MAX => {
+                            let max = value
+                                .to_integer_literal::<usize>()
+                                .expect("arg `max` must be an integer literal");
 
-                        arg.set_max(max);
-                    }
-                    attr::DESCRIPTION => {
-                        let description = value
-                            .to_string_literal()
-                            .expect("arg `description` is expected to be a string literal");
+                            arg.set_max(max);
+                        }
+                        attr::DESCRIPTION => {
+                            let description = value
+                                .to_string_literal()
+                                .expect("arg `description` is expected to be a string literal");
 
-                        arg.set_description(description);
+                            arg.set_description(description);
+                        }
+                        attr::DEFAULT => match value {
+                            Value::Literal(lit) => arg.set_default_values(vec![lit]),
+                            Value::Array(array) => arg.set_default_values(array),
+                        },
+                        attr::VALUES => match value {
+                            Value::Literal(lit) => arg.set_valid_values(vec![lit]),
+                            Value::Array(array) => arg.set_valid_values(array),
+                        }
+                        _ => panic!("invalid `arg` key `{}`", key),
                     }
-                    attr::DEFAULT => match value {
-                        Value::Literal(lit) => arg.set_default_values(vec![lit]),
-                        Value::Array(array) => arg.set_default_values(array),
-                    },
-                    _ => panic!("invalid `arg` key `{}`", key),
                 }
             }
         }
@@ -118,7 +127,7 @@ impl ArgAttrData {
 
     pub fn set_default_values(&mut self, default_values: Vec<Lit>) {
         assert!(default_values.len() > 0, "default values is empty");
-        if let Err(diff) = check_same_type(&default_values[0], default_values.as_slice()) {
+        if let Err(diff) = check_same_type(default_values.as_slice()) {
             panic!(
                 "invalid default value for arg `{}`, expected `{}` but was `{}`.\
                 Default values must be of the same type",
@@ -130,9 +139,27 @@ impl ArgAttrData {
         self.default_values = default_values;
     }
 
+    pub fn set_valid_values(&mut self, valid_values: Vec<Lit>) {
+        assert!(valid_values.len() > 0, "valid values is empty");
+        if let Err(diff) = check_same_type(valid_values.as_slice()) {
+            panic!(
+                "invalid valid value for arg `{}`, expected `{}` but was `{}`.\
+                Default values must be of the same type",
+                self.name,
+                lit_variant_to_string(&valid_values[0]),
+                lit_variant_to_string(diff)
+            )
+        }
+        self.valid_values = valid_values;
+    }
+
     pub fn expand(&self) -> TokenStream {
         if self.has_default_values() {
-            assert_arg_and_default_values_same_type(&self.fn_arg, &self.default_values);
+            assert_same_type_as_fn_arg(&self.fn_arg, &self.default_values);
+        }
+
+        if !self.valid_values.is_empty() {
+            assert_same_type_as_fn_arg(&self.fn_arg, &self.valid_values);
         }
 
         let (min, max) = self.arg_count();
@@ -157,6 +184,14 @@ impl ArgAttrData {
             quote! { .defaults(&[#(#tokens),*]) }
         };
 
+        // Argument valid values
+        let valid_values = if self.valid_values.is_empty() {
+            quote! {}
+        } else {
+            let tokens = self.valid_values.iter().map(|s| quote! { #s });
+            quote! { .valid_values(&[#(#tokens),*]) }
+        };
+
         // Argument description
         let description = self
             .description
@@ -171,6 +206,7 @@ impl ArgAttrData {
             clapi::Argument::new(#name)
             #arg_count
             #description
+            #valid_values
             #default_values
         }
     }
@@ -179,14 +215,9 @@ impl ArgAttrData {
         let (arg, arg_type) = &self.fn_arg;
 
         // Get the `min` and `max` number of values for this argument.
-        let (min, max) = match (self.min, self.max) {
-            (min, max) if min.is_some() | max.is_none() => (min, max),
-            _ => match arg_type {
-                ArgumentType::Type(_) => (Some(1), Some(1)),
-                ArgumentType::Option(_) => (Some(0), Some(1)),
-                ArgumentType::Vec(_) | ArgumentType::Slice(_) => (Some(0), None),
-                ArgumentType::Array(array) => (Some(array.len), Some(array.len))
-            },
+        let (min, max) = {
+            let (arg_min, arg_max) = arg_count_for_type(arg_type);
+            (self.min.or(arg_min), self.max.or(arg_max))
         };
 
         assert_valid_arg_count(&arg, arg_type, min, max);
@@ -237,6 +268,15 @@ impl PartialEq for ArgAttrData {
     }
 }
 
+fn arg_count_for_type(ty: &ArgumentType) -> (Option<usize>, Option<usize>) {
+    match ty {
+        ArgumentType::Type(_) => (Some(1), Some(1)),
+        ArgumentType::Option(_) => (Some(0), Some(1)),
+        ArgumentType::Vec(_) | ArgumentType::Slice(_) => (Some(0), None),
+        ArgumentType::Array(n) => (Some(n.len), Some(n.len))
+    }
+}
+
 fn lit_variant_to_string(lit: &Lit) -> &'static str {
     match lit {
         Lit::Str(_) => "string",
@@ -250,12 +290,13 @@ fn lit_variant_to_string(lit: &Lit) -> &'static str {
     }
 }
 
-fn check_same_type<'a>(left: &'a Lit, right: &'a [Lit]) -> Result<(), &'a Lit> {
-    if right.len() <= 1 {
+fn check_same_type(values: &[Lit]) -> Result<(), &Lit> {
+    if values.len() <= 1 {
         Ok(())
     } else {
-        for value in right {
-            if std::mem::discriminant(left) != std::mem::discriminant(value) {
+        let comp = &values[0];
+        for value in &values[1..] {
+            if std::mem::discriminant(comp) != std::mem::discriminant(value) {
                 return Err(value);
             }
         }
@@ -264,58 +305,62 @@ fn check_same_type<'a>(left: &'a Lit, right: &'a [Lit]) -> Result<(), &'a Lit> {
     }
 }
 
-fn assert_arg_and_default_values_same_type(
+fn assert_same_type_as_fn_arg(
     (arg, ty): &(FnArgData, ArgumentType),
-    default_values: &[Lit],
+    values: &[Lit],
 ) {
-    let arg_type = ty.get_type();
-    let lit = &default_values[0];
+    fn display_lit_to_string(lit: &Lit) -> String {
+        let mut buf = String::new();
+        display_lit(&mut buf, lit).expect("error in `display_lit`");
+        buf
+    }
 
-    let lit_str = if default_values.len() > 1 {
-        let s = default_values
-            .iter()
-            .map(lit_to_string)
+    let arg_type = ty.get_type();
+    let lit = &values[0];
+    let lit_str = if values.len() > 1 {
+        let s = values.iter()
+            .map(display_lit_to_string)
             .collect::<Vec<String>>()
             .join(", ");
 
         format!("[{}]", s)
     } else {
-        lit_to_string(&default_values[0])
+        display_lit_to_string(lit)
     };
 
     if arg_type.is_bool() {
         assert!(
             lit.is_bool_literal(),
-            "expected bool default value for `{}` but was `{}`",
-            arg.arg_name,
+            "expected bool values for `{}` but was {}",
+            pat_type_to_string(&arg.pat_type),
             lit_str
         );
     } else if arg_type.is_char() {
         assert!(
             lit.is_char_literal(),
-            "expected char default value for `{}` but was `{}`",
-            arg.arg_name,
+            "expected char values for `{}` but was {}",
+            pat_type_to_string(&arg.pat_type),
             lit_str
         );
     } else if arg_type.is_string() {
         assert!(
             lit.is_string(),
-            "expected string default value for `{}` but was `{}`",
-            arg.arg_name,
+            "expected string values for `{}` but was {}",
+            pat_type_to_string(&arg.pat_type),
             lit_str
         );
     } else if arg_type.is_integer() {
         assert!(
             lit.is_integer_literal(),
-            "expected integer default value for `{}` but was `{}`",
-            arg.arg_name,
+            "expected integer values for `{}` but was {}",
+            pat_type_to_string(&arg.pat_type),
             lit_str
         )
     } else if arg_type.is_float() {
         assert!(
             lit.is_integer_literal(),
-            "expected float default value for `{}` but was `{}`",
-            arg.arg_name,
+            "expected float values for `{}` but was {}",
+            pat_type_to_string(&arg.pat_type),
             lit_str
         )
     }
@@ -332,30 +377,30 @@ fn assert_valid_arg_count(arg: &FnArgData, arg_type: &ArgumentType, min: Option<
 
     match arg_type {
         ArgumentType::Type(_) => {
-            // If the argument is an option bool flag, `min` and `max` will be 0 and 1.
-            // Check `option.rs`
-            if !is_option_bool_flag(arg) && min != 1 || max != 1 {
-                panic!(
-                    "invalid number of arguments for `{}` expected 1",
-                    pat_type_to_string(&arg.pat_type)
+            if is_option_bool_flag(arg){
+                assert!((0..=1).contains(&min) && max == 1,
+                        "invalid number of arguments for `{}` expected 1",
+                        pat_type_to_string(&arg.pat_type)
+                )
+
+            } else {
+                assert!(min == 1 && max == 1,
+                        "invalid number of arguments for `{}` expected 1",
+                        pat_type_to_string(&arg.pat_type)
                 );
             }
         }
         ArgumentType::Option(_) => {
-            if min != 0 || max != 1{
-                panic!(
+            assert!((0..=1).contains(&min) && max == 1,
                     "invalid number of arguments for `{}` expected from 0 to 1",
                     pat_type_to_string(&arg.pat_type),
-                );
-            }
+            );
         }
         ArgumentType::Vec(_) | ArgumentType::Slice(_) => { /* Nothing */ },
         ArgumentType::Array(array) => {
             if min != max {
                 panic!("invalid number of arguments for `{}` expected {}",
-                    pat_type_to_string(&arg.pat_type),
-                    array.len
-                );
+                        pat_type_to_string(&arg.pat_type), array.len);
             }
         }
     }

@@ -503,7 +503,7 @@ pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {
     item_fn
 }
 
-/// Checks if a function argument is an option bool flag like: `--enable`
+/// Checks if a function argument can be considered an option bool flag like: `--enable`
 ///
 /// In the next example, `enable` is considered an option bool flag when passing: `--enable`
 /// the parameter enable will have the value of `true` and `false` if absent.
@@ -513,13 +513,33 @@ pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {
 /// fn main(enable: bool){}
 /// ```
 pub fn is_option_bool_flag(fn_arg: &FnArgData) -> bool {
+    // Only `option`s can be bool flags
+    if !fn_arg.is_option {
+        return false;
+    }
+
+    // Of course, only bool can be an option bool flag
+    if !fn_arg.pat_type.ty.is_bool() {
+        return false;
+    }
+
     if let Some(attribute) = &fn_arg.name_value {
-        fn_arg.pat_type.ty.is_bool()
-            && !(attribute.contains_name(crate::attr::MIN)
-                || attribute.contains_name(crate::attr::MAX)
-                || attribute.contains_name(crate::attr::DEFAULT))
+        let min = attribute.get(crate::attr::MIN)
+            .map(|v| v.to_integer_literal::<usize>().expect("`min` must be a integer literal"))
+            .unwrap_or(0);
+
+        let max = attribute.get(crate::attr::MAX)
+            .map(|v| v.to_integer_literal::<usize>().expect("`max` must be a integer literal"))
+            .unwrap_or(1);
+
+        let default = attribute.get(crate::attr::DEFAULT)
+            .map(|v| v.to_bool_literal().expect("`default` must be a bool literal"))
+            .unwrap_or(false);
+
+        // Is an option bool flag is is boolean type and: min = 0, max = 1, default = false
+        min == 0 && max == 1 && default == false
     } else {
-        fn_arg.pat_type.ty.is_bool()
+        true
     }
 }
 
@@ -638,7 +658,7 @@ mod imp {
             }
 
             while let Some((subcommand, attribute)) = subcommands.pop() {
-                if attribute.contains_name(crate::attr::PARENT) {
+                if attribute.contains(crate::attr::PARENT) {
                     let literal = attribute.get(crate::attr::PARENT)
                         .unwrap()
                         .to_string_literal()
@@ -875,7 +895,7 @@ mod imp {
         let mut subcommands = get_subcommands_data(&root_path);
 
         while let Some((subcommand, _, attribute)) = subcommands.pop() {
-            if attribute.contains_name(crate::attr::PARENT){
+            if attribute.contains(crate::attr::PARENT){
                 let literal = attribute.get(crate::attr::PARENT)
                     .unwrap()
                     .to_string_literal()

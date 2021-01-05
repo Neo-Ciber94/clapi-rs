@@ -1,0 +1,7 @@
+error: custom attribute panicked
+ --> $DIR/invalid_arg_type_max.rs:3:1
+  |
+3 | #[command]
+  | ^^^^^^^^^^
+  |
+  = help: message: invalid number of arguments for `value : i64` expected 1

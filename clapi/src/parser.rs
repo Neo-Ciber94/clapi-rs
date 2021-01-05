@@ -110,7 +110,7 @@ impl Parser {
                         // Only 1 because multiple arguments with default values is no allowed.
                         if require_default_values && !default_value_is_set {
                             if arg.has_default_values() {
-                                option_args.add(arg).unwrap();
+                                option_args.add(arg).expect("duplicated argument");
 
                                 // This is just a flag, `Argument`S with default values already have
                                 // the default value set
@@ -166,16 +166,16 @@ impl Parser {
                             )
                         })?;
 
-                        option_args.add(arg).unwrap();
+                        option_args.add(arg).expect("duplicated argument");
                     }
 
                     // Sets the option arguments
                     options
                         .add(option.args(option_args))
-                        .unwrap();
+                        .expect("duplicated option");
                 } else {
                     // Adds the option
-                    options.add(option).unwrap();
+                    options.add(option).expect("duplicated option");
                 }
             } else {
                 return Err(Error::new_parse_error(
@@ -205,7 +205,7 @@ impl Parser {
             // Only 1 because multiple arguments with default values is no allowed.
             if require_default_values && !default_value_is_set {
                 if arg.has_default_values() {
-                    command_args.add(arg).unwrap();
+                    command_args.add(arg).expect("duplicated argument");
 
                     // This is just a flag, `Argument`S with default values already have
                     // the default value set
@@ -240,7 +240,7 @@ impl Parser {
                 arg.set_values(values).map_err(|error| {
                     // We add the last arg
                     let mut args = command_args.clone();
-                    args.add(arg.clone()).unwrap();
+                    args.add(arg.clone()).expect("duplicated argument");
                     Error::new_parse_error(
                         error,
                         ParseResult::new(
@@ -250,7 +250,7 @@ impl Parser {
                 })?;
             }
 
-            command_args.add(arg).unwrap();
+            command_args.add(arg).expect("duplicated argument");
         }
 
         Ok(command_args)

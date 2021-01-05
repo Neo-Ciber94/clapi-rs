@@ -20,7 +20,7 @@ pub struct Argument {
     arg_count: ArgCount,
     validator: Option<Rc<dyn Validator>>,
     default_values: Vec<String>,
-    valid_values: Vec<String>,
+    valid_values: Vec<String>, //todo: change for HashSet
     values: Vec<String>,
 }
 

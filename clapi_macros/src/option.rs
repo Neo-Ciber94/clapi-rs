@@ -35,21 +35,14 @@ impl OptionAttrData {
     }
 
     pub fn from_arg_data(arg_data: FnArgData) -> Self {
-        // The `ArgAttrData` don't need the attributes, these are set by the option
-        fn drop_attributes(mut data: FnArgData) -> FnArgData {
-            data.attribute = None;
-            data.name_value = None;
-            data
-        }
         let mut option = OptionAttrData::new(arg_data.arg_name.clone());
-        let mut args = ArgAttrData::from_arg_data(drop_attributes(arg_data.clone()));
+        let mut args = ArgAttrData::from_arg_data(arg_data.clone());
 
         if let Some(att) = &arg_data.name_value {
             for (key, value) in att {
                 match key.as_str() {
                     attr::ARG => {
                         let arg_name = value
-                            .clone()
                             .to_string_literal()
                             .expect("option `arg` must be a string literal");
 
@@ -57,7 +50,6 @@ impl OptionAttrData {
                     }
                     attr::ALIAS => {
                         let alias = value
-                            .clone()
                             .to_string_literal()
                             .expect("option `alias` must be a string literal");
 
@@ -65,14 +57,14 @@ impl OptionAttrData {
                     }
                     attr::DESCRIPTION => {
                         let description = value
-                            .clone()
                             .to_string_literal()
                             .expect("option `description` must be a string literal");
+
+                        //args.set_description(description.clone());
                         option.set_description(description);
                     }
                     attr::MIN => {
                         let min = value
-                            .clone()
                             .to_integer_literal::<usize>()
                             .expect("option `min` must be an integer literal");
 
@@ -80,7 +72,6 @@ impl OptionAttrData {
                     }
                     attr::MAX => {
                         let max = value
-                            .clone()
                             .to_integer_literal::<usize>()
                             .expect("option `max` must be an integer literal");
 
@@ -89,6 +80,10 @@ impl OptionAttrData {
                     attr::DEFAULT => match value {
                         Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
                         Value::Array(array) => args.set_default_values(array.clone()),
+                    },
+                    attr::VALUES => match value {
+                        Value::Literal(lit) => args.set_valid_values(vec![lit.clone()]),
+                        Value::Array(array) => args.set_valid_values(array.clone()),
                     },
                     _ => panic!("invalid `option` key `{}`", key),
                 }
@@ -113,7 +108,7 @@ impl OptionAttrData {
             };
             args.set_default_values(vec![syn::Lit::Bool(lit)]);
             args.set_min(0);
-            args.set_max(1);
+            args.set_max(1); //#[option]
         }
 
         // Sets the attribute and the args

@@ -129,7 +129,7 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// By default any function argument is considered a command `option`,
 /// Use this attribute to provide additional information like `arg`, `alias`,
-/// `description` or `min`, `max` and `default` arguments.
+/// `description` or `min`, `max`, `default` and `values` arguments.
 ///
 /// # Options
 /// - `arg`: Name of the argument.
@@ -138,6 +138,7 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
 /// - `min`: Min number of values the option takes.
 /// - `max`: Max number of values the option takes.
 /// - `default`: Default value(s) of the option.
+/// - `values`: Valid values of the option.
 ///
 /// Function arguments can be declared as the following types:
 /// - Any type that implement `FromStr`.
@@ -175,9 +176,10 @@ pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
 ///
 /// # Options
 /// - `arg`: Name of the argument.
-/// - `min`: Min number of values the option takes.
-/// - `max`: Max number of values the option takes.
-/// - `default`: Default value(s) of the option.
+/// - `min`: Min number of values the argument takes.
+/// - `max`: Max number of values the argument takes.
+/// - `default`: Default value(s) of the argument.
+/// - `values`: Valid values of the argument.
 ///
 /// Function arguments can be declared as the following types:
 /// - Any type that implement `FromStr`.

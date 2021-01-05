@@ -8,15 +8,13 @@ use crate::macro_attribute::{
     display_lit, lit_to_string, meta_item_to_string, MacroAttribute, MetaItem,
 };
 use std::convert::TryFrom;
-
-type Map<K, V> = linked_hash_map::LinkedHashMap<K, V>;
-type Iter<'a, K, V> = linked_hash_map::Iter<'a, K, V>;
-type IntoIter<K, V> = linked_hash_map::IntoIter<K, V>;
+use std::hash::{Hash, Hasher};
+use linked_hash_set::LinkedHashSet;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct NameValueAttribute {
     path: String,
-    args: Map<String, Value>,
+    args: LinkedHashSet<NameValue>,
     style: AttrStyle,
 }
 
@@ -29,12 +27,16 @@ impl NameValueAttribute {
         }
     }
 
+    pub fn from_args(path: String, style: AttrStyle, args: LinkedHashSet<NameValue>) -> Self {
+        NameValueAttribute { path, args, style }
+    }
+
     pub fn new(
         path: &str,
         meta_items: Vec<MetaItem>,
         style: AttrStyle,
     ) -> Result<Self, NameValueError> {
-        let mut args = Map::new();
+        let mut args = LinkedHashSet::new();
 
         for meta_item in meta_items.into_iter() {
             let name_value = meta_item
@@ -42,16 +44,14 @@ impl NameValueAttribute {
                 .cloned()
                 .ok_or_else(|| NameValueError::InvalidValue(meta_item.clone()))?;
 
-            if args.contains_key(&name_value.name) {
+            if args.contains(&name_value) {
                 return Err(NameValueError::DuplicatedKey(name_value.name));
             } else {
-                args.insert(name_value.name, name_value.value);
+                args.insert(name_value);
             }
         }
 
-        let mut name_value_attribute = NameValueAttribute::empty(path.to_string(), style);
-        name_value_attribute.args = args;
-        Ok(name_value_attribute)
+        Ok(NameValueAttribute::from_args(path.to_owned(), style, args))
     }
 
     pub fn from_attribute_args(
@@ -70,10 +70,6 @@ impl NameValueAttribute {
         &self.style
     }
 
-    pub fn names(&self) -> impl Iterator<Item = &String> {
-        self.args.keys()
-    }
-
     pub fn len(&self) -> usize {
         self.args.len()
     }
@@ -83,19 +79,18 @@ impl NameValueAttribute {
     }
 
     pub fn get(&self, name: &str) -> Option<&Value> {
-        self.args.get(name)
-    }
-
-    pub fn contains_name(&self, name: &str) -> bool {
-        self.args.contains_key(name)
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = (&String, &Value)> {
-        self.args.iter()
-    }
-
-    pub fn into_inner(self) -> Map<String, Value> {
         self.args
+            .iter()
+            .find(|v| v.name == name)
+            .map(|v| &v.value)
+    }
+
+    pub fn contains(&self, name: &str) -> bool {
+        self.args.iter().any(|v| v.name == name)
+    }
+
+    pub fn iter(&self) -> Iter<'_> {
+        Iter { iter: self.args.iter() }
     }
 }
 
@@ -103,25 +98,55 @@ impl<'a> Index<&'a str> for NameValueAttribute {
     type Output = Value;
 
     fn index(&self, index: &'a str) -> &Self::Output {
-        &self.args[index]
+        self.get(index).expect("invalid name")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Iter<'a> {
+    iter: linked_hash_set::Iter<'a, NameValue>
+}
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = (&'a String, &'a Value);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter
+            .next()
+            .map(|v| (&v.name, &v.value))
     }
 }
 
 impl<'a> IntoIterator for &'a NameValueAttribute {
     type Item = (&'a String, &'a Value);
-    type IntoIter = Iter<'a, String, Value>;
+    type IntoIter = Iter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.args.iter()
+        self.iter()
+    }
+}
+
+pub struct IntoIter {
+    iter: linked_hash_set::IntoIter<NameValue>
+}
+
+impl Iterator for IntoIter {
+    type Item = (String, Value);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.iter.next() {
+            Some(NameValue { name, value }) => Some((name, value)),
+            None => None
+        }
     }
 }
 
 impl IntoIterator for NameValueAttribute {
     type Item = (String, Value);
-    type IntoIter = IntoIter<String, Value>;
+    type IntoIter = IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.args.into_iter()
+        IntoIter { iter: self.args.into_iter() }
     }
 }
 
@@ -143,12 +168,8 @@ impl Display for NameValueAttribute {
 
         let meta = self
             .args
-            .values()
-            .map(|value| {
-                let mut s = String::new();
-                value.display(&mut s, false).unwrap();
-                s
-            })
+            .iter()
+            .map(|v| v.to_string())
             .collect::<Vec<String>>();
 
         if meta.is_empty() {
@@ -175,7 +196,7 @@ impl Debug for NameValueError {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct NameValue {
     pub name: String,
     pub value: Value,
@@ -184,6 +205,20 @@ pub struct NameValue {
 impl Display for NameValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}={}", self.name, self.value)
+    }
+}
+
+impl Hash for NameValue {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write(self.name.as_bytes());
+    }
+}
+
+impl Eq for NameValue {}
+
+impl PartialEq for NameValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
     }
 }
 
@@ -431,9 +466,9 @@ mod tests {
         let raw_attr = MacroAttribute::new(parse_attr(tokens));
         let attr = raw_attr.into_name_values().unwrap();
 
-        assert!(attr.contains_name("name"));
-        assert!(attr.contains_name("age"));
-        assert!(attr.contains_name("fav_numbers"));
+        assert!(attr.contains("name"));
+        assert!(attr.contains("age"));
+        assert!(attr.contains("fav_numbers"));
     }
 
     #[test]

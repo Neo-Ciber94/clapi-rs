@@ -4,4 +4,4 @@ error: custom attribute panicked
 3 | #[command]
   | ^^^^^^^^^^
   |
-  = help: message: expected integer default value for `x` but was `hello`
+  = help: message: expected integer values for `x : i64` but was "hello"
