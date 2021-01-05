@@ -35,12 +35,12 @@ impl DeclareVar {
                         None => false,
                         Some(option) => {
                             let arg = option.get_arg().unwrap();
-                            if !arg.get_values().is_empty() {
+                            if arg.is_set() {
                                 arg.convert::<bool>()?
                             } else {
                                 true
                             }
-                        }
+                        },
                     }
                 }
             }

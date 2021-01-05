@@ -53,13 +53,15 @@ impl ArgLocalVar {
                 let option_name = quote_expr!(self.var_name);
                 quote! {
                     match opts.get(#option_name) {
+                        None => false,
                         Some(option) => {
-                            match option.get_arg() {
-                                Some(arg) if arg.get_values().len() > 0 => arg.convert::<bool>()?,
-                                Some(_) | None => true,
+                            let arg = option.get_arg().unwrap();
+                            if arg.is_set() {
+                                arg.convert::<bool>()?
+                            } else {
+                                true
                             }
                         },
-                        None => false
                     }
                 }
             }

@@ -20,8 +20,9 @@ pub struct Argument {
     arg_count: ArgCount,
     validator: Option<Rc<dyn Validator>>,
     default_values: Vec<String>,
-    valid_values: Vec<String>, //todo: change for HashSet
+    valid_values: Vec<String>,
     values: Vec<String>,
+    is_set: bool
 }
 
 impl Argument {
@@ -40,6 +41,7 @@ impl Argument {
             default_values: vec![],
             valid_values: vec![],
             values: vec![],
+            is_set: false,
         }
     }
 
@@ -130,6 +132,12 @@ impl Argument {
         }
     }
 
+    /// Returns `true` if this `Argument` contains values, or false if don't contains values
+    /// or only contains default values.
+    pub fn is_set(&self) -> bool {
+        self.is_set
+    }
+
     /// Sets the number of values this argument takes.
     ///
     /// # Panics
@@ -196,6 +204,8 @@ impl Argument {
             "cannot set valid values when default values are already declared"
         );
 
+        // Keep in mind we aren't removing duplicate values,
+        // but duplicates don't have any impact
         let values = values
             .into_iter()
             .map(|s| s.to_string())
@@ -237,11 +247,7 @@ impl Argument {
             .map(|s| s.to_string())
             .collect::<Vec<String>>();
 
-        assert!(self.values.is_empty(), "already contains values");
-        assert!(
-            self.default_values.is_empty(),
-            "default values are already set"
-        );
+        assert!(self.get_values().is_empty(), "already contains values");
         assert!(
             self.arg_count.takes(values.len()),
             "invalid value count expected {} but was {}",
@@ -314,6 +320,7 @@ impl Argument {
         }
 
         self.values = values;
+        self.is_set = true;
         Ok(())
     }
 
@@ -333,21 +340,21 @@ impl Argument {
         // Checks if the type `T` is valid for the validator
         self.assert_valid_type::<T>()?;
 
-        if self.values.is_empty() {
+        if self.get_values().is_empty() {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
                 "expected at least 1 argument value",
             ));
         }
 
-        if self.values.len() != 1 {
+        if self.get_values().len() != 1 {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
                 "multiple argument values found but 1 was expected",
             ));
         }
 
-        try_parse_str(&self.values[0])
+        try_parse_str(&self.get_values()[0])
     }
 
     /// Converts the values of this argument to a concrete type.
@@ -365,7 +372,7 @@ impl Argument {
         // Checks if the type `T` is valid for the validator
         self.assert_valid_type::<T>()?;
 
-        if self.values.is_empty() {
+        if self.get_values().is_empty() {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
                 "expected at least 1 argument value",
@@ -373,7 +380,7 @@ impl Argument {
         }
 
         let mut ret = Vec::new();
-        for value in &self.values {
+        for value in self.get_values() {
             ret.push(try_parse_str(value)?);
         }
         Ok(ret)
@@ -966,16 +973,19 @@ mod tests {
         assert_eq!(arg.get_arg_count(), &ArgCount::more_than(1));
         assert!(arg.get_validator().is_some());
         assert_eq!(arg.get_default_values()[0].clone(), "1".to_owned());
+        assert!(!arg.is_set());
     }
 
     #[test]
     fn set_values_test() {
         let mut number = Argument::one_or_more("number").validator(parse_validator::<f64>());
 
+        assert!(!number.is_set());
         assert!(number.set_values(&[1, 2, 3]).is_ok());
         assert!(number.set_values(&[0.2, 5.4]).is_ok());
         assert!(number.set_values(&["1", "0.25", "3"]).is_ok());
         assert!(number.set_values(&[true, false]).is_err());
+        assert!(number.is_set());
     }
 
     #[test]
@@ -1048,7 +1058,6 @@ mod tests {
         assert!(args.add(Argument::new("greeting").default("Hello")).is_ok());
         assert!(args.add(Argument::new("words").arg_count(3)).is_ok());
     }
-
 
     #[test]
     #[should_panic]
