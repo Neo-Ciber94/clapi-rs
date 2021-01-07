@@ -1,5 +1,5 @@
 use crate::serde::internal::{AnyToString, StringOrList, ValidType};
-use crate::{ArgCount, Argument, ArgumentList, Command, CommandOption, OptionList};
+use crate::{ValueCount, Argument, ArgumentList, Command, CommandOption, OptionList};
 use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::export::{Formatter, Result};
 use serde::ser::{SerializeSeq, SerializeStruct};
@@ -7,7 +7,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 
 // ArgCount
-impl Serialize for ArgCount {
+impl Serialize for ValueCount {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -19,7 +19,7 @@ impl Serialize for ArgCount {
     }
 }
 
-impl<'de> Deserialize<'de> for ArgCount {
+impl<'de> Deserialize<'de> for ValueCount {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -76,7 +76,7 @@ impl<'de> Deserialize<'de> for ArgCount {
 
         struct ArgCountVisitor;
         impl<'de> Visitor<'de> for ArgCountVisitor {
-            type Value = ArgCount;
+            type Value = ValueCount;
 
             fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
                 formatter.write_str("struct ArgCount")
@@ -93,7 +93,7 @@ impl<'de> Deserialize<'de> for ArgCount {
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(1, &self))?;
 
-                Ok(ArgCount::new_checked(min, max).expect("min < max"))
+                Ok(ValueCount::new_checked(min, max).expect("min < max"))
             }
 
             fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
@@ -121,7 +121,7 @@ impl<'de> Deserialize<'de> for ArgCount {
                     }
                 }
 
-                Ok(ArgCount::new_checked(min.flatten(),max.flatten()).expect("min < max"))
+                Ok(ValueCount::new_checked(min.flatten(), max.flatten()).expect("min < max"))
             }
         }
 
@@ -151,8 +151,8 @@ impl Serialize for Argument {
         let mut state = serializer.serialize_struct("Argument", 7)?;
         state.serialize_field("name", &self.get_name())?;
         state.serialize_field("description", &self.get_description())?;
-        state.serialize_field("min_count", &self.get_arg_count().min_count())?;
-        state.serialize_field("max_count", &self.get_arg_count().max_count())?;
+        state.serialize_field("min_count", &self.get_value_count().min_count())?;
+        state.serialize_field("max_count", &self.get_value_count().max_count())?;
         state.serialize_field("type", &get_valid_type(self.get_validator()))?;
         state.serialize_field("valid_values", &self.get_valid_values())?;
         state.serialize_field("default_values", &self.get_default_values())?;
@@ -282,13 +282,13 @@ impl<'de> Deserialize<'de> for Argument {
 
                 match (min_count, max_count) {
                     (Some(min), Some(max)) => {
-                        argument = argument.arg_count(ArgCount::new(min, max));
+                        argument = argument.value_count(ValueCount::new(min, max));
                     },
                     (Some(min), None) => {
-                        argument = argument.arg_count(ArgCount::more_than(min));
+                        argument = argument.value_count(ValueCount::more_than(min));
                     },
                     (None, Some(max)) => {
-                        argument = argument.arg_count(ArgCount::less_than(max));
+                        argument = argument.value_count(ValueCount::less_than(max));
                     }
                     (None, None) => { /*By default an `Argument` takes 1 value */ }
                 }
@@ -397,13 +397,13 @@ impl<'de> Deserialize<'de> for Argument {
 
                 match (min_count.flatten(), max_count.flatten()) {
                     (Some(min), Some(max)) => {
-                        argument = argument.arg_count(ArgCount::new(min, max));
+                        argument = argument.value_count(ValueCount::new(min, max));
                     },
                     (Some(min), None) => {
-                        argument = argument.arg_count(ArgCount::more_than(min));
+                        argument = argument.value_count(ValueCount::more_than(min));
                     },
                     (None, Some(max)) => {
-                        argument = argument.arg_count(ArgCount::less_than(max));
+                        argument = argument.value_count(ValueCount::less_than(max));
                     }
                     (None, None) => { /*By default an `Argument` takes 1 value */ }
                 }
@@ -1165,12 +1165,12 @@ mod tests {
 
     #[cfg(test)]
     mod arg_count_tests {
-        use crate::ArgCount;
+        use crate::ValueCount;
         use serde_test::Token;
 
         #[test]
         fn arg_count_test1() {
-            let arg_count = ArgCount::new(2, 10);
+            let arg_count = ValueCount::new(2, 10);
             serde_test::assert_tokens(
                 &arg_count,
                 &[
@@ -1191,7 +1191,7 @@ mod tests {
 
         #[test]
         fn arg_count_test2() {
-            let arg_count = ArgCount::less_than(10);
+            let arg_count = ValueCount::less_than(10);
             serde_test::assert_tokens(
                 &arg_count,
                 &[
@@ -1211,7 +1211,7 @@ mod tests {
 
         #[test]
         fn arg_count_test3() {
-            let arg_count = ArgCount::any();
+            let arg_count = ValueCount::any();
             serde_test::assert_tokens(
                 &arg_count,
                 &[
@@ -1240,7 +1240,7 @@ mod tests {
         fn argument_test() {
             let arg = Argument::new("numbers")
                 .description("A set of numbers")
-                .arg_count(1..=10)
+                .value_count(1..=10)
                 .validator(parse_validator::<i64>())
                 .valid_values(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
                 .defaults(&[1, 2, 3]);
@@ -1322,7 +1322,7 @@ mod tests {
         fn argument_list() {
             let mut args = ArgumentList::new();
             args.add(Argument::new("A").description("a")).unwrap();
-            args.add(Argument::new("B").arg_count(2)).unwrap();
+            args.add(Argument::new("B").value_count(2)).unwrap();
             args.add(Argument::new("C").valid_values(&['a', 'b', 'c']))
                 .unwrap();
 
@@ -1340,7 +1340,7 @@ mod tests {
     #[cfg(test)]
     mod options_tests {
         use crate::serde::tests::{args_tokens, option_tokens};
-        use crate::{ArgCount, Argument, CommandOption, OptionList};
+        use crate::{ValueCount, Argument, CommandOption, OptionList};
         use serde_test::Token;
 
         #[test]
@@ -1427,7 +1427,7 @@ mod tests {
 
             let arg = option.get_arg().unwrap();
             assert_eq!(arg.get_name(), "color");
-            assert_eq!(arg.get_arg_count(), &ArgCount::new(1, 1));
+            assert_eq!(arg.get_value_count(), &ValueCount::new(1, 1));
             assert_eq!(
                 arg.get_valid_values(),
                 &["red".to_owned(), "green".to_owned(), "blue".to_owned()]
@@ -1481,7 +1481,7 @@ mod tests {
     #[cfg(test)]
     mod command_tests {
         use crate::serde::tests::{args_tokens, command_tokens, option_tokens};
-        use crate::{ArgCount, Argument, Command, CommandOption};
+        use crate::{ValueCount, Argument, Command, CommandOption};
 
         #[test]
         fn command_test() {
@@ -1493,7 +1493,7 @@ mod tests {
                     CommandOption::new("color")
                         .arg(Argument::new("color").valid_values(vec!["red", "green", "blue"])),
                 )
-                .arg(Argument::new("values").arg_count(1..));
+                .arg(Argument::new("values").value_count(1..));
 
             let subcommands = command_tokens(
                 "version",
@@ -1625,7 +1625,7 @@ mod tests {
 
             let arg = command.get_arg().unwrap();
             assert_eq!(arg.get_name(), "values");
-            assert_eq!(arg.get_arg_count(), &ArgCount::more_than(1));
+            assert_eq!(arg.get_value_count(), &ValueCount::more_than(1));
         }
     }
 

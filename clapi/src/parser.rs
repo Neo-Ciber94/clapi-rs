@@ -10,6 +10,7 @@ use crate::option::{CommandOption, OptionList};
 use crate::parse_result::ParseResult;
 use crate::tokenizer::{Token, Tokenizer};
 use crate::utils::Then;
+use crate::Argument;
 
 /// A command-line argument parser.
 #[derive(Debug)]
@@ -110,7 +111,7 @@ impl Parser {
                         // Only 1 because multiple arguments with default values is no allowed.
                         if require_default_values && !default_value_is_set {
                             if arg.has_default_values() {
-                                option_args.add(arg).expect("duplicated argument");
+                                add_argument(&mut option_args, arg);
 
                                 // This is just a flag, `Argument`S with default values already have
                                 // the default value set
@@ -120,7 +121,7 @@ impl Parser {
                         }
 
                         let mut values = Vec::new();
-                        let max_count = arg.get_arg_count().max();
+                        let max_count = arg.get_value_count().max();
                         let mut count = 0;
 
                         while count < max_count {
@@ -166,16 +167,14 @@ impl Parser {
                             )
                         })?;
 
-                        option_args.add(arg).expect("duplicated argument");
+                        add_argument(&mut option_args, arg);
                     }
 
                     // Sets the option arguments
-                    options
-                        .add(option.args(option_args))
-                        .expect("duplicated option");
+                    add_option(&mut options, option.args(option_args));
                 } else {
                     // Adds the option
-                    options.add(option).expect("duplicated option");
+                    add_option(&mut options, option)
                 }
             } else {
                 return Err(Error::new_parse_error(
@@ -205,7 +204,7 @@ impl Parser {
             // Only 1 because multiple arguments with default values is no allowed.
             if require_default_values && !default_value_is_set {
                 if arg.has_default_values() {
-                    command_args.add(arg).expect("duplicated argument");
+                    add_argument(&mut command_args, arg);
 
                     // This is just a flag, `Argument`S with default values already have
                     // the default value set
@@ -215,7 +214,7 @@ impl Parser {
             }
 
             if args_iter.peek().is_some() {
-                let max_count = arg.get_arg_count().max();
+                let max_count = arg.get_value_count().max();
                 let mut count = 0;
 
                 while count < max_count {
@@ -240,7 +239,7 @@ impl Parser {
                 arg.set_values(values).map_err(|error| {
                     // We add the last arg
                     let mut args = command_args.clone();
-                    args.add(arg.clone()).expect("duplicated argument");
+                    add_argument(&mut args, arg.clone());
                     Error::new_parse_error(
                         error,
                         ParseResult::new(
@@ -250,7 +249,7 @@ impl Parser {
                 })?;
             }
 
-            command_args.add(arg).expect("duplicated argument");
+            add_argument(&mut command_args, arg);
         }
 
         Ok(command_args)
@@ -280,7 +279,7 @@ impl Parser {
         // Sets the options that takes default arguments
         for opt in default_options {
             if !options.contains(opt.get_name()) {
-                options.add(opt.clone()).expect("duplicated option");
+                add_option(options, opt.clone());
             }
         }
     }
@@ -300,7 +299,7 @@ impl Parser {
 
             for arg in args {
                 // To avoid overflow
-                match required_values.checked_add(arg.get_arg_count().max()) {
+                match required_values.checked_add(arg.get_value_count().max()) {
                     None => return false,
                     Some(n) => required_values = n
                 }
@@ -341,4 +340,16 @@ pub(crate) fn get_option_prefixed<'a>(
     }
 
     None
+}
+
+fn add_option(options: &mut OptionList, new_option: CommandOption) {
+    options.add(new_option).unwrap_or_else(|e| {
+       panic!("duplicated option: `{}`", e.get_name())
+    });
+}
+
+fn add_argument(arguments: &mut ArgumentList, new_arg: Argument){
+    arguments.add(new_arg).unwrap_or_else(|e| {
+        panic!("duplicated argument: `{}`", e.get_name())
+    });
 }

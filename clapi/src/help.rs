@@ -105,6 +105,7 @@ impl Display for Buffer {
     }
 }
 
+// todo: Add additional config for uppercase `args`, indents
 /// A default implementation of the `Help` trait.
 pub struct DefaultHelp(pub HelpKind);
 
@@ -186,7 +187,7 @@ impl Help for DefaultHelp {
 
                 for arg in command.get_args() {
                     let arg_name = arg.get_name().to_uppercase();
-                    if arg.get_arg_count().max() > 1 {
+                    if arg.get_value_count().max() > 1 {
                         write!(buf, " [{}]...", arg_name)?;
                     } else {
                         write!(buf, " [{}] ", arg_name)?;
@@ -260,12 +261,14 @@ pub(crate) fn use_help_for_more_info_msg(context: &Context) -> Option<String> {
     if let Some(help) = context.help() {
         match help.kind() {
             HelpKind::Any | HelpKind::Subcommand => {
-                Some(format!("Use '{} <subcommand>' for more information about a command.", help.name()))
+                let command = context.root().get_name();
+                Some(format!("Use '{} {} <subcommand>' for more information about a command.", command, help.name()))
             }
             HelpKind::Option => {
                 // SAFETY: `name_prefixes` is never empty
                 let prefix = context.name_prefixes().next().unwrap();
-                Some(format!("Use '<subcommand> {}{}' for more information about a command.", prefix, help.name()))
+                let command = context.root().get_name();
+                Some(format!("Use '{} <subcommand> {}{}' for more information about a command.", command, prefix, help.name()))
             }
         }
     } else {
@@ -275,13 +278,13 @@ pub(crate) fn use_help_for_more_info_msg(context: &Context) -> Option<String> {
 
 pub(crate) fn to_command<H: Help + ?Sized>(help: &H) -> Command {
     Command::new(help.name())
-        .arg(Argument::new("subcommand").arg_count(0..=1))
+        .arg(Argument::new("subcommand").value_count(0..=1))
         .description(help.description())
 }
 
 pub(crate) fn to_option<H: Help + ?Sized>(help: &H) -> CommandOption {
     CommandOption::new(help.name())
-        .arg(Argument::new("subcommand").arg_count(0..=1))
+        .arg(Argument::new("subcommand").value_count(0..=1))
         .description(help.description())
         .then_apply(|opt| {
             if let Some(alias) = help.alias() {

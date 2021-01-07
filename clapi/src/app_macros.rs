@@ -396,11 +396,11 @@ macro_rules! app {
     // Argument fallthrough
     (@arg ($arg_builder:expr)) => { $arg_builder };
 
-    // Argument count
+    // Argument value count
     // clapi::app! { (@arg => (count => 1..) }
     (@arg ($arg_builder:expr) (count => $count:expr) $($tt:tt)*) => {
         $crate::app!{
-            @arg ($arg_builder.arg_count($count)) $($tt)*
+            @arg ($arg_builder.value_count($count)) $($tt)*
         }
     };
 

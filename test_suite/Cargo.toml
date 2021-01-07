@@ -6,8 +6,8 @@ edition = "2018"
 publish = false
 
 [[test]]
-name = "tests"
-path = "tests/compiletest.rs"
+name = "compile_test"
+path = "tests/compile_test.rs"
 
 [dependencies]
 clapi = { path= "../clapi",  features=["macros"] }

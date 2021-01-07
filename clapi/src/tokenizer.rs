@@ -133,7 +133,7 @@ impl Tokenizer {
                     tokens.extend(args.into_iter().map(Token::Arg));
                 } else if let Some(opt) = current_command.get_options().get(option.as_str()) {
                     for arg in opt.get_args() {
-                        let max_arg_count = arg.get_arg_count().max();
+                        let max_arg_count = arg.get_value_count().max();
                         let mut count = 0;
                         while count < max_arg_count {
                             if let Some(value) = iterator.peek() {
@@ -276,7 +276,7 @@ mod tests {
         let command = Command::new("My App")
             .arg(Argument::one_or_more("args"))
             .option(CommandOption::new("enable").alias("e"))
-            .option(CommandOption::new("range").arg(Argument::new("range").arg_count(1..=2)))
+            .option(CommandOption::new("range").arg(Argument::new("range").value_count(1..=2)))
             .subcommand(Command::new("version"));
 
         assert_eq!(tokenize(command.clone(), "").unwrap(), Vec::new());

@@ -162,7 +162,7 @@ impl ArgAttrData {
             assert_same_type_as_fn_arg(&self.fn_arg, &self.valid_values);
         }
 
-        let (min, max) = self.arg_count();
+        let (min, max) = self.get_value_count();
 
         // Assertions
         self.assert_min_max(min, max);
@@ -172,8 +172,8 @@ impl ArgAttrData {
         let min = quote_option!(min);
         let max = quote_option!(max);
 
-        let arg_count = quote! {
-            .arg_count(clapi::ArgCount::new_checked(#min, #max).expect("min < max"))
+        let value_count = quote! {
+            .value_count(clapi::ValueCount::new_checked(#min, #max).expect("min < max"))
         };
 
         // Argument default values
@@ -204,14 +204,14 @@ impl ArgAttrData {
 
         quote! {
             clapi::Argument::new(#name)
-            #arg_count
+            #value_count
             #description
             #valid_values
             #default_values
         }
     }
 
-    fn arg_count(&self) -> (Option<usize>, Option<usize>) {
+    fn get_value_count(&self) -> (Option<usize>, Option<usize>) {
         let (arg, arg_type) = &self.fn_arg;
 
         // Get the `min` and `max` number of values for this argument.

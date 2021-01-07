@@ -160,7 +160,7 @@ pub mod utils;
 #[cfg(feature = "serde")]
 mod serde;
 
-mod arg_count;
+mod value_count;
 mod args;
 mod command;
 mod command_line;
@@ -179,7 +179,7 @@ pub mod suggestion;
 pub mod help;
 
 // Re-exports
-pub use self::arg_count::*;
+pub use self::value_count::*;
 pub use self::args::*;
 pub use self::command::*;
 pub use self::command_line::*;

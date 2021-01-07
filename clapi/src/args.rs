@@ -1,7 +1,6 @@
 #![allow(clippy::len_zero)]
-
 use crate::error::Result;
-use crate::{ArgCount, Error, ErrorKind};
+use crate::{ValueCount, Error, ErrorKind};
 use linked_hash_set::LinkedHashSet;
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display, Formatter};
@@ -17,7 +16,7 @@ use validator::Validator;
 pub struct Argument {
     name: String,
     description: Option<String>,
-    arg_count: ArgCount,
+    count: ValueCount,
     validator: Option<Rc<dyn Validator>>,
     default_values: Vec<String>,
     valid_values: Vec<String>,
@@ -35,7 +34,7 @@ impl Argument {
         Argument {
             name,
             description: None,
-            arg_count: ArgCount::exactly(1),
+            count: ValueCount::exactly(1),
             validator: None,
             default_values: vec![],
             valid_values: vec![],
@@ -49,7 +48,7 @@ impl Argument {
     /// Panics if the argument `name` is blank or empty.
     #[inline]
     pub fn zero_or_one<S: Into<String>>(name: S) -> Self {
-        Self::new(name).arg_count(0..=1)
+        Self::new(name).value_count(0..=1)
     }
 
     /// Constructs a new `Argument` that takes 0 or more values.
@@ -58,7 +57,7 @@ impl Argument {
     /// Panics if the argument `name` is blank or empty.
     #[inline]
     pub fn zero_or_more<S: Into<String>>(name: S) -> Self {
-        Self::new(name).arg_count(0..)
+        Self::new(name).value_count(0..)
     }
 
     /// Constructs a new `Argument` that takes 1 or more values.
@@ -67,7 +66,7 @@ impl Argument {
     /// Panics if the argument `name` is blank or empty.
     #[inline]
     pub fn one_or_more<S: Into<String>>(name: S) -> Self {
-        Self::new(name).arg_count(1..)
+        Self::new(name).value_count(1..)
     }
 
     /// Returns the name of this argument.
@@ -81,8 +80,8 @@ impl Argument {
     }
 
     /// Returns the number of values this argument takes.
-    pub fn get_arg_count(&self) -> &ArgCount {
-        &self.arg_count
+    pub fn get_value_count(&self) -> &ValueCount {
+        &self.count
     }
 
     /// Returns the value `Validator` used by this argument.
@@ -144,14 +143,10 @@ impl Argument {
     ///
     /// # Panics
     /// If the value is exactly 0, an argument must take from 0 to 1 values.
-    pub fn arg_count<A: Into<ArgCount>>(mut self, arg_count: A) -> Self {
-        let arg_count = arg_count.into();
-        assert!(
-            !arg_count.takes_exactly(0),
-            "`{}` cannot takes 0 values",
-            self.name
-        );
-        self.arg_count = arg_count;
+    pub fn value_count<A: Into<ValueCount>>(mut self, value_count: A) -> Self {
+        let count = value_count.into();
+        assert!(!count.takes_exactly(0), "`{}` cannot takes 0 values", self.name);
+        self.count = count;
         self
     }
 
@@ -251,9 +246,9 @@ impl Argument {
 
         assert!(self.get_values().is_empty(), "already contains values");
         assert!(
-            self.arg_count.takes(values.len()),
+            self.count.takes(values.len()),
             "invalid value count expected {} but was {}",
-            self.arg_count,
+            self.count,
             values.len()
         );
 
@@ -291,13 +286,13 @@ impl Argument {
             .map(|s| s.to_string())
             .collect::<Vec<String>>();
 
-        if !self.arg_count.takes(values.len()) {
+        if !self.count.takes(values.len()) {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
                 format!(
                     "`{}` expect {} but was {}",
                     self.name,
-                    self.arg_count,
+                    self.count,
                     values.len()
                 ),
             ));
@@ -432,7 +427,7 @@ impl Debug for Argument {
         f.debug_struct("Argument")
             .field("name", &self.name)
             .field("description", &self.description)
-            .field("arg_count", &self.arg_count)
+            .field("arg_count", &self.count)
             .field(
                 "validator",
                 &if self.validator.is_some() {
@@ -468,8 +463,8 @@ where
 #[doc(hidden)]
 pub fn try_parse_values<T: 'static>(values: Vec<String>) -> crate::Result<Vec<T>>
 where
-    T: std::str::FromStr,
-    <T as std::str::FromStr>::Err: std::fmt::Display,
+    T: FromStr,
+    <T as FromStr>::Err: Display,
 {
     let mut ret = Vec::new();
     for value in values {
@@ -673,7 +668,7 @@ impl ArgumentList {
         if self.inner.iter().any(|a| a.has_default_values()) {
             if let Some(arg) = self.inner.iter()
                 .filter(|arg| !arg.has_default_values())
-                .find(|arg| !arg.arg_count.is_exact()) {
+                .find(|arg| !arg.count.is_exact()) {
                 panic!("arguments is variable values is no allowed if there is default values: `{}` contains variable values", arg.name)
             }
         }
@@ -684,10 +679,10 @@ impl ArgumentList {
         // For example: we have 2 arguments: `numbers` (takes 1 to 3) and `ages` (takes 1 to 10)
         // if we pass: -1 0 2 25 10, is no possible to know to what argument the values are being
         // passed
-        if self.inner.iter().filter(|a| !a.get_arg_count().is_exact()).count() > 1 {
+        if self.inner.iter().filter(|a| !a.get_value_count().is_exact()).count() > 1 {
             let arg = self.inner
                 .iter()
-                .filter(|a| !a.get_arg_count().is_exact())
+                .filter(|a| !a.get_value_count().is_exact())
                 .nth(1)
                 .unwrap();
             panic!("multiple arguments that takes variable arguments is not allowed: `{}` contains variable values", arg.name);
@@ -964,13 +959,13 @@ mod tests {
     fn arg_test() {
         let arg = Argument::new("number")
             .description("the values to use")
-            .arg_count(1..)
+            .value_count(1..)
             .validator(parse_validator::<i64>())
             .default(1);
 
         assert_eq!(arg.get_name(), "number");
         assert_eq!(arg.get_description(), Some("the values to use"));
-        assert_eq!(arg.get_arg_count(), &ArgCount::more_than(1));
+        assert_eq!(arg.get_value_count(), &ValueCount::more_than(1));
         assert!(arg.get_validator().is_some());
         assert_eq!(arg.get_default_values()[0].clone(), "1".to_owned());
         assert!(!arg.is_set());
@@ -1049,21 +1044,21 @@ mod tests {
     fn argument_list_with_default_values_and_variable_args_test(){
         let mut args = ArgumentList::new();
         assert!(args.add(Argument::new("greeting").default("Hello")).is_ok());
-        assert!(args.add(Argument::new("words").arg_count(1..)).is_ok());
+        assert!(args.add(Argument::new("words").value_count(1..)).is_ok());
     }
 
     #[test]
     fn argument_list_with_default_values_and_exact_args_test(){
         let mut args = ArgumentList::new();
         assert!(args.add(Argument::new("greeting").default("Hello")).is_ok());
-        assert!(args.add(Argument::new("words").arg_count(3)).is_ok());
+        assert!(args.add(Argument::new("words").value_count(3)).is_ok());
     }
 
     #[test]
     #[should_panic]
     fn argument_list_with_variable_args_test(){
         let mut args = ArgumentList::new();
-        assert!(args.add(Argument::new("numbers").arg_count(1..10)).is_ok());
-        assert!(args.add(Argument::new("characters").arg_count(1..4)).is_ok());
+        assert!(args.add(Argument::new("numbers").value_count(1..10)).is_ok());
+        assert!(args.add(Argument::new("characters").value_count(1..4)).is_ok());
     }
 }

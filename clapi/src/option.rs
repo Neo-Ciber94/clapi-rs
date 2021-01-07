@@ -12,6 +12,7 @@ pub struct CommandOption {
     description: Option<String>,
     is_required: bool,
     args: ArgumentList,
+    // is_hidden, is_multiple
 }
 
 impl CommandOption {
@@ -181,25 +182,12 @@ impl OptionList {
     /// # Returns
     /// `false` if there is an option with the same alias than the provided one.
     pub fn add(&mut self, option: CommandOption) -> std::result::Result<(), CommandOption> {
-        // Check if there if any option that match the new option alias or name
-
-        if self.contains(option.name.as_str()) {
+        if self.is_option_duplicate(&option) {
             return Err(option);
         }
 
-        for alias in &option.aliases {
-            if self.contains(alias) {
-                return Err(option);
-            }
-        }
-
-        if self.inner.contains(&option) {
-            Err(option)
-        } else {
-            let was_added = self.inner.insert(option);
-            debug_assert!(was_added);
-            Ok(())
-        }
+        self.inner.insert(option);
+        Ok(())
     }
 
     /// Returns the `CommandOption` with the given name or alias or `None`
@@ -261,6 +249,21 @@ impl OptionList {
         Iter {
             iter: self.inner.iter(),
         }
+    }
+
+    fn is_option_duplicate(&self, option: &CommandOption) -> bool {
+        // Check if there if any option that match the new option alias or name
+        if self.contains(option.name.as_str()) {
+            return true;
+        }
+
+        for alias in &option.aliases {
+            if self.contains(alias) {
+                return true;
+            }
+        }
+
+        false
     }
 }
 
@@ -427,13 +430,13 @@ mod tests {
 
         let opt1 = CommandOption::new("version")
             .alias("v")
-            .arg(Argument::new("version").arg_count(1));
+            .arg(Argument::new("version").value_count(1));
 
         let opt2 = CommandOption::new("author")
             .alias("a")
-            .arg(Argument::new("x").arg_count(0..));
+            .arg(Argument::new("x").value_count(0..));
 
-        let opt3 = CommandOption::new("verbose").arg(Argument::new("x").arg_count(1..3));
+        let opt3 = CommandOption::new("verbose").arg(Argument::new("x").value_count(1..3));
 
         options.add(opt1).unwrap();
         options.add(opt2).unwrap();

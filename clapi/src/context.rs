@@ -15,7 +15,7 @@ pub struct Context {
     suggestions: Option<Rc<dyn SuggestionProvider + 'static>>,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
-    arg_assign: LinkedHashSet<char>,
+    arg_assign: LinkedHashSet<char>, // value_assign
     delimiter: char,
 }
 
@@ -181,10 +181,6 @@ impl Context {
     pub fn root(&self) -> &Command {
         &self.root
     }
-
-    // pub(crate) fn root_mut(&mut self) -> &mut Command {
-    //     &mut self.root
-    // }
 }
 
 impl Debug for Context {

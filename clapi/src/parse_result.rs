@@ -250,7 +250,7 @@ mod tests {
                 CommandOption::new("enable").arg(
                     Argument::new("value")
                         .validator(parse_validator::<bool>())
-                        .arg_count(0..=1),
+                        .value_count(0..=1),
                 ),
             );
 
@@ -357,18 +357,18 @@ mod tests {
     #[test]
     fn parse_result_variable_arg_count_test1() {
         let command = Command::new("My App")
-            .arg(Argument::new("values").arg_count(0..=3))
+            .arg(Argument::new("values").value_count(0..=3))
             .option(
                 CommandOption::new("letters").arg(
                     Argument::new("letters")
-                        .arg_count(1..)
+                        .value_count(1..)
                         .validator(parse_validator::<char>()),
                 ),
             )
             .option(
                 CommandOption::new("numbers").arg(
                     Argument::new("numbers")
-                        .arg_count(1..=2)
+                        .value_count(1..=2)
                         .validator(parse_validator::<i64>()),
                 ),
             );
@@ -445,7 +445,7 @@ mod tests {
     #[test]
     fn parse_result_error_kind_test() {
         let command = Command::new("My App")
-            .arg(Argument::new("values").arg_count(0..5))
+            .arg(Argument::new("values").value_count(0..5))
             .subcommand(Command::new("version"))
             .option(
                 CommandOption::new("range")
@@ -497,7 +497,7 @@ mod tests {
         let command = Command::new("My App").option(
             CommandOption::new("enable").arg(
                 Argument::new("enable")
-                    .arg_count(0..=1)
+                    .value_count(0..=1)
                     .validator(parse_validator::<bool>()),
             ),
         );
