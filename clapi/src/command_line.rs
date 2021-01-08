@@ -135,7 +135,7 @@ impl CommandLine {
 
                 // Adds an `Use '' for see more information about a command` if any
                 fn format_error(context: &Context, error: &dyn StdError, message: String) -> String {
-                    if let Some(help) = crate::help::use_help_for_more_info_msg(context) {
+                    if let Some(help) = crate::help::after_help_message(context) {
                         format!("{}.\n\n{}\n{}", error, message, help)
                     } else {
                         format!("{}.\n\n{}", error, message)

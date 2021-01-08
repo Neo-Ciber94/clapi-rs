@@ -271,7 +271,7 @@ impl Argument {
             }
         }
 
-        self.default_values = values.clone();
+        self.default_values = values;
         self
     }
 

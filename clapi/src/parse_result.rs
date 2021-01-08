@@ -23,7 +23,7 @@ impl ParseResult {
     }
 
     /// Returns the executing `Command`.
-    pub fn command(&self) -> &Command {
+    pub fn command(&self) -> &Command { //todo: name = executing_command, exec_command, running_command
         &self.command
     }
 
@@ -591,5 +591,23 @@ mod tests {
             .option(CommandOption::new("range")
                 .arg(Argument::new("start").default(1))
                 .arg(Argument::new("end").default(20)));
+    }
+
+    #[test]
+    fn parse_result_allow_multiple_test(){
+        let command = Command::new("MyApp")
+            .option(CommandOption::new("values")
+                .multiple(true)
+                .arg(Argument::one_or_more("values")));
+
+        let result1 = parse_with("--values 5 6", command.clone()).unwrap();
+        assert!(result1.get_option_arg("values").unwrap().contains("5"));
+        assert!(result1.get_option_arg("values").unwrap().contains("6"));
+
+        let result2 = parse_with("--values 1 2 --values 3 4", command.clone()).unwrap();
+        assert!(result2.get_option_arg("values").unwrap().contains("1"));
+        assert!(result2.get_option_arg("values").unwrap().contains("2"));
+        assert!(result2.get_option_arg("values").unwrap().contains("3"));
+        assert!(result2.get_option_arg("values").unwrap().contains("4"));
     }
 }

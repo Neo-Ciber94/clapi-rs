@@ -1,0 +1,7 @@
+error: custom attribute panicked
+ --> $DIR/invalid_option_multiple.rs:3:1
+  |
+3 | #[command]
+  | ^^^^^^^^^^
+  |
+  = help: message: option `multiple` must be a bool literal

@@ -241,21 +241,25 @@ impl ContextBuilder {
     }
 
     pub fn name_prefix<S: Into<String>>(mut self, prefix: S) -> Self {
+        // fixme: prefix cannot be a letter, number or whitespace
         self.name_prefixes.insert(prefix.into());
         self
     }
 
     pub fn alias_prefix<S: Into<String>>(mut self, prefix: S) -> Self {
+        // fixme: prefix cannot be a letter, number or whitespace
         self.alias_prefixes.insert(prefix.into());
         self
     }
 
     pub fn arg_assign(mut self, value: char) -> Self {
+        // fixme: `value` cannot be a letter, number or whitespace
         self.arg_assign.insert(value);
         self
     }
 
     pub fn delimiter(mut self, value: char) -> Self {
+        // fixme: delimiter cannot be a letter, number or whitespace
         self.delimiter = Some(value);
         self
     }

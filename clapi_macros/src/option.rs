@@ -9,7 +9,14 @@ use quote::*;
 ///
 /// ```text
 /// #[command]
-/// #[option(numbers, alias="n", description="Average", min=1, max=100, default=0)]
+/// #[option(numbers,
+///     alias="n",
+///     description="Average",
+///     hidden = false,
+///     multiple = false,
+///     min=1,
+///     max=100,
+///     default=0)]
 /// fn avg(numbers: Vec<i64>){
 ///     println!("{}", numbers.iter().sum::<i64>() / numbers.len() as i64);
 /// }
@@ -20,7 +27,9 @@ pub struct OptionAttrData {
     attribute: Option<MacroAttribute>,
     alias: Option<String>,
     description: Option<String>,
-    args: Option<ArgAttrData>,
+    arg: Option<ArgAttrData>,
+    is_hidden: Option<bool>,
+    allow_multiple: Option<bool>,
 }
 
 impl OptionAttrData {
@@ -30,7 +39,9 @@ impl OptionAttrData {
             attribute: None,
             alias: None,
             description: None,
-            args: None,
+            arg: None,
+            is_hidden: None,
+            allow_multiple: None,
         }
     }
 
@@ -77,6 +88,20 @@ impl OptionAttrData {
 
                         args.set_max(max);
                     }
+                    attr::HIDDEN => {
+                        let is_hidden = value
+                            .to_bool_literal()
+                            .expect("option `hidden` must be a bool literal");
+
+                        option.set_hidden(is_hidden);
+                    }
+                    attr::MULTIPLE => {
+                        let allow_multiple = value
+                            .to_bool_literal()
+                            .expect("option `multiple` must be a bool literal");
+
+                        option.set_multiple(allow_multiple);
+                    },
                     attr::DEFAULT => match value {
                         Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
                         Value::Array(array) => args.set_default_values(array.clone()),
@@ -130,39 +155,50 @@ impl OptionAttrData {
     }
 
     pub fn set_args(&mut self, args: ArgAttrData) {
-        self.args = Some(args);
+        self.arg = Some(args);
+    }
+
+    pub fn set_hidden(&mut self, is_hidden: bool) {
+        self.is_hidden = Some(is_hidden);
+    }
+
+    pub fn set_multiple(&mut self, allow_multiple: bool){
+        self.allow_multiple = Some(allow_multiple);
     }
 
     pub fn expand(&self) -> TokenStream {
-        // CommandOption::set_alias
-        let alias = if let Some(s) = &self.alias {
-            quote! { .alias(#s) }
-        } else {
-            quote! {}
-        };
+        // Option alias
+        let alias = self.alias
+            .as_ref()
+            .map(|s| quote! { .alias(#s) });
 
-        // CommandOption::set_description
-        let description = if let Some(s) = &self.description {
-            quote! { .description(#s) }
-        } else {
-            quote! {}
-        };
+        // Option description
+        let description = self.description
+            .as_ref()
+            .map(|s| quote! { .description(#s) });
 
-        // `CommandOption::set_required` is args have default values
-        let required = match &self.args {
+        // Option is required if `args` have default values
+        let required = match &self.arg {
             Some(args) if !args.has_default_values() => {
                 quote! { .required(true) }
             }
             _ => quote! {},
         };
 
-        // CommandOption::set_args
-        let args = if let Some(args) = &self.args {
-            let tokens = args.expand();
-            quote! { .arg(#tokens) }
-        } else {
-            quote! {}
-        };
+        // Option argument
+        let arg = self.arg
+            .as_ref()
+            .map(|arg| quote! { .arg(#arg) });
+
+        // Option is hidden
+        let is_hidden = self.is_hidden
+            .as_ref()
+            .map(|value| quote! { .hidden(#value)} );
+
+        // Option allow multiple
+        let allow_multiple = self.allow_multiple
+            .as_ref()
+            .map(|value| quote! { .multiple(#value)} );
 
         let name = quote_expr!(self.name);
 
@@ -171,7 +207,9 @@ impl OptionAttrData {
             #alias
             #description
             #required
-            #args
+            #is_hidden
+            #allow_multiple
+            #arg
         }
     }
 }

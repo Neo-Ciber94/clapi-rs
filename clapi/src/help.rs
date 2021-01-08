@@ -1,6 +1,6 @@
 #![allow(clippy::len_zero)]
 use std::fmt::{Write, Display, Formatter};
-use crate::{Context, Command, CommandOption, Argument};
+use crate::{Context, Command, CommandOption, Argument, OptionList};
 use crate::utils::Then;
 
 /// A trait for provide help information about a `Command`.
@@ -105,7 +105,7 @@ impl Display for Buffer {
     }
 }
 
-// todo: Add additional config for uppercase `args`, indents
+// todo: Add additional config for uppercase `args`, indents, after help message, etc..
 /// A default implementation of the `Help` trait.
 pub struct DefaultHelp(pub HelpKind);
 
@@ -126,15 +126,18 @@ impl Help for DefaultHelp {
             writeln!(buf, "{}", description)?;
         }
 
+        // Number of no-hidden options
+        let option_count = count_options(command.get_options());
+
         // Command usage
-        if command.take_args() || command.get_options().len() > 0 || command.get_children().len() > 0 {
+        if command.get_children().len() > 0 || command.take_args() || option_count > 0 {
             // We check again for args, options and children to add a newline
             writeln!(buf)?;
             self.usage(buf, context, command)?;
         }
 
         // Options
-        if command.get_options().len() > 0 {
+        if option_count > 0 {
             writeln!(buf)?;
             writeln!(buf, "OPTIONS:")?;
 
@@ -161,7 +164,7 @@ impl Help for DefaultHelp {
         }
 
         // Help usage message
-        if let Some(msg) = use_help_for_more_info_msg(context) {
+        if let Some(msg) = after_help_message(context) {
             writeln!(buf)?;
             writeln!(buf, "{}", msg)?;
         }
@@ -170,15 +173,18 @@ impl Help for DefaultHelp {
     }
 
     fn usage(&self, buf: &mut Buffer, _: &Context, command: &Command) -> std::fmt::Result {
-        if command.take_args() || command.get_options().len() > 0 || command.get_children().len() > 0 {
+        // Number of no-hidden options
+        let option_count = count_options(command.get_options());
+
+        if command.get_children().len() > 0 || command.take_args() || option_count > 0 {
             writeln!(buf, "USAGE:")?;
             // command [OPTIONS] [ARGS]...
             {
                 write_indent(buf);
                 write!(buf, "{}", command.get_name())?;
 
-                if command.get_options().len() > 1 {
-                    if command.get_options().len() == 1 {
+                if option_count > 1 {
+                    if option_count == 1 {
                         write!(buf, " [OPTION]")?;
                     } else {
                         write!(buf, " [OPTIONS]")?;
@@ -202,7 +208,7 @@ impl Help for DefaultHelp {
                 write_indent(buf);
                 write!(buf, "{} [SUBCOMMAND]", command.get_name())?;
 
-                if command.get_children().any(|c| c.get_options().len() > 0) {
+                if command.get_children().any(|c| count_options(c.get_options()) > 0) {
                     write!(buf, " [OPTIONS]")?;
                 }
 
@@ -220,6 +226,13 @@ impl Help for DefaultHelp {
     fn kind(&self) -> HelpKind {
         self.0
     }
+}
+
+// Number of no-hidden options
+fn count_options(options: &OptionList) -> usize {
+    options.iter()
+        .filter(|opt| !opt.is_hidden())
+        .count()
 }
 
 // Add indentation to the buffer
@@ -257,7 +270,7 @@ fn command_to_string(command: &Command) -> String {
 }
 
 // Use '' for see more information about a command
-pub(crate) fn use_help_for_more_info_msg(context: &Context) -> Option<String> {
+pub(crate) fn after_help_message(context: &Context) -> Option<String> {
     if let Some(help) = context.help() {
         match help.kind() {
             HelpKind::Any | HelpKind::Subcommand => {

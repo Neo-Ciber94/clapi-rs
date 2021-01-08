@@ -171,10 +171,24 @@ impl Parser {
                     }
 
                     // Sets the option arguments
-                    add_option(&mut options, option.args(option_args));
+                    add_option(&mut options, option.args(option_args))
+                        // Can fail if there is more values than the option can hold
+                        .map_err(|(error, option)| {
+                            // We add the last option to the error
+                            let mut options = options.clone();
+                            options.add(option).unwrap();
+                            Error::new_parse_error(
+                                error,
+                                ParseResult::new(
+                                    command.clone(), options, ArgumentList::default()
+                                ),
+                            )
+                    })?;
                 } else {
                     // Adds the option
-                    add_option(&mut options, option)
+                    // SAFETY: `add_option` only fail with duplicated options that allow multiples,
+                    // and takes args
+                    add_option(&mut options, option).unwrap();
                 }
             } else {
                 return Err(Error::new_parse_error(
@@ -279,7 +293,8 @@ impl Parser {
         // Sets the options that takes default arguments
         for opt in default_options {
             if !options.contains(opt.get_name()) {
-                add_option(options, opt.clone());
+                // SAFETY: `add_option` only fail with duplicated options that allow multiples
+                add_option(options, opt.clone()).unwrap();
             }
         }
     }
@@ -342,10 +357,42 @@ pub(crate) fn get_option_prefixed<'a>(
     None
 }
 
-fn add_option(options: &mut OptionList, new_option: CommandOption) {
-    options.add(new_option).unwrap_or_else(|e| {
-       panic!("duplicated option: `{}`", e.get_name())
-    });
+fn add_option(options: &mut OptionList, new_option: CommandOption) -> std::result::Result<(), (Error, CommandOption)> {
+    if new_option.allow_multiple() && options.contains(new_option.get_name()) {
+        // If don't takes args is no-op
+        if !new_option.take_args() {
+            return Ok(());
+        }
+
+        let mut args = ArgumentList::new();
+        let option = options.get(new_option.get_name()).unwrap();
+
+        for arg in option.get_args() {
+            let mut values = Vec::new();
+            values.extend_from_slice(arg.get_values());
+            let new_option_args = new_option.get_args()
+                .get(arg.get_name())
+                .unwrap();
+
+            values.extend_from_slice(new_option_args.get_values());
+
+            let mut new_arg = arg.clone();
+            if let Err(error) = new_arg.set_values(values) {
+                return Err((error, new_option));
+            }
+
+            // SAFETY: If `options` already contains the `option` which have no duplicates
+            args.add(new_arg).unwrap();
+        }
+
+        options.add_or_replace(new_option.args(args));
+        Ok(())
+    } else {
+        options.add(new_option).unwrap_or_else(|e| {
+            panic!("option `{}` was specified multiple times but 1 was expected", e.get_name())
+        });
+        Ok(())
+    }
 }
 
 fn add_argument(arguments: &mut ArgumentList, new_arg: Argument){

@@ -1,0 +1,7 @@
+error: custom attribute panicked
+ --> $DIR/invalid_option_hidden.rs:3:1
+  |
+3 | #[command]
+  | ^^^^^^^^^^
+  |
+  = help: message: option `hidden` must be a bool literal

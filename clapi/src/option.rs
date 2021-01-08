@@ -10,9 +10,10 @@ pub struct CommandOption {
     name: String,
     aliases: LinkedHashSet<String>,
     description: Option<String>,
-    is_required: bool,
     args: ArgumentList,
-    // is_hidden, is_multiple
+    is_required: bool,
+    is_hidden: bool,
+    allow_multiple: bool,
 }
 
 impl CommandOption {
@@ -29,6 +30,8 @@ impl CommandOption {
             description: None,
             args: ArgumentList::new(),
             is_required: false,
+            is_hidden: false,
+            allow_multiple: false,
         }
     }
 
@@ -52,6 +55,16 @@ impl CommandOption {
     /// Returns `true` if this option is required.
     pub fn is_required(&self) -> bool {
         self.is_required
+    }
+
+    /// Returns `true` if this option is no visible for `help`.
+    pub fn is_hidden(&self) -> bool {
+        self.is_hidden
+    }
+
+    /// Returns `true` if this option is allowed to appear multiple times.
+    pub fn allow_multiple(&self) -> bool {
+        self.allow_multiple
     }
 
     /// Returns the `Argument` this option takes or `None` if have more than 1 argument.
@@ -105,6 +118,19 @@ impl CommandOption {
     /// Specify if this option is required, by default is `false`.
     pub fn required(mut self, is_required: bool) -> Self {
         self.is_required = is_required;
+        self
+    }
+
+    /// Specify if this option is hidden for the `help`.
+    pub fn hidden(mut self, is_hidden: bool) -> Self {
+        self.is_hidden = is_hidden;
+        self
+    }
+
+    /// Specify if this option can be declared multiple times in a command,
+    /// in that case all the values will be added to a single option.
+    pub fn multiple(mut self, allow_multiple: bool) -> Self {
+        self.allow_multiple = allow_multiple;
         self
     }
 
@@ -186,8 +212,17 @@ impl OptionList {
             return Err(option);
         }
 
-        self.inner.insert(option);
+        self.inner.insert_if_absent(option);
         Ok(())
+    }
+
+    /// Adds the specified `CommandOption` or replace it it already exists,
+    pub fn add_or_replace(&mut self, option: CommandOption) {
+        if self.inner.contains(&option) {
+            self.inner.remove(&option);
+        }
+
+        self.inner.insert(option);
     }
 
     /// Returns the `CommandOption` with the given name or alias or `None`
@@ -252,18 +287,8 @@ impl OptionList {
     }
 
     fn is_option_duplicate(&self, option: &CommandOption) -> bool {
-        // Check if there if any option that match the new option alias or name
-        if self.contains(option.name.as_str()) {
-            return true;
-        }
-
-        for alias in &option.aliases {
-            if self.contains(alias) {
-                return true;
-            }
-        }
-
-        false
+        // Check if there if any option that match the new option `alias` or `name`
+        self.contains(&option.name) || option.get_aliases().any(|alias| self.contains(alias))
     }
 }
 
@@ -354,12 +379,30 @@ mod tests {
     }
 
     #[test]
-    fn required_test() {
+    fn is_required_test() {
         let opt1 = CommandOption::new("date");
         assert!(!opt1.is_required());
 
         let opt2 = opt1.clone().required(true);
         assert!(opt2.is_required());
+    }
+
+    #[test]
+    fn is_hidden_test(){
+        let opt1 = CommandOption::new("help");
+        assert!(!opt1.is_hidden());
+
+        let opt2 = CommandOption::new("help").hidden(true);
+        assert!(opt2.is_hidden());
+    }
+
+    #[test]
+    fn allow_multiple_test(){
+        let opt1 = CommandOption::new("values");
+        assert!(!opt1.allow_multiple());
+
+        let opt2 = CommandOption::new("values").multiple(true);
+        assert!(opt2.allow_multiple());
     }
 
     #[test]
