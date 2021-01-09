@@ -127,21 +127,18 @@ impl CommandOption {
         self
     }
 
-    /// Specify if this option can be declared multiple times in a command,
-    /// in that case all the values will be added to a single option.
+    /// Specify if this option can appear multiple times.
     pub fn multiple(mut self, allow_multiple: bool) -> Self {
         self.allow_multiple = allow_multiple;
         self
     }
 
     /// Adds a new `Argument` to this option.
-    pub fn arg(mut self, arg: Argument) -> Self {
+    pub fn arg(mut self, mut arg: Argument) -> Self {
+        arg.set_name_if_none(self.name.clone());
+
         if let Err(duplicated) = self.args.add(arg) {
-            panic!(
-                "`{}` already contains an argument named: `{}`",
-                self.name,
-                duplicated.get_name()
-            );
+            panic!("`{}` already contains an argument named: `{}`", self.name, duplicated.get_name());
         }
         self
     }
@@ -411,7 +408,7 @@ mod tests {
 
         let opt2 = opt1
             .clone()
-            .arg(Argument::new("value").valid_values(&["day", "hour", "minute"]));
+            .arg(Argument::with_name("value").valid_values(&["day", "hour", "minute"]));
 
         assert!(opt2.get_arg().unwrap().is_valid("day"));
         assert!(opt2.get_arg().unwrap().is_valid("hour"));
@@ -473,13 +470,13 @@ mod tests {
 
         let opt1 = CommandOption::new("version")
             .alias("v")
-            .arg(Argument::new("version").value_count(1));
+            .arg(Argument::with_name("version").value_count(1));
 
         let opt2 = CommandOption::new("author")
             .alias("a")
-            .arg(Argument::new("x").value_count(0..));
+            .arg(Argument::with_name("x").value_count(0..));
 
-        let opt3 = CommandOption::new("verbose").arg(Argument::new("x").value_count(1..3));
+        let opt3 = CommandOption::new("verbose").arg(Argument::with_name("x").value_count(1..3));
 
         options.add(opt1).unwrap();
         options.add(opt2).unwrap();

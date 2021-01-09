@@ -97,7 +97,7 @@ mod tests {
             .arg(Argument::one_or_more("values"))
             .option(
                 CommandOption::new("repeat").alias("r").arg(
-                    Argument::new("times")
+                    Argument::with_name("times")
                         .validator(parse_validator::<u64>())
                         .default(1),
                 ),
@@ -105,7 +105,7 @@ mod tests {
             .option(
                 CommandOption::new("color")
                     .alias("c")
-                    .arg(Argument::new("color").valid_values(&["red", "blue", "green"])),
+                    .arg(Argument::with_name("color").valid_values(&["red", "blue", "green"])),
             );
 
         let result = parse_with("--repeat 2 -c red hello world!", command.clone()).unwrap();
@@ -160,7 +160,7 @@ mod tests {
             .subcommand(
                 Command::new("set")
                     .arg(Argument::one_or_more("value"))
-                    .option(CommandOption::new("repeat").arg(Argument::new("count"))),
+                    .option(CommandOption::new("repeat").arg(Argument::with_name("count"))),
             )
             .subcommand(Command::new("get"));
 
@@ -203,7 +203,7 @@ mod tests {
                 CommandOption::new("times")
                     .alias("t")
                     .required(true)
-                    .arg(Argument::new("times").validator(parse_validator::<u64>())),
+                    .arg(Argument::with_name("times").validator(parse_validator::<u64>())),
             )
             .arg(Argument::zero_or_more("values"));
 
@@ -248,7 +248,7 @@ mod tests {
             .option(CommandOption::new("second").alias("s"))
             .option(
                 CommandOption::new("enable").arg(
-                    Argument::new("value")
+                    Argument::with_name("value")
                         .validator(parse_validator::<bool>())
                         .value_count(0..=1),
                 ),
@@ -270,13 +270,13 @@ mod tests {
     #[test]
     fn parse_result_multiple_args_test() {
         let command = Command::new("My App")
-            .arg(Argument::new("min").validator(parse_validator::<i64>()))
-            .arg(Argument::new("max").validator(parse_validator::<i64>()))
+            .arg(Argument::with_name("min").validator(parse_validator::<i64>()))
+            .arg(Argument::with_name("max").validator(parse_validator::<i64>()))
             .option(
                 CommandOption::new("replace")
                     .alias("r")
-                    .arg(Argument::new("from"))
-                    .arg(Argument::new("to")),
+                    .arg(Argument::with_name("from"))
+                    .arg(Argument::with_name("to")),
             );
 
         let result = parse_with("--replace a A -- 2 10", command.clone()).unwrap();
@@ -357,17 +357,17 @@ mod tests {
     #[test]
     fn parse_result_variable_arg_count_test1() {
         let command = Command::new("My App")
-            .arg(Argument::new("values").value_count(0..=3))
+            .arg(Argument::with_name("values").value_count(0..=3))
             .option(
                 CommandOption::new("letters").arg(
-                    Argument::new("letters")
+                    Argument::with_name("letters")
                         .value_count(1..)
                         .validator(parse_validator::<char>()),
                 ),
             )
             .option(
                 CommandOption::new("numbers").arg(
-                    Argument::new("numbers")
+                    Argument::with_name("numbers")
                         .value_count(1..=2)
                         .validator(parse_validator::<i64>()),
                 ),
@@ -445,13 +445,13 @@ mod tests {
     #[test]
     fn parse_result_error_kind_test() {
         let command = Command::new("My App")
-            .arg(Argument::new("values").value_count(0..5))
+            .arg(Argument::with_name("values").value_count(0..5))
             .subcommand(Command::new("version"))
             .option(
                 CommandOption::new("range")
                     .alias("r")
-                    .arg(Argument::new("min").validator(parse_validator::<i64>()))
-                    .arg(Argument::new("max").validator(parse_validator::<i64>())),
+                    .arg(Argument::with_name("min").validator(parse_validator::<i64>()))
+                    .arg(Argument::with_name("max").validator(parse_validator::<i64>())),
             )
             .option(CommandOption::new("A").alias("a"))
             .option(CommandOption::new("B").alias("b"))
@@ -459,12 +459,12 @@ mod tests {
                 Command::new("read").option(
                     CommandOption::new("mode")
                         .required(true)
-                        .arg(Argument::new("mode").valid_values(&["low", "mid", "high"])),
+                        .arg(Argument::with_name("mode").valid_values(&["low", "mid", "high"])),
                 ),
             )
             .subcommand(
                 Command::new("data")
-                    .subcommand(Command::new("set").arg(Argument::new("value")))
+                    .subcommand(Command::new("set").arg(Argument::with_name("value")))
                     .subcommand(Command::new("get")),
             );
 
@@ -496,7 +496,7 @@ mod tests {
     fn parse_result_option_bool_flag_test() {
         let command = Command::new("My App").option(
             CommandOption::new("enable").arg(
-                Argument::new("enable")
+                Argument::with_name("enable")
                     .value_count(0..=1)
                     .validator(parse_validator::<bool>()),
             ),
@@ -532,8 +532,8 @@ mod tests {
     #[test]
     fn parse_result_arg_default_values_test1(){
         let command = Command::new("MyApp")
-            .arg(Argument::new("min").default(1))
-            .arg(Argument::new("max"));
+            .arg(Argument::with_name("min").default(1))
+            .arg(Argument::with_name("max"));
 
         let result1 = parse_with("10", command.clone()).unwrap();
         assert!(result1.args.get("min").unwrap().contains("1"));
@@ -548,16 +548,16 @@ mod tests {
     #[should_panic]
     fn parse_result_arg_default_values_test2(){
         let _command = Command::new("MyApp")
-            .arg(Argument::new("min").default(1))
-            .arg(Argument::new("max").default(10));
+            .arg(Argument::with_name("min").default(1))
+            .arg(Argument::with_name("max").default(10));
     }
 
     #[test]
     fn parse_result_option_default_values_test1(){
         let command = Command::new("MyApp")
             .option(CommandOption::new("range")
-                .arg(Argument::new("start").default(1))
-                .arg(Argument::new("end")));
+                .arg(Argument::with_name("start").default(1))
+                .arg(Argument::with_name("end")));
 
         let result1 = parse_with("--range 22", command.clone()).unwrap();
         assert!(result1.get_option_args("range")
@@ -589,8 +589,8 @@ mod tests {
     fn parse_result_option_default_values_test2(){
         let _command = Command::new("MyApp")
             .option(CommandOption::new("range")
-                .arg(Argument::new("start").default(1))
-                .arg(Argument::new("end").default(20)));
+                .arg(Argument::with_name("start").default(1))
+                .arg(Argument::with_name("end").default(20)));
     }
 
     #[test]

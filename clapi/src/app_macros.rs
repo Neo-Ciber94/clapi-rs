@@ -330,7 +330,7 @@ macro_rules! app {
         $crate::app!{
             @option
             ($option_builder.arg(
-                $crate::app!{ @arg ($crate::Argument::new(stringify!($arg_name))) $($($rest)+)? }
+                $crate::app!{ @arg ($crate::Argument::with_name(stringify!($arg_name))) $($($rest)+)? }
             )) $($tt)*
         }
     };
@@ -341,7 +341,7 @@ macro_rules! app {
         $crate::app!{
             @option
             ($option_builder.arg(
-                $crate::app!{ @arg ($crate::Argument::new($arg_name)) $($($rest)+)? }
+                $crate::app!{ @arg ($crate::Argument::with_name($arg_name)) $($($rest)+)? }
             )) $($tt)*
         }
     };
@@ -377,7 +377,7 @@ macro_rules! app {
         $crate::app!{
             @command
             ($builder.arg(
-                $crate::app!{ @arg ($crate::Argument::new(stringify!($arg_name))) $($($rest)+)? }
+                $crate::app!{ @arg ($crate::Argument::with_name(stringify!($arg_name))) $($($rest)+)? }
             )) $($tt)*
         }
     };
@@ -388,7 +388,7 @@ macro_rules! app {
         $crate::app!{
             @command
             ($builder.arg(
-                $crate::app!{ @arg ($crate::Argument::new($arg_name)) $($($rest)+)? }
+                $crate::app!{ @arg ($crate::Argument::with_name($arg_name)) $($($rest)+)? }
             )) $($tt)*
         }
     };

@@ -126,8 +126,7 @@ impl Command {
     /// # Panics:
     /// Panics if the `description` is blank or empty.
     pub fn description<S: Into<String>>(mut self, description: S) -> Self {
-        self.description = Some(assert_not_blank!(
-            description.into(),
+        self.description = Some(assert_not_blank!(description.into(),
             "`description` cannot be blank or empty"
         ));
         self
@@ -137,11 +136,8 @@ impl Command {
     ///
     /// # Panics:
     /// Panics if the `about` is blank or empty.
-    pub fn about<S: Into<String>>(mut self, help: S) -> Self {
-        self.about = Some(assert_not_blank!(
-            help.into(),
-            "`help` cannot be blank or empty"
-        ));
+    pub fn about<S: Into<String>>(mut self, about: S) -> Self {
+        self.about = Some(assert_not_blank!(about.into(),"`about` cannot be blank or empty"));
         self
     }
 
@@ -434,9 +430,9 @@ mod tests {
 
     #[test]
     fn args_test() {
-        let cmd = Command::new("time").arg(Argument::new("arg").value_count(1));
+        let cmd = Command::new("time").arg(Argument::with_name("arg").value_count(1));
 
-        assert_eq!(cmd.get_arg().unwrap(), &Argument::new("arg"));
+        assert_eq!(cmd.get_arg().unwrap(), &Argument::with_name("arg"));
     }
 
     #[test]

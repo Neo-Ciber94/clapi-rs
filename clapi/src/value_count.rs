@@ -99,6 +99,18 @@ impl ValueCount {
         self.max
     }
 
+    /// Returns a copy of this `ValueCount` with the given `min`.
+    #[inline]
+    pub fn with_min(&self, min: usize) -> Self {
+        Self::new_checked(Some(min), self.max).expect("min < max")
+    }
+
+    /// Returns a copy of this `ValueCount` with the given `max`.
+    #[inline]
+    pub fn with_max(&self, max: usize) -> Self {
+        Self::new_checked(self.min, Some(max)).expect("min < max")
+    }
+
     /// Returns `true` if this takes the provided number of values.
     #[inline]
     pub const fn takes(&self, count: usize) -> bool {

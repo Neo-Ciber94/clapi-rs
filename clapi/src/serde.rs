@@ -278,7 +278,7 @@ impl<'de> Deserialize<'de> for Argument {
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(6, &self))?;
 
-                let mut argument = Argument::new(name);
+                let mut argument = Argument::with_name(name);
 
                 match (min_count, max_count) {
                     (Some(min), Some(max)) => {
@@ -389,7 +389,7 @@ impl<'de> Deserialize<'de> for Argument {
                 }
 
                 let mut argument =
-                    Argument::new(name.ok_or_else(|| de::Error::missing_field("name"))?);
+                    Argument::with_name(name.ok_or_else(|| de::Error::missing_field("name"))?);
 
                 if let Some(Some(description)) = description {
                     argument = argument.description(description);
@@ -1238,7 +1238,7 @@ mod tests {
 
         #[test]
         fn argument_test() {
-            let arg = Argument::new("numbers")
+            let arg = Argument::with_name("numbers")
                 .description("A set of numbers")
                 .value_count(1..=10)
                 .validator(parse_validator::<i64>())
@@ -1261,7 +1261,7 @@ mod tests {
 
         #[test]
         fn argument_missing_fields_test1() {
-            let arg = Argument::new("numbers");
+            let arg = Argument::with_name("numbers");
 
             serde_test::assert_tokens(&arg, &args_tokens(
                 "numbers",
@@ -1276,7 +1276,7 @@ mod tests {
 
         #[test]
         fn argument_missing_fields_test2() {
-            let arg = Argument::new("numbers")
+            let arg = Argument::with_name("numbers")
                 .valid_values(&[0, 1, 2, 3])
                 .default(0);
 
@@ -1321,9 +1321,9 @@ mod tests {
         #[test]
         fn argument_list() {
             let mut args = ArgumentList::new();
-            args.add(Argument::new("A").description("a")).unwrap();
-            args.add(Argument::new("B").value_count(2)).unwrap();
-            args.add(Argument::new("C").valid_values(&['a', 'b', 'c']))
+            args.add(Argument::with_name("A").description("a")).unwrap();
+            args.add(Argument::with_name("B").value_count(2)).unwrap();
+            args.add(Argument::with_name("C").valid_values(&['a', 'b', 'c']))
                 .unwrap();
 
             let mut tokens = Vec::new();
@@ -1350,7 +1350,7 @@ mod tests {
                 .alias("T")
                 .description("Number of times")
                 .required(false)
-                .arg(Argument::new("N"));
+                .arg(Argument::with_name("N"));
 
             let mut args = Vec::new();
             args.extend(args_tokens(
@@ -1379,7 +1379,7 @@ mod tests {
         fn option_missing_fields_test() {
             let option = CommandOption::new("color")
                 .required(true)
-                .arg(Argument::new("color").valid_values(vec!["red", "blue", "green"]));
+                .arg(Argument::with_name("color").valid_values(vec!["red", "blue", "green"]));
 
             let args = Vec::from(args_tokens(
                 "color",
@@ -1444,7 +1444,7 @@ mod tests {
                 .add(
                     CommandOption::new("B")
                         .alias("b")
-                        .arg(Argument::new("value")),
+                        .arg(Argument::with_name("value")),
                 )
                 .unwrap();
 
@@ -1491,9 +1491,9 @@ mod tests {
                 .subcommand(Command::new("version").description("Shows the version of the app"))
                 .option(
                     CommandOption::new("color")
-                        .arg(Argument::new("color").valid_values(vec!["red", "green", "blue"])),
+                        .arg(Argument::with_name("color").valid_values(vec!["red", "green", "blue"])),
                 )
-                .arg(Argument::new("values").value_count(1..));
+                .arg(Argument::with_name("values").value_count(1..));
 
             let subcommands = command_tokens(
                 "version",
@@ -1548,7 +1548,7 @@ mod tests {
 
         #[test]
         fn command_missing_fields_test() {
-            let command = Command::new("echo").arg(Argument::new("value"));
+            let command = Command::new("echo").arg(Argument::with_name("value"));
 
             let arg = args_tokens(
                 "value",

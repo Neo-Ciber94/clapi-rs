@@ -291,13 +291,13 @@ pub(crate) fn after_help_message(context: &Context) -> Option<String> {
 
 pub(crate) fn to_command<H: Help + ?Sized>(help: &H) -> Command {
     Command::new(help.name())
-        .arg(Argument::new("subcommand").value_count(0..=1))
+        .arg(Argument::with_name("subcommand").value_count(0..=1))
         .description(help.description())
 }
 
 pub(crate) fn to_option<H: Help + ?Sized>(help: &H) -> CommandOption {
     CommandOption::new(help.name())
-        .arg(Argument::new("subcommand").value_count(0..=1))
+        .arg(Argument::with_name("subcommand").value_count(0..=1))
         .description(help.description())
         .then_apply(|opt| {
             if let Some(alias) = help.alias() {

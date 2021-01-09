@@ -203,7 +203,7 @@ impl ArgAttrData {
         let name = quote_expr!(self.name);
 
         quote! {
-            clapi::Argument::new(#name)
+            clapi::Argument::with_name(#name)
             #value_count
             #description
             #valid_values

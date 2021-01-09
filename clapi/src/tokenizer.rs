@@ -276,7 +276,7 @@ mod tests {
         let command = Command::new("My App")
             .arg(Argument::one_or_more("args"))
             .option(CommandOption::new("enable").alias("e"))
-            .option(CommandOption::new("range").arg(Argument::new("range").value_count(1..=2)))
+            .option(CommandOption::new("range").arg(Argument::with_name("range").value_count(1..=2)))
             .subcommand(Command::new("version"));
 
         assert_eq!(tokenize(command.clone(), "").unwrap(), Vec::new());
@@ -309,7 +309,7 @@ mod tests {
             .option(
                 CommandOption::new("times")
                     .alias("t")
-                    .arg(Argument::new("times")),
+                    .arg(Argument::with_name("times")),
             )
             .option(
                 CommandOption::new("numbers")
@@ -338,7 +338,7 @@ mod tests {
             .option(
                 CommandOption::new("times")
                     .alias("t")
-                    .arg(Argument::new("times")),
+                    .arg(Argument::with_name("times")),
             )
             .option(
                 CommandOption::new("numbers")

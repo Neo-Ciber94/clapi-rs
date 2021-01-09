@@ -22,7 +22,7 @@
 //!         .arg(Argument::one_or_more("values"))
 //!         .option(CommandOption::new("times")
 //!             .alias("t")
-//!             .arg(Argument::new("times")
+//!             .arg(Argument::with_name("times")
 //!                 .validator(parse_validator::<u64>())
 //!                 .default(1))));
 //!
@@ -77,7 +77,7 @@
 //!                 .arg(Argument::one_or_more("values"))
 //!                 .option(
 //!                     CommandOption::new("times").alias("t").arg(
-//!                         Argument::new("times")
+//!                         Argument::with_name("times")
 //!                             .validator(parse_validator::<u64>())
 //!                             .default(1),
 //!                     ),
