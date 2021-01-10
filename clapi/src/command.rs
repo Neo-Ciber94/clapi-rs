@@ -9,6 +9,8 @@ use std::cell::{RefCell, RefMut};
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
+use crate::ParseResult;
+use std::borrow::Borrow;
 
 /// A command-line command.
 #[derive(Clone)]
@@ -17,6 +19,7 @@ pub struct Command {
     name: String,
     description: Option<String>,
     about: Option<String>,
+    //help: Option<String>,
     children: LinkedHashSet<Command>,
     options: OptionList,
     args: ArgumentList,
@@ -237,6 +240,112 @@ impl Command {
                 unreachable!()
             }
         }
+    }
+
+    //////////////////////////////////////////////////
+    //             Utility Parse Methods            //
+    //////////////////////////////////////////////////
+
+    /// Parse the arguments from `std::env::args` using this command and returns the `ParseResult`.
+    ///
+    /// # Example:
+    /// ```no_run
+    /// use clapi::{Command, CommandOption, Argument};
+    /// use clapi::validator::parse_validator;
+    ///
+    /// let result = Command::root()
+    ///                 .option(CommandOption::new("negate")
+    ///                     .arg(Argument::new().validator(parse_validator::<bool>())))
+    ///                 .arg(Argument::one_or_more("values").validator(parse_validator::<i64>()))
+    ///                 .parse_args()
+    ///                 .unwrap();
+    /// ```
+    pub fn parse_args(self) -> Result<ParseResult> {
+        self.parse_with(std::env::args().skip(1))
+    }
+
+    /// Parse the arguments using this command and returns the `ParseResult`.
+    ///
+    /// # Example:
+    /// ```
+    /// use clapi::{Command, CommandOption, Argument};
+    /// use clapi::validator::parse_validator;
+    ///
+    /// let result = Command::root()
+    ///                 .option(CommandOption::new("negate")
+    ///                     .arg(Argument::new().validator(parse_validator::<bool>())))
+    ///                 .arg(Argument::one_or_more("values").validator(parse_validator::<i64>()))
+    ///                 .parse_with(vec!["--negate=true", "1", "2", "3"])
+    ///                 .unwrap();
+    ///
+    /// assert!(result.contains_option("negate"));
+    /// assert_eq!(result.arg().unwrap().convert_all::<i64>().ok(), Some(vec![1, 2, 3]));
+    /// ```
+    pub fn parse_with<I, S>(self, args: I) -> Result<ParseResult>
+        where I: IntoIterator<Item=S>,
+              S: Borrow<str> {
+        crate::Parser.parse(&crate::Context::new(self), args)
+    }
+
+    /// Parse and run with arguments from `std::env::args` using this command.
+    ///
+    /// # Example:
+    /// ```no_run
+    /// use clapi::{Command, CommandOption, Argument};
+    /// use clapi::validator::parse_validator;
+    ///
+    /// let result = Command::root()
+    ///                 .option(CommandOption::new("negate")
+    ///                     .arg(Argument::new().validator(parse_validator::<bool>())))
+    ///                 .arg(Argument::one_or_more("values").validator(parse_validator::<i64>()))
+    ///                 .handler(|opts, args|{
+    ///                     let negate = opts.get_arg("negate").unwrap().convert::<bool>()?;
+    ///                     let total = args.convert_all::<i64>("values")?.iter().sum::<i64>();
+    ///                     if negate {
+    ///                         println!("{}", -total);
+    ///                     } else {
+    ///                         println!("{}", -total);
+    ///                     }
+    ///                     Ok(())
+    ///                 })
+    ///                 .parse_run()
+    ///                 .unwrap();
+    /// ```
+    pub fn parse_run(self) -> Result<()> {
+        self.parse_run_with(std::env::args().skip(1))
+    }
+
+    /// Parse and run with the given arguments using this command.
+    ///
+    /// # Example:
+    /// ```no_run
+    /// use clapi::{Command, CommandOption, Argument};
+    /// use clapi::validator::parse_validator;
+    ///
+    /// let result = Command::root()
+    ///                 .option(CommandOption::new("negate")
+    ///                     .arg(Argument::new().validator(parse_validator::<bool>())))
+    ///                 .arg(Argument::one_or_more("values").validator(parse_validator::<i64>()))
+    ///                 .handler(|opts, args|{
+    ///                     let negate = opts.get_arg("negate").unwrap().convert::<bool>()?;
+    ///                     let total = args.convert_all::<i64>("values")?.iter().sum::<i64>();
+    ///                     if negate {
+    ///                         println!("{}", -total);
+    ///                     } else {
+    ///                         println!("{}", -total);
+    ///                     }
+    ///                     Ok(())
+    ///                 })
+    ///                 .parse_run_with(vec!["--negate=true", "1", "2", "3"])
+    ///                 .unwrap();
+    /// ```
+    pub fn parse_run_with<I, S>(self, args: I) -> Result<()>
+        where I: IntoIterator<Item=S>,
+              S: Borrow<str> {
+        crate::CommandLine::new(self)
+            .use_default_suggestions()
+            .use_default_help()
+            .run_with(args)
     }
 }
 

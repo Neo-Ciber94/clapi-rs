@@ -23,7 +23,7 @@ impl ParseResult {
     }
 
     /// Returns the executing `Command`.
-    pub fn command(&self) -> &Command { //todo: name = executing_command, exec_command, running_command
+    pub fn executing_command(&self) -> &Command {
         &self.command
     }
 
@@ -56,6 +56,11 @@ impl ParseResult {
         self.args.contains(arg_name)
     }
 
+    /// Returns the `Argument` with the given name or `None` if not found.
+    pub fn get_arg<S: AsRef<str>>(&self, arg_name: S) -> Option<&Argument> {
+        self.args.get(arg_name)
+    }
+
     /// Returns the `CommandOption` with the given name or alias, or `None`.
     pub fn get_option<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&CommandOption> {
         self.options.get(name_or_alias)
@@ -72,11 +77,6 @@ impl ParseResult {
     /// Returns the arguments of the option with the given name or alias, or `None` if not found.
     pub fn get_option_args<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&ArgumentList> {
         self.get_option(name_or_alias).map(|o| o.get_args())
-    }
-
-    /// Returns the `Argument` with the given name or `None` if not found.
-    pub fn get_arg<S: AsRef<str>>(&self, arg_name: S) -> Option<&Argument> {
-        self.args.get(arg_name)
     }
 }
 
@@ -165,7 +165,7 @@ mod tests {
             .subcommand(Command::new("get"));
 
         let result = parse_with("set --repeat 1 1 2 3 4", command.clone()).unwrap();
-        assert_eq!(result.command().get_name(), "set");
+        assert_eq!(result.executing_command().get_name(), "set");
         assert!(result
             .get_option("repeat")
             .unwrap()

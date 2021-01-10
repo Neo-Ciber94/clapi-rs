@@ -588,14 +588,10 @@ impl ArgumentList {
     pub fn convert<T>(&self, arg_name: &str) -> Result<T>
     where
         T: FromStr + 'static,
-        <T as FromStr>::Err: Display,
-    {
+        <T as FromStr>::Err: Display, {
         match &self.get(arg_name) {
             Some(arg) => arg.convert(),
-            None => Err(Error::new(
-                ErrorKind::InvalidArgument(arg_name.to_owned()),
-                format!("cannot find: `{}`", arg_name),
-            )),
+            None => Err(Error::from(ErrorKind::InvalidArgument(arg_name.to_owned()))),
         }
     }
 

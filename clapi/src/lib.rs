@@ -34,7 +34,7 @@
 //!     return;
 //! }
 //!
-//! if result.command().get_name() == "repeat" {
+//! if result.executing_command().get_name() == "repeat" {
 //!     let times = result.get_option_arg("times")
 //!         .unwrap()
 //!         .convert::<u64>()
@@ -53,7 +53,7 @@
 //!     static HELP : DefaultHelp = DefaultHelp(HelpKind::Any);
 //!
 //!     let mut buffer = Buffer::new();
-//!     HELP.help(&mut buffer, &context, result.command()).unwrap();
+//!     HELP.help(&mut buffer, &context, result.executing_command()).unwrap();
 //!     println!("{}", buffer);
 //! }
 //! ```
@@ -190,6 +190,7 @@ pub use self::parse_result::*;
 pub use self::parser::*;
 pub use self::symbol::*;
 pub use self::tokenizer::*;
+
 
 /// Clapi macros
 #[macro_use]

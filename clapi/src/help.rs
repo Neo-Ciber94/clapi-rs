@@ -105,7 +105,6 @@ impl Display for Buffer {
     }
 }
 
-// todo: Add additional config for uppercase `args`, indents, after help message, etc..
 /// A default implementation of the `Help` trait.
 pub struct DefaultHelp(pub HelpKind);
 
@@ -307,3 +306,16 @@ pub(crate) fn to_option<H: Help + ?Sized>(help: &H) -> CommandOption {
             }
         })
 }
+
+// pub enum MessageSource {
+//     UseCommand, UseHelp, Overwrite
+// }
+// pub struct HelpConfig<'a> {
+//     indent: &'a [u8],
+//     upper_case_arg_names: bool,
+//     upper_case_sections: bool,
+//     help_message_source: MessageSource,
+//     usage_message_source: MessageSource,
+//     after_help_message: Option<String>,
+//     kind: HelpKind
+// }

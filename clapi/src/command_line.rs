@@ -71,12 +71,21 @@ impl CommandLine {
         self
     }
 
+    /// Runs this command-line app.
+    ///
+    /// This is equivalent to `cmd_line.exec(std::env::args().skip(1))`.
+    #[inline]
+    pub fn run(&mut self) -> Result<()> {
+        // We skip the first element that may be the path of the executable
+        self.run_with(std::env::args().skip(1))
+    }
+
     /// Executes this command-line app passing the specified arguments.
     #[inline]
-    pub fn exec<S, I>(&mut self, args: I) -> Result<()>
-    where
-        S: Borrow<str>,
-        I: IntoIterator<Item = S>,
+    pub fn run_with<S, I>(&mut self, args: I) -> Result<()>
+        where
+            S: Borrow<str>,
+            I: IntoIterator<Item = S>,
     {
         let result = Parser.parse(&self.context, args);
         let parse_result = match result {
@@ -84,7 +93,7 @@ impl CommandLine {
             Err(error) => return self.handle_error(error),
         };
 
-        let command = parse_result.command();
+        let command = parse_result.executing_command();
 
         // Check if the command require to display help
         if self.contains_help(&parse_result) {
@@ -103,22 +112,6 @@ impl CommandLine {
             // Shows a help message if there is no handler
             self.display_help(None)
         }
-    }
-
-    /// Runs this command-line app.
-    ///
-    /// This is equivalent to `cmd_line.exec(std::env::args().skip(1))`.
-    #[inline]
-    pub fn run(&mut self) -> Result<()> {
-        self.exec(std::env::args().skip(1))
-    }
-
-    /// Executes this command-line app and pass the specified arguments as `&str`.
-    ///
-    /// This forwards the call to `CommandLine::exec` by slit the `str`.
-    #[inline]
-    pub fn exec_str(&mut self, args: &str) -> Result<()> {
-        self.exec(split_into_args(args))
     }
 
     fn handle_error(&self, error: Error) -> Result<()> {
@@ -168,7 +161,7 @@ impl CommandLine {
     }
 
     fn handle_help(&self, parse_result: &ParseResult) -> Result<()> {
-        let command = parse_result.command();
+        let command = parse_result.executing_command();
         let help = self.help().unwrap();
 
         if is_help_option(help.as_ref(), parse_result) {
@@ -332,7 +325,7 @@ fn is_help_option<H: Help + ?Sized>(help: &H, parse_result: &ParseResult) -> boo
 }
 
 fn is_help_subcommand<H: Help + ?Sized>(help: &H, parse_result: &ParseResult) -> bool {
-    help.name() == parse_result.command().get_name()
+    help.name() == parse_result.executing_command().get_name()
 }
 
 /// Split the given value `&str` into command-line args.

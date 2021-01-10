@@ -1,8 +1,10 @@
 #![allow(clippy::len_zero)]
 use crate::args::{Argument, ArgumentList};
 use linked_hash_set::LinkedHashSet;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
+use std::str::FromStr;
+use crate::{Error, ErrorKind, Result};
 
 /// Represents a command-line option.
 #[derive(Debug, Clone)]

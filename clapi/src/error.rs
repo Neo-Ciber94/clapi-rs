@@ -204,7 +204,7 @@ impl ParseError {
 
     /// Returns the `Command` where the error occurred.
     pub fn command(&self) -> &Command {
-        &self.parse_result.command()
+        &self.parse_result.executing_command()
     }
 
     /// Returns the `OptionList`s of the executing command.
