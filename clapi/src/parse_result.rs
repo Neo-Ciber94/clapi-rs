@@ -88,7 +88,8 @@ mod tests {
 
     fn parse_with(value: &str, command: Command) -> crate::Result<ParseResult> {
         let context = Context::new(command);
-        Parser.parse(&context, split_into_args(value))
+        Parser::new(&context).parse(split_into_args(value))
+        //Parser.parse(&context, split_into_args(value))
     }
 
     #[test]

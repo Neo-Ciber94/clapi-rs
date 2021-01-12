@@ -50,10 +50,10 @@
 //!     }
 //! } else {
 //!     // Fallthrough
-//!     static HELP : DefaultHelp = DefaultHelp(HelpKind::Any);
+//!     static HELP : DefaultHelp = DefaultHelp::new();
 //!
 //!     let mut buffer = Buffer::new();
-//!     HELP.help(&mut buffer, &context, result.executing_command()).unwrap();
+//!     HELP.help(&mut buffer, &context, result.executing_command());
 //!     println!("{}", buffer);
 //! }
 //! ```

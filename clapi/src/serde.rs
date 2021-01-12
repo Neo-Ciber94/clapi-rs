@@ -764,7 +764,7 @@ impl Serialize for Command {
         let mut state = serializer.serialize_struct("Command", 6)?;
         state.serialize_field("name", self.get_name())?;
         state.serialize_field("description", &self.get_description())?;
-        state.serialize_field("about", &self.get_about())?;
+        state.serialize_field("about", &self.get_usage())?;
         state.serialize_field(
             "subcommands",
             &self.get_children().cloned().collect::<Vec<Command>>(),
@@ -898,7 +898,7 @@ impl<'de> Deserialize<'de> for Command {
                 }
 
                 if let Some(about) = about {
-                    command = command.about(about);
+                    command = command.usage(about);
                 }
 
                 Ok(command)
@@ -970,7 +970,7 @@ impl<'de> Deserialize<'de> for Command {
                 }
 
                 if let Some(Some(about)) = about {
-                    command = command.about(about);
+                    command = command.usage(about);
                 }
 
                 if let Some(subcommands) = subcommands {
@@ -1487,7 +1487,7 @@ mod tests {
         fn command_test() {
             let command = Command::new("echo")
                 .description("Prints a value")
-                .about("echo 1.0")
+                .usage("echo 1.0")
                 .subcommand(Command::new("version").description("Shows the version of the app"))
                 .option(
                     CommandOption::new("color")
@@ -1604,7 +1604,7 @@ mod tests {
 
             assert_eq!(command.get_name(), "echo");
             assert_eq!(command.get_description(), Some("Prints a value"));
-            assert_eq!(command.get_about(), Some("echo 1.0"));
+            assert_eq!(command.get_usage(), Some("echo 1.0"));
 
             let subcommand = command.find_subcommand("version").unwrap();
             assert_eq!(subcommand.get_name(), "version");

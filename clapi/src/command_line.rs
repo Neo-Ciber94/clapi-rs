@@ -51,7 +51,7 @@ impl CommandLine {
 
     /// Sets the default `HelpCommand`.
     pub fn use_default_help(self) -> Self {
-        self.set_help(DefaultHelp(HelpKind::Any))
+        self.set_help(DefaultHelp::default())
     }
 
     /// Sets the specified `HelpProvider`.
@@ -87,7 +87,9 @@ impl CommandLine {
             S: Borrow<str>,
             I: IntoIterator<Item = S>,
     {
-        let result = Parser.parse(&self.context, args);
+        let mut parser = Parser::new(&self.context);
+        let result = parser.parse(args);
+        //let result = Parser.parse(&self.context, args);
         let parse_result = match result {
             Ok(r) => r,
             Err(error) => return self.handle_error(error),
@@ -122,7 +124,8 @@ impl CommandLine {
                 return self.display_help(None)
             },
 
-            // Special case, if is an invalid argument count error, we display a help message
+            // Special case, if is an invalid argument count error,
+            // we display a help message with the error
             ErrorKind::InvalidArgumentCount => {
                 use std::error::Error as StdError;
 
@@ -233,8 +236,8 @@ impl CommandLine {
         let mut buffer = crate::help::Buffer::new();
 
         match kind {
-            MessageKind::Help => help.help(&mut buffer, &self.context, command).unwrap(),
-            MessageKind::Usage => help.usage(&mut buffer, &self.context, command).unwrap(),
+            MessageKind::Help => help.help(&mut buffer, &self.context, command),
+            MessageKind::Usage => help.usage(&mut buffer, &self.context, command)
         };
 
         buffer.to_string()
@@ -423,6 +426,11 @@ pub fn split_into_args_with_quote_escape(value: &str, quote_escape: char) -> Vec
 
     result
 }
+
+// InvalidArgumentCount -> error + usage
+// InvalidArgument -> error + usage
+// UnrecognizedCommand -> error + suggestion
+// UnrecognizedOption -> error + suggestion
 
 #[cfg(test)]
 mod tests {

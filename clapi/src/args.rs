@@ -427,6 +427,13 @@ impl Argument {
     }
 }
 
+impl Default for Argument {
+    #[inline]
+    fn default() -> Self {
+        Argument::new()
+    }
+}
+
 impl Eq for Argument {}
 
 impl PartialEq for Argument {

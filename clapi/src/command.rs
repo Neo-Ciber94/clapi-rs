@@ -18,8 +18,8 @@ pub struct Command {
     parent: Option<Symbol>,
     name: String,
     description: Option<String>,
-    about: Option<String>,
-    //help: Option<String>,
+    usage: Option<String>,
+    help: Option<String>,
     children: LinkedHashSet<Command>,
     options: OptionList,
     args: ArgumentList,
@@ -53,7 +53,8 @@ impl Command {
             name,
             parent: None,
             description: None,
-            about: None,
+            usage: None,
+            help: None,
             children: LinkedHashSet::new(),
             handler: None,
             args: ArgumentList::new(),
@@ -71,9 +72,14 @@ impl Command {
         self.description.as_deref()
     }
 
-    /// Returns additional information about this command like authors, usage, examples, etc...
-    pub fn get_about(&self) -> Option<&str> {
-        self.about.as_deref()
+    /// Returns information about the usage of this command.
+    pub fn get_usage(&self) -> Option<&str> {
+        self.usage.as_deref()
+    }
+
+    /// Returns the `help` information of the command.
+    pub fn get_help(&self) -> Option<&str> {
+        self.help.as_deref()
     }
 
     /// Returns an `ExactSizeIterator` over the children of this command.
@@ -136,14 +142,26 @@ impl Command {
         self
     }
 
-    /// Sets additional information about this command like authors, usage, examples, etc...
+    /// Sets information about the usage of this command.
     ///
     /// # Panics:
-    /// Panics if the `about` is blank or empty.
-    pub fn about<S: Into<String>>(mut self, about: S) -> Self {
-        self.about = Some(assert_not_blank!(
-            about.into(),
-            "`about` cannot be blank or empty"
+    /// Panics if the `usage` is blank or empty.
+    pub fn usage<S: Into<String>>(mut self, usage: S) -> Self {
+        self.usage = Some(assert_not_blank!(
+            usage.into(),
+            "`usage` cannot be blank or empty"
+        ));
+        self
+    }
+
+    /// Sets help information about this command.
+    ///
+    /// # Panics:
+    /// Panics if the `help` is blank or empty.
+    pub fn help<S: Into<String>>(mut self, help: S) -> Self {
+        self.usage = Some(assert_not_blank!(
+            help.into(),
+            "`help` cannot be blank or empty"
         ));
         self
     }
@@ -297,7 +315,7 @@ impl Command {
     /// ```
     #[inline]
     pub fn parse_args(self) -> Result<ParseResult> {
-        self.parse_with(std::env::args().skip(1))
+        self.parse_from(std::env::args().skip(1))
     }
 
     /// Parse the arguments using this command and returns the `ParseResult`.
@@ -311,19 +329,20 @@ impl Command {
     ///                 .option(CommandOption::new("negate")
     ///                     .arg(Argument::new().validator(parse_validator::<bool>())))
     ///                 .arg(Argument::one_or_more("values").validator(parse_validator::<i64>()))
-    ///                 .parse_with(vec!["--negate=true", "1", "2", "3"])
+    ///                 .parse_from(vec!["--negate=true", "1", "2", "3"])
     ///                 .unwrap();
     ///
     /// assert!(result.contains_option("negate"));
     /// assert_eq!(result.arg().unwrap().convert_all::<i64>().ok(), Some(vec![1, 2, 3]));
     /// ```
     #[inline]
-    pub fn parse_with<I, S>(self, args: I) -> Result<ParseResult>
+    pub fn parse_from<I, S>(self, _args: I) -> Result<ParseResult>
     where
         I: IntoIterator<Item = S>,
         S: Borrow<str>,
     {
-        crate::Parser.parse(&crate::Context::new(self), args)
+        //crate::Parser.parse(&crate::Context::new(self), args)
+        unimplemented!()
     }
 }
 
@@ -348,6 +367,8 @@ impl Debug for Command {
         f.debug_struct("Command")
             .field("name", &self.get_name())
             .field("description", &self.get_description())
+            .field("about", &self.get_usage())
+            .field("help", &self.get_help())
             .field("parent", &self.get_parent())
             .field("options", &self.get_options())
             .field("arguments", &self.get_args())
@@ -355,7 +376,7 @@ impl Debug for Command {
                 "handler",
                 &debug_option(
                     &self.get_handler(),
-                    "FnMut(&Options, &ArgumentList) -> Result<()>",
+                    "FnMut(&OptionList, &ArgumentList) -> Result<()>",
                 ),
             )
             .field("children", &self.get_children())
@@ -421,11 +442,11 @@ mod tests {
     fn command_test1() {
         let cmd = Command::new("time")
             .description("Shows the time")
-            .about("Sets the time or show it");
+            .usage("Sets the time or show it");
 
         assert_eq!(cmd.get_name(), "time");
         assert_eq!(cmd.get_description(), Some("Shows the time"));
-        assert_eq!(cmd.get_about(), Some("Sets the time or show it"));
+        assert_eq!(cmd.get_usage(), Some("Sets the time or show it"));
     }
 
     #[test]
@@ -445,7 +466,7 @@ mod tests {
     fn command_test4() {
         Command::new("time")
             .description("Show the time")
-            .about("\n");
+            .usage("\n");
     }
 
     #[test]

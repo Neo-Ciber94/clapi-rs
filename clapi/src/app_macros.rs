@@ -36,7 +36,7 @@ macro_rules! crate_version {
 ///
 /// You use the `@subcommand`, `@option` and `@arg` tags to create subcommand, option and args
 /// respectively. A list of the tags and its properties:
-/// - `@subcommand` : description, about, handler, @subcommand, @option and @arg.
+/// - `@subcommand` : description, usage, help, handler, @subcommand, @option and @arg.
 /// - `@option` : description, alias, required and @arg.
 /// - `@arg` : description, values, default, count, validator and type,
 ///
@@ -66,7 +66,7 @@ macro_rules! crate_version {
 /// ```
 /// clapi::app!{ MyApp =>
 ///     (description => "App to sum values")
-///     (about => "MyApp 1.0")
+///     (usage => "USAGE: \n command [--times] <values...>")
 ///     (@arg values =>
 ///         (count => 1..)
 ///         (type => i64)
@@ -129,11 +129,19 @@ macro_rules! app {
         }
     };
 
-    // Command `about`:
-    // clapi::app! { MyApp => (about => ... ) }
-    (@command ($builder:expr) (about => $about:expr) $($tt:tt)*) => {
+    // Command `usage`:
+    // clapi::app! { MyApp => (usage => ... ) }
+    (@command ($builder:expr) (usage => $usage:expr) $($tt:tt)*) => {
         $crate::app!{
-            @command ($builder.about($about)) $($tt)*
+            @command ($builder.usage($usage)) $($tt)*
+        }
+    };
+
+    // Command `help`:
+    // clapi::app! { MyApp => (help => ... ) }
+    (@command ($builder:expr) (help => $help:expr) $($tt:tt)*) => {
+        $crate::app!{
+            @command ($builder.help($help)) $($tt)*
         }
     };
 

@@ -35,13 +35,14 @@ pub struct CommandAttrData {
     is_child: bool,
     version: Option<String>,
     description: Option<String>,
-    about: Option<String>,
+    usage: Option<String>,
+    help: Option<String>,
     item_fn: Option<ItemFn>,
     children: Vec<CommandAttrData>,
     options: Vec<OptionAttrData>,
     args: Vec<ArgAttrData>,
     vars: Vec<ArgLocalVar>,
-    help: Option<ItemStatic>
+    help_impl: Option<ItemStatic>
 }
 
 impl CommandAttrData {
@@ -52,13 +53,14 @@ impl CommandAttrData {
             attribute,
             version: None,
             description: None,
-            about: None,
+            usage: None,
+            help: None,
             item_fn: None,
             children: vec![],
             options: vec![],
             vars: vec![],
             args: vec![],
-            help: None
+            help_impl: None
         }
     }
 
@@ -81,8 +83,12 @@ impl CommandAttrData {
         self.description = Some(description);
     }
 
-    pub fn set_about(&mut self, about: String) {
-        self.about = Some(about);
+    pub fn set_usage(&mut self, about: String) {
+        self.usage = Some(about);
+    }
+
+    pub fn set_help(&mut self, help: String) {
+        self.help = Some(help);
     }
 
     pub fn set_child(&mut self, command: CommandAttrData) {
@@ -120,9 +126,9 @@ impl CommandAttrData {
         self.item_fn = Some(item_fn);
     }
 
-    pub fn set_help(&mut self, help: ItemStatic) {
+    pub fn set_help_impl(&mut self, item: ItemStatic) {
         assert!(!self.is_child);
-        self.help = Some(help)
+        self.help_impl = Some(item)
     }
 
     pub fn get_mut_recursive(&mut self, name_path: &NamePath) -> Option<&mut CommandAttrData> {
@@ -180,24 +186,28 @@ impl CommandAttrData {
             .as_ref()
             .map(|_| {
                 quote! { .option(clapi::CommandOption::new("version").alias("v")) }
-            })
-            .unwrap_or_else(|| quote! {});
+            });
 
         // Command description
         let description = self
             .description
             .as_ref()
             .map(|s| quote! { #s })
-            .map(|tokens| quote! { .description(#tokens)})
-            .unwrap_or_else(|| quote! {});
+            .map(|tokens| quote! { .description(#tokens)});
 
-        // Command help
-        let about = self
-            .about
+        // Command usage
+        let usage = self
+            .usage
             .as_ref()
             .map(|s| quote! { #s })
-            .map(|tokens| quote! { .about(#tokens)})
-            .unwrap_or_else(|| quote! {});
+            .map(|tokens| quote! { .usage(#tokens)});
+
+        // Command help
+        let help = self
+            .help
+            .as_ref()
+            .map(|s| quote! { #s })
+            .map(|tokens| quote! { .help(#tokens)});
 
         // Get the function body
         let body = self.get_body(vars.as_slice());
@@ -221,8 +231,7 @@ impl CommandAttrData {
                         return Ok(());
                     }
                 }
-            })
-            .unwrap_or_else(|| quote! {});
+            });
 
         //println!("contains expressions {}: {}", self.fn_name, self.contains_expressions());
         // Command handler
@@ -243,15 +252,15 @@ impl CommandAttrData {
             // NOT EMPTY:
             //      fn test() { println!("HELLO WORLD"); }
             //      fn test() { let value = 0; }
-            if show_version.is_empty() {
-                quote!{}
-            } else {
+            if let Some(show_version) = show_version {
                 quote!{
                     .handler(|opts, args|{
                         #show_version
                         Err(clapi::Error::from(clapi::ErrorKind::FallthroughHelp))
                     })
                 }
+            } else {
+                quote! {}
             }
         };
 
@@ -259,7 +268,8 @@ impl CommandAttrData {
         command = quote! {
             #command
                 #description
-                #about
+                #usage
+                #help
                 #version
                 #(#args)*
                 #(#options)*
@@ -274,8 +284,8 @@ impl CommandAttrData {
             let ret = &self.item_fn.as_ref().unwrap().sig.output;
             let attrs = &self.item_fn.as_ref().unwrap().attrs;
             let items = self.get_body_items();
-            let help = if self.help.is_some() {
-                let help_body = self.get_help();
+            let help = if self.help_impl.is_some() {
+                let help_body = self.get_help_impl();
                 quote!{
                     .set_help({ #help_body })
                 }
@@ -304,19 +314,19 @@ impl CommandAttrData {
         }
     }
 
-    fn get_help(&self) -> TokenStream {
-        let help = &self.help.as_ref().unwrap().ident;
+    fn get_help_impl(&self) -> TokenStream {
+        let help = &self.help_impl.as_ref().unwrap().ident;
 
         quote! {
             struct __Help;
             impl clapi::help::Help for __Help {
                 #[inline]
-                fn help(&self, buf: &mut clapi::help::Buffer, context: &clapi::Context, command: &clapi::Command) -> std::fmt::Result {
+                fn help(&self, buf: &mut clapi::help::Buffer, context: &clapi::Context, command: &clapi::Command) {
                     #help.help(buf, context, command)
                 }
 
                 #[inline]
-                fn usage(&self, buf: &mut clapi::help::Buffer, context: &clapi::Context, command: &clapi::Command) -> std::fmt::Result {
+                fn usage(&self, buf: &mut clapi::help::Buffer, context: &clapi::Context, command: &clapi::Command) {
                     #help.usage(buf, context, command)
                 }
 
@@ -598,12 +608,19 @@ mod imp {
                         .expect("`description` must be a string literal");
                     command.set_description(description);
                 }
-                crate::attr::ABOUT => {
+                crate::attr::USAGE => {
+                    let usage = value
+                        .clone()
+                        .to_string_literal()
+                        .expect("`usage` must be a string literal");
+                    command.set_usage(usage);
+                }
+                crate::attr::HELP => {
                     let help = value
                         .clone()
                         .to_string_literal()
-                        .expect("`about` must be a string literal");
-                    command.set_description(help);
+                        .expect("`help` must be a string literal");
+                    command.set_help(help);
                 }
                 crate::attr::VERSION => {
                     assert!(
@@ -715,7 +732,7 @@ mod imp {
             }
 
             if result.len() == 1 {
-                command.set_help(result.remove(0));
+                command.set_help_impl(result.remove(0));
             }
         }
 
@@ -885,11 +902,11 @@ mod imp {
         let mut root = command_from_fn(attribute, item_fn, false, true, true);
 
         if let Some(help) = find_help(&root_path) {
-            if root.help.is_some() {
+            if root.help_impl.is_some() {
                 panic!("`#[help]` is already defined in `fn {}`", root.fn_name.name());
             }
 
-            root.set_help(help)
+            root.set_help_impl(help)
         }
 
         let mut subcommands = get_subcommands_data(&root_path);

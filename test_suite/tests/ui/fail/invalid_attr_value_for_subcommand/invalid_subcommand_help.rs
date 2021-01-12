@@ -2,7 +2,7 @@ use clapi::macros::*;
 
 #[command]
 fn app(){
-    #[subcommand(about=1)]
+    #[subcommand(help=1)]
     fn child(){}
 }
 

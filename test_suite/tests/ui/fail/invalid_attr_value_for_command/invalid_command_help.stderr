@@ -1,0 +1,7 @@
+error: custom attribute panicked
+ --> $DIR/invalid_command_help.rs:3:1
+  |
+3 | #[command(help=123)]
+  | ^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: message: `help` must be a string literal
