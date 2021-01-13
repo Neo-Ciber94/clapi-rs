@@ -336,13 +336,14 @@ impl Command {
     /// assert_eq!(result.arg().unwrap().convert_all::<i64>().ok(), Some(vec![1, 2, 3]));
     /// ```
     #[inline]
-    pub fn parse_from<I, S>(self, _args: I) -> Result<ParseResult>
+    pub fn parse_from<I, S>(self, args: I) -> Result<ParseResult>
     where
         I: IntoIterator<Item = S>,
         S: Borrow<str>,
     {
-        //crate::Parser.parse(&crate::Context::new(self), args)
-        unimplemented!()
+        let context = crate::Context::new(self);
+        let mut parser = crate::Parser::new(&context);
+        parser.parse(args)
     }
 }
 

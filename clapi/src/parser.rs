@@ -16,7 +16,21 @@ use crate::Argument;
 #[derive(Debug)]
 pub struct Parser<'a> {
     context: &'a Context,
-    command: Option<Command>
+    state: ParseState,
+    command: Option<Command>,
+    options: Option<OptionList>,
+    args: Option<ArgumentList>,
+}
+
+/// State of the parser.
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+pub enum ParseState {
+    /// The parser is not executed yet.
+    Uninitialized,
+    /// The parse operation finished successfully.
+    Completed,
+    /// The parse operation failed.
+    Failed
 }
 
 impl<'a> Parser<'a> {
@@ -24,20 +38,54 @@ impl<'a> Parser<'a> {
         Parser {
             context,
             command: None,
+            options: Some(OptionList::new()),
+            args: Some(ArgumentList::new()),
+            state: ParseState::Uninitialized,
         }
     }
 
-    pub fn parse<S, I>(&mut self, args: I, ) -> Result<ParseResult>
+    pub fn state(&self) -> ParseState {
+        self.state
+    }
+
+    pub fn options(&self) -> Option<&OptionList> {
+        self.options.as_ref()
+    }
+
+    pub fn args(&self) -> Option<&ArgumentList> {
+        self.args.as_ref()
+    }
+
+    pub fn parse<S, I>(&mut self, args: I) -> Result<ParseResult>
         where S: Borrow<str>,
               I: IntoIterator<Item = S> {
-        let tokens = Tokenizer.tokenize(&self.context, args)?;
+        let tokens = Tokenizer
+            .tokenize(&self.context, args)
+            .map_err(|error| {
+                self.state = ParseState::Failed;
+                error
+        })?;
+
+        match self.parse_tokens(tokens) {
+            Ok(result) => {
+                self.state = ParseState::Completed;
+                Ok(result)
+            },
+            Err(error) => {
+                self.state = ParseState::Failed;
+                Err(error)
+            }
+        }
+    }
+
+    fn parse_tokens(&mut self, tokens: Vec<Token>) -> Result<ParseResult> {
         let mut iterator = tokens.iter().peekable();
 
         // Parse executing command
         self.parse_executing_command(&mut iterator)?;
 
-        // Gets the commands options and its arguments
-        let mut options = self.get_options(&mut iterator)?;
+        // Parse the commands options and its arguments
+        self.parse_options(&mut iterator)?;
 
         // Skip next `end of arguments` token (if any)
         if let Some(index) = iterator.clone().position(|t| t.is_eoo()) {
@@ -62,13 +110,13 @@ impl<'a> Parser<'a> {
         }
 
         // Check and set required options (if any)
-        self.set_required_options(&mut options)?;
+        self.set_required_options()?;
 
         // Check and set options with default values (if any)
-        self.set_default_options(&mut options);
+        self.set_default_options();
 
-        // Gets the command arguments
-        let args = self.get_args(&options, &mut iterator)?;
+        // Parse the command arguments
+        self.parse_args(&mut iterator)?;
 
         // If there is arguments left and the current command takes no arguments is an error
         if iterator.peek().is_some() {
@@ -81,6 +129,8 @@ impl<'a> Parser<'a> {
 
         // Sets the command, options and arguments
         let command = self.command.take().unwrap();
+        let options = self.options.take().unwrap();
+        let args = self.args.take().unwrap();
         Ok(ParseResult::new(command, options, args))
     }
 
@@ -105,9 +155,8 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn get_options<'b, I>(&self, iterator: &mut Peekable<I>) -> Result<OptionList> where I: Iterator<Item=&'b Token> + Clone {
+    fn parse_options<'b, I>(&mut self, iterator: &mut Peekable<I>) -> Result<()> where I: Iterator<Item=&'b Token> + Clone {
         let command = self.command.as_ref().unwrap();
-        let mut options = OptionList::new();
 
         while let Some(Token::Opt(prefix, s)) = iterator.peek() {
             if let Some(option) = get_option_prefixed(&self.context, command, prefix, s) {
@@ -125,7 +174,7 @@ impl<'a> Parser<'a> {
                         // Only 1 because multiple arguments with default values is no allowed.
                         if require_default_values && !default_value_is_set {
                             if arg.has_default_values() {
-                                self.add_argument(&mut option_args, arg);
+                                add_argument(&mut option_args, arg);
 
                                 // This is just a flag, `Argument`S with default values already have
                                 // the default value set
@@ -171,7 +220,7 @@ impl<'a> Parser<'a> {
                         // Sets the argument values
                         arg.set_values(values).map_err(|error| {
                             // We add the last option to the error
-                            let mut options = options.clone();
+                            let mut options = self.options.clone().unwrap();
                             options.add(option.clone()).unwrap();
                             Error::new_parse_error(
                                 error,
@@ -181,15 +230,15 @@ impl<'a> Parser<'a> {
                             )
                         })?;
 
-                        self.add_argument(&mut option_args, arg);
+                        add_argument(&mut option_args, arg);
                     }
 
                     // Sets the option arguments
-                    self.add_option(&mut options, option.args(option_args))
+                    add_option(self.options.as_mut().unwrap(), option.args(option_args))
                         // Can fail if there is more values than the option can hold
                         .map_err(|(error, option)| {
                             // We add the last option to the error
-                            let mut options = options.clone();
+                            let mut options = self.options.clone().unwrap();
                             options.add(option).unwrap();
                             Error::new_parse_error(
                                 error,
@@ -202,26 +251,25 @@ impl<'a> Parser<'a> {
                     // Adds the option
                     // SAFETY: `add_option` only fail with duplicated options that allow multiples,
                     // and takes args
-                    self.add_option(&mut options, option).unwrap();
+                    add_option(self.options.as_mut().unwrap(), option).unwrap();
                 }
             } else {
                 return Err(Error::new_parse_error(
                     Error::from(ErrorKind::UnrecognizedOption(prefix.clone(), s.clone())),
                     ParseResult::new(
                         command.clone(),
-                        options,
+                        self.options.clone().unwrap(),
                         ArgumentList::default(),
                     ),
                 ));
             }
         }
 
-        Ok(options)
+        Ok(())
     }
 
-    fn get_args<'b, I>(&self, options: &OptionList, iterator: &mut Peekable<I>) -> Result<ArgumentList> where I: Iterator<Item=&'b Token> + Clone {
+    fn parse_args<'b, I>(&mut self, iterator: &mut Peekable<I>) -> Result<()> where I: Iterator<Item=&'b Token> + Clone {
         let command = self.command.as_ref().unwrap();
-        let mut command_args = ArgumentList::new();
         let mut args_iter = command.get_args().iter().cloned().peekable();
         let require_default_values = self.require_default_values(command.get_args(), iterator);
         let mut default_value_is_set = false;
@@ -233,7 +281,7 @@ impl<'a> Parser<'a> {
             // Only 1 because multiple arguments with default values is no allowed.
             if require_default_values && !default_value_is_set {
                 if arg.has_default_values() {
-                    self.add_argument(&mut command_args, arg);
+                    add_argument(self.args.as_mut().unwrap(), arg);
 
                     // This is just a flag, `Argument`S with default values already have
                     // the default value set
@@ -267,24 +315,26 @@ impl<'a> Parser<'a> {
             if values.len() > 0 || (values.is_empty() && !arg.has_default_values()) {
                 arg.set_values(values).map_err(|error| {
                     // We add the last arg
-                    let mut args = command_args.clone();
-                    self.add_argument(&mut args, arg.clone());
+                    let mut args = self.args.clone().unwrap();
+                    let options = self.options.clone().unwrap();
+                    add_argument(&mut args, arg.clone());
                     Error::new_parse_error(
                         error,
                         ParseResult::new(
-                            command.clone(), options.clone(), args
+                            command.clone(), options, args
                         ),
                     )
                 })?;
             }
 
-            self.add_argument(&mut command_args, arg);
+            add_argument(self.args.as_mut().unwrap(), arg);
         }
 
-        Ok(command_args)
+        Ok(())
     }
 
-    fn set_required_options(&self, options: &mut OptionList) -> Result<()> {
+    fn set_required_options(&self) -> Result<()> {
+        let options = self.options.as_ref().unwrap();
         let command = self.command.as_ref().unwrap();
         let required_options = command
             .then(|c| c.get_options().iter())
@@ -301,7 +351,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn set_default_options(&self, options: &mut OptionList) {
+    fn set_default_options(&mut self) {
         let command = self.command.as_ref().unwrap();
         let default_options = command
             .then(|c| c.get_options().iter())
@@ -309,9 +359,9 @@ impl<'a> Parser<'a> {
 
         // Sets the options that takes default arguments
         for opt in default_options {
-            if !options.contains(opt.get_name()) {
+            if !self.options.as_ref().unwrap().contains(opt.get_name()) {
                 // SAFETY: `add_option` only fail with duplicated options that allow multiples
-                self.add_option(options, opt.clone()).unwrap();
+                add_option(self.options.as_mut().unwrap(), opt.clone()).unwrap();
             }
         }
     }
@@ -341,50 +391,6 @@ impl<'a> Parser<'a> {
         }
 
         false
-    }
-
-    fn add_option(&self, options: &mut OptionList, new_option: CommandOption) -> std::result::Result<(), (Error, CommandOption)> {
-        if new_option.allow_multiple() && options.contains(new_option.get_name()) {
-            // If don't takes args is no-op
-            if !new_option.take_args() {
-                return Ok(());
-            }
-
-            let mut args = ArgumentList::new();
-            let option = options.get(new_option.get_name()).unwrap();
-
-            for arg in option.get_args() {
-                let mut values = Vec::new();
-                values.extend_from_slice(arg.get_values());
-                let new_option_args = new_option.get_args()
-                    .get(arg.get_name())
-                    .unwrap();
-
-                values.extend_from_slice(new_option_args.get_values());
-
-                let mut new_arg = arg.clone();
-                if let Err(error) = new_arg.set_values(values) {
-                    return Err((error, new_option));
-                }
-
-                // SAFETY: If `options` already contains the `option` which have no duplicates
-                args.add(new_arg).unwrap();
-            }
-
-            options.add_or_replace(new_option.args(args));
-            Ok(())
-        } else {
-            options.add(new_option).unwrap_or_else(|e| {
-                panic!("option `{}` was specified multiple times but 1 was expected", e.get_name())
-            });
-            Ok(())
-        }
-    }
-
-    fn add_argument(&self, arguments: &mut ArgumentList, new_arg: Argument){
-        arguments.add(new_arg).unwrap_or_else(|e| {
-            panic!("duplicated argument: `{}`", e.get_name())
-        });
     }
 }
 
@@ -416,4 +422,48 @@ pub(crate) fn get_option_prefixed<'a>(
     }
 
     None
+}
+
+fn add_option(options: &mut OptionList, new_option: CommandOption) -> std::result::Result<(), (Error, CommandOption)> {
+    if new_option.allow_multiple() && options.contains(new_option.get_name()) {
+        // If don't takes args is no-op
+        if !new_option.take_args() {
+            return Ok(());
+        }
+
+        let mut args = ArgumentList::new();
+        let option = options.get(new_option.get_name()).unwrap();
+
+        for arg in option.get_args() {
+            let mut values = Vec::new();
+            values.extend_from_slice(arg.get_values());
+            let new_option_args = new_option.get_args()
+                .get(arg.get_name())
+                .unwrap();
+
+            values.extend_from_slice(new_option_args.get_values());
+
+            let mut new_arg = arg.clone();
+            if let Err(error) = new_arg.set_values(values) {
+                return Err((error, new_option));
+            }
+
+            // SAFETY: If `options` already contains the `option` which have no duplicates
+            args.add(new_arg).unwrap();
+        }
+
+        options.add_or_replace(new_option.args(args));
+        Ok(())
+    } else {
+        options.add(new_option).unwrap_or_else(|e| {
+            panic!("option `{}` was specified multiple times but 1 was expected", e.get_name())
+        });
+        Ok(())
+    }
+}
+
+fn add_argument(arguments: &mut ArgumentList, new_arg: Argument){
+    arguments.add(new_arg).unwrap_or_else(|e| {
+        panic!("duplicated argument: `{}`", e.get_name())
+    });
 }

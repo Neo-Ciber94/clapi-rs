@@ -42,7 +42,9 @@ let command = Command::root()
                 .default(1))));
 
 let context = Context::new(command);
-let result = Parser.parse(&context, std::env::args().skip(1)).expect("unexpected error");
+let result = Parser::new(&context)
+                .parse(std::env::args().skip(1))
+                .expect("unexpected error");
 
 if result.contains_option("version") {
     println!("MyApp 1.0");
