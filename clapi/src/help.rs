@@ -202,11 +202,12 @@ impl<'a> Help for DefaultHelp<'a> {
             writeln!(buf, "{}", description).unwrap();
         }
 
-        // Number of no-hidden options
+        // Number of no-hidden options and subcommands
         let option_count = count_options(command.get_options());
+        let subcommand_count = count_subcommands(&command);
 
         // Command usage
-        if command.get_children().len() > 0 || command.take_args() || option_count > 0 {
+        if command.take_args() || subcommand_count > 0 || option_count > 0 {
             // We check again for args, options and children to add a newline
             writeln!(buf).unwrap();
             self.usage(buf, context, command);
@@ -217,18 +218,18 @@ impl<'a> Help for DefaultHelp<'a> {
             writeln!(buf).unwrap();
             writeln!(buf, "{}:", letter_case.format("OPTIONS")).unwrap();
 
-            for option in command.get_options() {
+            for option in command.get_options().iter().filter(|o| !o.is_hidden()) {
                 write_indent(buf, self.indent);
                 writeln!(buf, "{}", option_to_string(context, option)).unwrap();
             }
         }
 
         // Subcommands
-        if command.get_children().len() > 0 {
+        if subcommand_count > 0 {
             writeln!(buf).unwrap();
             writeln!(buf, "{}:", letter_case.format("SUBCOMMANDS")).unwrap();
 
-            for command in command.get_children() {
+            for command in command.get_children().filter(|c| !c.is_hidden()) {
                 write_indent(buf, self.indent);
                 writeln!(buf, "{}", command_to_string(command)).unwrap();
             }
@@ -271,11 +272,12 @@ impl<'a> Help for DefaultHelp<'a> {
             MessageSource::UseHelp => {}
         }
 
-        // Number of no-hidden options
+        // Number of no-hidden options and subcommands
         let option_count = count_options(command.get_options());
+        let subcommand_count = count_subcommands(&command);
         let letter_case = self.letter_case;
 
-        if command.get_children().len() > 0 || command.take_args() || option_count > 0 {
+        if command.take_args() || subcommand_count > 0 || option_count > 0 {
             writeln!(buf, "{}:", self.letter_case.format("USAGE")).unwrap();
             // command [OPTIONS] [ARGS]...
             {
@@ -302,7 +304,7 @@ impl<'a> Help for DefaultHelp<'a> {
             }
 
             // command [SUBCOMMAND] [OPTIONS] [ARGS]...
-            if command.get_children().len() > 0 {
+            if subcommand_count > 0 {
                 write_indent(buf, self.indent);
                 write!(buf, "{} [{}]", command.get_name(), letter_case.format("SUBCOMMAND")).unwrap();
 
@@ -310,7 +312,9 @@ impl<'a> Help for DefaultHelp<'a> {
                     write!(buf, " [{}]", letter_case.format("OPTIONS")).unwrap();
                 }
 
-                if command.get_children().any(|c| c.take_args()) {
+                if command.get_children()
+                    .filter(|c| !c.is_hidden())
+                    .any(|c| c.take_args()) {
                     write!(buf, " [{}]", letter_case.format("ARGS")).unwrap();
                 }
 
@@ -363,6 +367,13 @@ fn count_options(options: &OptionList) -> usize {
         .count()
 }
 
+// Number of no-hidden subcommands
+fn count_subcommands(parent: &Command) -> usize {
+    parent.get_children()
+        .filter(|c| !c.is_hidden())
+        .count()
+}
+
 // Add indentation to the buffer
 fn write_indent(buf: &mut Buffer, indent: &[u8]) {
     buf.buffer_mut().extend_from_slice(indent);
@@ -379,11 +390,12 @@ fn option_to_string(context: &Context, option: &CommandOption) -> String {
     } else {
         let name_prefix = context.name_prefixes().next().unwrap();
         // Normally there is 4 spaces if the `alias prefix` and `name` is 1 char
-        format!("    {}{}", name_prefix, option.get_name())
+        //format!("    {}{}", name_prefix, option.get_name())
+        format!("{}{:4}", name_prefix, option.get_name())
     };
 
     if let Some(description) = option.get_description() {
-        format!("{:25} {}", names, description)
+        format!("{:20} {}", names, description)
     } else {
         names
     }
@@ -392,7 +404,7 @@ fn option_to_string(context: &Context, option: &CommandOption) -> String {
 // version              Shows the version
 fn command_to_string(command: &Command) -> String {
     if let Some(description) = command.get_description() {
-        format!("{:25} {}", command.get_name(), description)
+        format!("{:20} {}", command.get_name(), description)
     } else {
         command.get_name().to_owned()
     }
@@ -421,6 +433,7 @@ pub(crate) fn after_help_message(context: &Context) -> Option<String> {
 pub(crate) fn to_command<H: Help + ?Sized>(help: &H) -> Command {
     Command::new(help.name())
         .arg(Argument::with_name("subcommand").value_count(0..=1))
+        .hidden(true)
         .description(help.description())
 }
 
@@ -428,6 +441,7 @@ pub(crate) fn to_option<H: Help + ?Sized>(help: &H) -> CommandOption {
     CommandOption::new(help.name())
         .arg(Argument::with_name("subcommand").value_count(0..=1))
         .description(help.description())
+        .hidden(true)
         .then_apply(|opt| {
             if let Some(alias) = help.alias() {
                 opt.alias(alias)

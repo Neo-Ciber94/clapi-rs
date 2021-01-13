@@ -419,11 +419,20 @@ impl Argument {
     }
 
     #[inline(always)]
-    pub(crate) fn set_name_if_none(&mut self, name: String) {
+    pub(crate) fn set_name_and_description_if_none(&mut self, name: &str, description: Option<&str>) {
+        // Ignore all if the `Argument` is named,
+        // this method is mostly called when using `Argument::new()`
         if self.name.is_some(){
             return;
         }
-        self.name = Some(name)
+
+        // Sets the same name as than the option
+        self.name = Some(name.to_owned());
+
+        // Sets the same description than the option
+        if self.description.is_some() && description.is_some() {
+            self.description = description.map(|s| s.to_owned());
+        }
     }
 }
 

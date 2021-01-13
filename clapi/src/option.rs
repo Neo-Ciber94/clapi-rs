@@ -135,7 +135,7 @@ impl CommandOption {
 
     /// Adds a new `Argument` to this option.
     pub fn arg(mut self, mut arg: Argument) -> Self {
-        arg.set_name_if_none(self.name.clone());
+        arg.set_name_and_description_if_none(self.get_name(), self.get_description());
 
         if let Err(duplicated) = self.args.add(arg) {
             panic!("`{}` already contains an argument named: `{}`", self.name, duplicated.get_name());

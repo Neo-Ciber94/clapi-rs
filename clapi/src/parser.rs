@@ -48,6 +48,18 @@ impl<'a> Parser<'a> {
         self.state
     }
 
+    pub fn is_completed(&self) -> bool {
+        self.state == ParseState::Completed
+    }
+
+    pub fn is_failed(&self) -> bool {
+        self.state == ParseState::Failed
+    }
+
+    pub fn command(&self) -> Option<&Command> {
+        self.command.as_ref()
+    }
+
     pub fn options(&self) -> Option<&OptionList> {
         self.options.as_ref()
     }
@@ -137,16 +149,13 @@ impl<'a> Parser<'a> {
     fn parse_executing_command<'b, I>(&mut self, iterator: &mut Peekable<I>) -> Result<()> where I: Iterator<Item=&'b Token> {
         let mut command = self.context.root();
         while let Some(Token::Cmd(name)) = iterator.peek() {
-            command = command.find_subcommand(name.as_str()).ok_or_else(|| {
-                Error::new_parse_error(
-                    Error::from(ErrorKind::UnrecognizedCommand(name.clone())),
-                    ParseResult::new(
-                        command.clone(),
-                        OptionList::default(),
-                        ArgumentList::default(),
-                    ),
-                )
-            })?;
+            command = match command.find_subcommand(name.as_str()) {
+                Some(x) => x,
+                None => {
+                    self.command = Some(command.clone());
+                    return Err(Error::from(ErrorKind::UnrecognizedCommand(name.clone())))
+                }
+            };
 
             iterator.next();
         }
@@ -218,35 +227,12 @@ impl<'a> Parser<'a> {
                         }
 
                         // Sets the argument values
-                        arg.set_values(values).map_err(|error| {
-                            // We add the last option to the error
-                            let mut options = self.options.clone().unwrap();
-                            options.add(option.clone()).unwrap();
-                            Error::new_parse_error(
-                                error,
-                                ParseResult::new(
-                                    command.clone(), options, ArgumentList::default()
-                                ),
-                            )
-                        })?;
-
+                        arg.set_values(values)?;
                         add_argument(&mut option_args, arg);
                     }
 
                     // Sets the option arguments
-                    add_option(self.options.as_mut().unwrap(), option.args(option_args))
-                        // Can fail if there is more values than the option can hold
-                        .map_err(|(error, option)| {
-                            // We add the last option to the error
-                            let mut options = self.options.clone().unwrap();
-                            options.add(option).unwrap();
-                            Error::new_parse_error(
-                                error,
-                                ParseResult::new(
-                                    command.clone(), options, ArgumentList::default()
-                                ),
-                            )
-                    })?;
+                    add_option(self.options.as_mut().unwrap(), option.args(option_args))?;
                 } else {
                     // Adds the option
                     // SAFETY: `add_option` only fail with duplicated options that allow multiples,
@@ -254,14 +240,7 @@ impl<'a> Parser<'a> {
                     add_option(self.options.as_mut().unwrap(), option).unwrap();
                 }
             } else {
-                return Err(Error::new_parse_error(
-                    Error::from(ErrorKind::UnrecognizedOption(prefix.clone(), s.clone())),
-                    ParseResult::new(
-                        command.clone(),
-                        self.options.clone().unwrap(),
-                        ArgumentList::default(),
-                    ),
-                ));
+                return Err(Error::from(ErrorKind::UnrecognizedOption(prefix.clone(), s.clone())));
             }
         }
 
@@ -313,18 +292,7 @@ impl<'a> Parser<'a> {
             // Sets the argument values
             // We attempt to set the values even if empty to return `invalid argument count` error.
             if values.len() > 0 || (values.is_empty() && !arg.has_default_values()) {
-                arg.set_values(values).map_err(|error| {
-                    // We add the last arg
-                    let mut args = self.args.clone().unwrap();
-                    let options = self.options.clone().unwrap();
-                    add_argument(&mut args, arg.clone());
-                    Error::new_parse_error(
-                        error,
-                        ParseResult::new(
-                            command.clone(), options, args
-                        ),
-                    )
-                })?;
+                arg.set_values(values)?;
             }
 
             add_argument(self.args.as_mut().unwrap(), arg);
@@ -424,7 +392,7 @@ pub(crate) fn get_option_prefixed<'a>(
     None
 }
 
-fn add_option(options: &mut OptionList, new_option: CommandOption) -> std::result::Result<(), (Error, CommandOption)> {
+fn add_option(options: &mut OptionList, new_option: CommandOption) -> Result<()> {
     if new_option.allow_multiple() && options.contains(new_option.get_name()) {
         // If don't takes args is no-op
         if !new_option.take_args() {
@@ -444,9 +412,7 @@ fn add_option(options: &mut OptionList, new_option: CommandOption) -> std::resul
             values.extend_from_slice(new_option_args.get_values());
 
             let mut new_arg = arg.clone();
-            if let Err(error) = new_arg.set_values(values) {
-                return Err((error, new_option));
-            }
+            new_arg.set_values(values)?;
 
             // SAFETY: If `options` already contains the `option` which have no duplicates
             args.add(new_arg).unwrap();

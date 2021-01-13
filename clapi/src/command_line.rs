@@ -1,7 +1,7 @@
 #![allow(clippy::len_zero)]
 use crate::command::Command;
 use crate::context::Context;
-use crate::error::{Error, ErrorKind, ParseError, Result};
+use crate::error::{Error, ErrorKind, Result};
 use crate::help::{DefaultHelp, HelpKind, Help};
 use crate::parser::Parser;
 use crate::suggestion::{SingleSuggestionProvider, SuggestionProvider};
@@ -89,10 +89,9 @@ impl CommandLine {
     {
         let mut parser = Parser::new(&self.context);
         let result = parser.parse(args);
-        //let result = Parser.parse(&self.context, args);
         let parse_result = match result {
             Ok(r) => r,
-            Err(error) => return self.handle_error(error),
+            Err(error) => return self.handle_error(&parser, error),
         };
 
         let command = parse_result.executing_command();
@@ -116,17 +115,22 @@ impl CommandLine {
         }
     }
 
-    fn handle_error(&self, error: Error) -> Result<()> {
+    fn handle_error(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
+        // InvalidArgumentCount -> error + usage
+        // InvalidArgument -> error + usage
+        // UnrecognizedCommand -> error + suggestion
+        // UnrecognizedOption -> error + suggestion
+
         match error.kind() {
             // Special case, the caller can returns `ErrorKind::FallthroughHelp`
             // to indicates the `CommandLine` to show a help message.
             ErrorKind::FallthroughHelp => {
-                return self.display_help(None)
+                self.display_help(None)
             },
 
             // Special case, if is an invalid argument count error,
             // we display a help message with the error
-            ErrorKind::InvalidArgumentCount => {
+            ErrorKind::InvalidArgumentCount /*| ErrorKind::InvalidArgument(_)*/ => {
                 use std::error::Error as StdError;
 
                 // Adds an `Use '' for see more information about a command` if any
@@ -144,23 +148,83 @@ impl CommandLine {
                     None => format_error(&self.context, &error, message)
                 };
 
-               return Err(Error::new(error.kind().clone(), source));
+                Err(Error::new(error.kind().clone(), source))
             },
-            _ => {}
+            ErrorKind::UnrecognizedOption(_, _) => {
+                self.display_option_suggestions(parser, error)
+            },
+            ErrorKind::UnrecognizedCommand(_) => {
+                self.display_command_suggestions(parser, error)
+            },
+            _ => {
+                Err(Error::from(error))
+            }
         }
+    }
 
-        // Handle a `ParseError`
-        let parse_error = error.try_into_parse_error()?;
+    fn display_option_suggestions(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
+        let option = match error.kind() {
+            ErrorKind::UnrecognizedOption(_, s) => s,
+            _ => unreachable!()
+        };
 
-        if self.contains_help(parse_error.parse_result()) {
-            return self.handle_help(parse_error.parse_result())
+        // SAFETY: We check if the method is `Some` before enter
+        let provider = self.suggestions().unwrap();
+        let command_options = parser.command()
+            .unwrap()
+            .get_options()
+            .iter()
+            .map(|o| o.get_name().to_string())
+            .collect::<Vec<String>>();
+
+        let suggestions = provider
+            .suggestions_for(option, &command_options)
+            .map(|result| {
+                provider.suggestion_message_for(result.map(|s| {
+                    let context = self.context();
+                    let options = parser.command().unwrap().get_options();
+                    prefix_option(context, options, s)
+                }))
+            })
+            .flatten();
+
+        if let Some(msg) = suggestions {
+            Err(Error::new(error.kind().clone(), msg))
+        } else {
+            Err(Error::from(error))
         }
+    }
 
-        if self.suggestions().is_some() {
-            return Err(self.display_suggestions(parse_error));
+    fn display_command_suggestions(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
+        let option = match error.kind() {
+            ErrorKind::UnrecognizedCommand(s) => s,
+            _ => unreachable!()
+        };
+
+        // SAFETY: We check if the method is `Some` before enter
+        let provider = self.suggestions().unwrap();
+        let command_options = parser.command()
+            .unwrap()
+            .get_children()
+            .map(|c| c.get_name().to_string())
+            .collect::<Vec<String>>();
+
+        let suggestions = provider
+            .suggestions_for(option, &command_options)
+            .map(|result| {
+                provider.suggestion_message_for(result.map(|s| {
+                    let context = self.context();
+                    let options = parser.command().unwrap().get_options();
+                    prefix_option(context, options, s)
+                }))
+            })
+            .flatten();
+
+        if let Some(msg) = suggestions {
+            Err(Error::new(error.kind().clone(), msg))
+        } else {
+            Err(Error::from(error))
         }
-
-        Err(Error::from(parse_error))
     }
 
     fn handle_help(&self, parse_result: &ParseResult) -> Result<()> {
@@ -247,51 +311,6 @@ impl CommandLine {
         // `print` to avoid adding other `\n` to the help message
         print!("{}", self.get_message(args, MessageKind::Help)?);
         Ok(())
-    }
-
-    fn display_suggestions(&self, parse_error: ParseError) -> Error {
-        // SAFETY: We check if the method is `Some` before enter
-        let provider = self.suggestions().unwrap();
-        let kind = parse_error.kind();
-
-        let (value, source) = match kind {
-            ErrorKind::UnrecognizedCommand(s) => (
-                s,
-                parse_error
-                    .command()
-                    .get_children()
-                    .map(|c| c.get_name().to_string())
-                    .collect::<Vec<String>>(),
-            ),
-            ErrorKind::UnrecognizedOption(_, s) => (
-                s,
-                parse_error
-                    .command()
-                    .get_options()
-                    .iter()
-                    .map(|o| o.get_name().to_string())
-                    .collect::<Vec<String>>(),
-            ),
-            // Forwards the error
-            _ => return Error::from(parse_error),
-        };
-
-        let suggestions = provider
-            .suggestions_for(value, &source)
-            .map(|result| {
-                provider.suggestion_message_for(result.map(|s| {
-                    let context = self.context();
-                    let options = parse_error.command().get_options();
-                    prefix_option(context, options, s)
-                }))
-            })
-            .flatten();
-
-        if let Some(msg) = suggestions {
-            Error::new(kind.clone(), msg)
-        } else {
-            Error::from(parse_error)
-        }
     }
 }
 
@@ -426,11 +445,6 @@ pub fn split_into_args_with_quote_escape(value: &str, quote_escape: char) -> Vec
 
     result
 }
-
-// InvalidArgumentCount -> error + usage
-// InvalidArgument -> error + usage
-// UnrecognizedCommand -> error + suggestion
-// UnrecognizedOption -> error + suggestion
 
 #[cfg(test)]
 mod tests {

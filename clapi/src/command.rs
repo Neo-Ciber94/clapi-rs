@@ -23,6 +23,7 @@ pub struct Command {
     children: LinkedHashSet<Command>,
     options: OptionList,
     args: ArgumentList,
+    is_hidden: bool,
     handler: Option<Rc<RefCell<dyn FnMut(&OptionList, &ArgumentList) -> Result<()>>>>,
 }
 
@@ -59,6 +60,7 @@ impl Command {
             handler: None,
             args: ArgumentList::new(),
             options,
+            is_hidden: false
         }
     }
 
@@ -116,6 +118,11 @@ impl Command {
     /// Returns the parent `Symbol` of this command, or `None` if is a root command.
     pub fn get_parent(&self) -> Option<&Symbol> {
         self.parent.as_ref()
+    }
+
+    /// Returns `true` if this command is no visible for `help`.
+    pub fn is_hidden(&self) -> bool {
+        self.is_hidden
     }
 
     /// Returns the handler of this command, or `None` if not set.
@@ -199,6 +206,15 @@ impl Command {
     /// Sets the `Arguments` of this command.
     pub fn args(mut self, args: ArgumentList) -> Self {
         self.args = args;
+        self
+    }
+
+    /// Specify if this command is hidden for the `help`, this property may be ignore
+    /// if is the `root` command.
+    ///
+    /// What will be hidden or not about the command is up to the implementor of the `Help` trait.
+    pub fn hidden(mut self, is_hidden: bool) -> Self {
+        self.is_hidden = is_hidden;
         self
     }
 
