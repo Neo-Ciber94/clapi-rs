@@ -1,6 +1,5 @@
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, Result};
-use crate::utils::Then;
 use std::borrow::Borrow;
 use std::fmt::{Display, Formatter};
 
@@ -185,7 +184,7 @@ struct OptionAndArgs {
 
 fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAndArgs> {
     // Check if the value contains a delimiter
-    if let Some(arg_assign) = context.arg_assign().cloned().find(|d| value.contains(*d)) {
+    if let Some(arg_assign) = context.value_assign().cloned().find(|d| value.contains(*d)) {
         let option_and_args = value
             .split(arg_assign)
             .map(|s| s.to_string())
@@ -195,15 +194,7 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
         return if option_and_args.len() != 2 {
             Err(Error::from(ErrorKind::InvalidExpression))
         } else {
-            let (prefix, option) =
-                context
-                    .trim_and_get_prefix(&option_and_args[0])
-                    .then_apply(|(p, o)| {
-                        (
-                            p.unwrap().trim().to_string(),
-                            o.trim_matches('"').trim().to_string(),
-                        )
-                    });
+            let (prefix, option) = context.trim_option_prefix(&option_and_args[0]);
 
             let args = option_and_args[1]
                 .split(context.delimiter())
@@ -236,26 +227,21 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
             }
 
             Ok(OptionAndArgs {
-                prefix,
-                option,
+                prefix: prefix.to_owned(),
+                option: option.to_owned(),
                 args: Some(args),
             })
         };
     } else {
-        let (prefix, option) = context.trim_and_get_prefix(value).then_apply(|(p, o)| {
-            (
-                p.unwrap().trim().to_string(),
-                o.trim_matches('"').trim().to_string(),
-            )
-        });
+        let (prefix, option) = context.trim_option_prefix(value);
 
         if option.is_empty() {
             return Err(Error::new(ErrorKind::InvalidExpression, "option is empty"));
         }
 
         Ok(OptionAndArgs {
-            prefix,
-            option,
+            prefix: prefix.to_owned(),
+            option: option.to_owned(),
             args: None,
         })
     }

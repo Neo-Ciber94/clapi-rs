@@ -14,15 +14,17 @@ pub trait SuggestionProvider {
     /// Provides a message for the given suggestions.
     fn suggestion_message_for(&self, suggestions: SuggestionResult) -> Option<String> {
         match suggestions {
-            SuggestionResult::Value(s) => Some(format!("\n\n\tDid you mean `{}`?\n", s)),
+            // Did you mean `{}`?
+            SuggestionResult::Value(s) => Some(format!("\tDid you mean `{}`?", s)),
+            // Did you mean any of `{0}`, `{1}`, `{2}`?
             SuggestionResult::List(values) => {
-                let formatted_values = values
+                let values = values
                     .into_iter()
                     .map(|s| format!("`{}`", s))
                     .collect::<Vec<String>>()
-                    .join("\n");
+                    .join(", ");
 
-                Some(format!("Possible values: \n{}", formatted_values))
+                Some(format!("\tDid you mean any of {}?", values))
             }
         }
     }

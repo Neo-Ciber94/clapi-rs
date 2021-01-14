@@ -15,14 +15,20 @@ pub struct Context {
     suggestions: Option<Rc<dyn SuggestionProvider + 'static>>,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
-    arg_assign: LinkedHashSet<char>, // value_assign
+    value_assign: LinkedHashSet<char>,
     delimiter: char,
 }
 
 impl Context {
     /// Constructs a new `Context` with the `RootCommand`.
+    #[inline]
     pub fn new(root: Command) -> Self {
         ContextBuilder::new(root).build()
+    }
+
+    #[inline]
+    pub fn builder(root: Command) -> ContextBuilder {
+        ContextBuilder::new(root)
     }
 
     /// Returns an `Iterator` over the option name prefixes of this context.
@@ -39,9 +45,9 @@ impl Context {
         }
     }
 
-    /// Returns an `Iterator` over the argument assign `char`s.
-    pub fn arg_assign(&self) -> impl ExactSizeIterator<Item = &char> {
-        self.arg_assign.iter()
+    /// Returns an `Iterator` over the value assign `char`s.
+    pub fn value_assign(&self) -> impl ExactSizeIterator<Item = &char> {
+        self.value_assign.iter()
     }
 
     /// Returns the delimiter used in this context.
@@ -137,49 +143,37 @@ impl Context {
         false
     }
 
-    /// Split the option and returns the `option` name.
-    pub fn trim_prefix<'a>(&self, value: &'a str) -> &'a str {
-        self.trim_and_get_prefix(value).1
-    }
-
-    /// Split the option and returns its `prefix` (if any) and the `option` name.
-    pub fn trim_and_get_prefix<'a>(&self, value: &'a str) -> (Option<&'a str>, &'a str) {
-        if let Some(prefix) = self
-            .name_prefixes()
-            .find(|prefix| value.starts_with(prefix.as_str()))
-        {
-            if let Some(index) = value.find(prefix) {
-                let (prefix, value) = value.split_at(index + prefix.len());
-                return (Some(prefix), value);
-            }
-        }
-
-        if let Some(prefix) = self
-            .alias_prefixes()
-            .find(|prefix| value.starts_with(prefix.as_str()))
-        {
-            if let Some(index) = value.find(prefix) {
-                let (prefix, value) = value.split_at(index + prefix.len());
-                return (Some(prefix), value);
-            }
-        }
-
-        (None, value)
-    }
-
-    /// Returns `true` if there is a `CommandOption` with the specified name or alias in this context.
-    pub fn has_option(&self, name_or_alias: &str) -> bool {
-        self.get_option(name_or_alias).is_some()
-    }
-
-    /// Returns `true` if there is a `Command` with the specified name in this context.
-    pub fn has_command(&self, name: &str) -> bool {
-        self.root().get_children().any(|c| c.get_name() == name)
-    }
-
     /// Returns the `RootCommand` used by this context.
     pub fn root(&self) -> &Command {
         &self.root
+    }
+
+    /// Splits the value and gets the value and its option prefix.
+    pub(crate) fn trim_option_prefix<'a>(&self, value: &'a str) -> (&'a str, &'a str) {
+        if let Some(prefix) = self.name_prefixes
+            .iter()
+            .find(|prefix| value.starts_with(prefix.as_str())) {
+            if let Some(prefix_index) = value.find(prefix) {
+                return value.split_at(prefix_index + prefix.len());
+            }
+        }
+
+        if let Some(prefix) = self.alias_prefixes
+            .iter()
+            .find(|prefix| value.starts_with(prefix.as_str())) {
+            if let Some(prefix_index) = value.find(prefix) {
+                return value.split_at(prefix_index + prefix.len());
+            }
+        }
+
+        let prefixes = self.name_prefixes
+            .iter()
+            .chain(self.alias_prefixes.iter())
+            .map(|s| format!("`{}`", s))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        panic!("`{}` do not contains a prefix, valid prefixes: [{}]", value, prefixes);
     }
 }
 
@@ -191,7 +185,7 @@ impl Debug for Context {
             .field("suggestions", &debug_option(&self.suggestions, "SuggestionProvider"))
             .field("name_prefixes", &self.name_prefixes)
             .field("alias_prefixes", &self.alias_prefixes)
-            .field("arg_assign", &self.arg_assign)
+            .field("arg_assign", &self.value_assign)
             .field("delimiter", &self.delimiter)
             .finish()
     }
@@ -223,7 +217,7 @@ pub struct ContextBuilder {
     suggestions: Option<Rc<dyn SuggestionProvider>>,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
-    arg_assign: LinkedHashSet<char>,
+    value_assign_chars: LinkedHashSet<char>,
     delimiter: Option<char>,
 }
 
@@ -235,31 +229,35 @@ impl ContextBuilder {
             suggestions: None,
             name_prefixes: Default::default(),
             alias_prefixes: Default::default(),
-            arg_assign: Default::default(),
+            value_assign_chars: Default::default(),
             delimiter: None,
         }
     }
 
     pub fn name_prefix<S: Into<String>>(mut self, prefix: S) -> Self {
-        // fixme: prefix cannot be a letter, number or whitespace
-        self.name_prefixes.insert(prefix.into());
+        let prefix = prefix.into();
+        assert_valid_symbol("prefixes", prefix.as_str());
+        self.name_prefixes.insert(prefix);
         self
     }
 
     pub fn alias_prefix<S: Into<String>>(mut self, prefix: S) -> Self {
-        // fixme: prefix cannot be a letter, number or whitespace
-        self.alias_prefixes.insert(prefix.into());
+        let prefix = prefix.into();
+        assert_valid_symbol("prefixes", prefix.as_str());
+        self.alias_prefixes.insert(prefix);
         self
     }
 
-    pub fn arg_assign(mut self, value: char) -> Self {
-        // fixme: `value` cannot be a letter, number or whitespace
-        self.arg_assign.insert(value);
+    pub fn value_assign(mut self, value: char) -> Self {
+        // A char is always 4 bytes
+        assert_valid_symbol("assign chars", value.encode_utf8(&mut [0;4]));
+        self.value_assign_chars.insert(value);
         self
     }
 
     pub fn delimiter(mut self, value: char) -> Self {
-        // fixme: delimiter cannot be a letter, number or whitespace
+        // A char is always 4 bytes
+        assert_valid_symbol("delimiters", value.encode_utf8(&mut [0;4]));
         self.delimiter = Some(value);
         self
     }
@@ -317,13 +315,80 @@ impl ContextBuilder {
             },
 
             // Assign char
-            arg_assign: {
-                if self.arg_assign.is_empty() {
-                    self.arg_assign.insert('=');
-                    self.arg_assign.insert(':');
+            value_assign: {
+                if self.value_assign_chars.is_empty() {
+                    self.value_assign_chars.insert('=');
+                    self.value_assign_chars.insert(':');
                 }
-                self.arg_assign
+                self.value_assign_chars
             },
         }
+    }
+}
+
+#[inline]
+fn assert_valid_symbol(source: &str, value: &str) {
+    for c in value.chars() {
+        if c.is_whitespace() {
+            panic!("{} cannot contains whitespaces: `{}`", source, value);
+        }
+
+        if c.is_ascii_alphanumeric() {
+            panic!("{} cannot contains numbers or letters: `{}`", source, value);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn context_test(){
+        let context = Context::new(Command::root());
+        assert!(context.is_name_prefix("--"));
+        assert!(context.is_alias_prefix("-"));
+        assert!(context.value_assign().any(|c| *c == ':'));
+        assert!(context.value_assign().any(|c| *c == '='));
+        assert_eq!(context.delimiter(), ',');
+    }
+
+    #[test]
+    fn context_builder_test(){
+        let context = Context::builder(Command::root())
+            .name_prefix("#")
+            .alias_prefix("##")
+            .value_assign('>')
+            .delimiter('-')
+            .build();
+
+        assert!(context.is_name_prefix("#"));
+        assert!(context.is_alias_prefix("##"));
+        assert!(context.value_assign().any(|c| *c == '>'));
+        assert_eq!(context.delimiter(), '-');
+    }
+
+    #[test]
+    #[should_panic(expected="prefixes cannot contains numbers or letters: `1`")]
+    fn invalid_name_prefix_test() {
+        Context::builder(Command::root()).name_prefix("1");
+    }
+
+    #[test]
+    #[should_panic(expected="prefixes cannot contains whitespaces: `\t ab`")]
+    fn invalid_alias_prefix_test() {
+        Context::builder(Command::root()).alias_prefix("\t ab");
+    }
+
+    #[test]
+    #[should_panic(expected="assign chars cannot contains whitespaces: `\t`")]
+    fn invalid_assign_chars_test() {
+        Context::builder(Command::root()).value_assign('\t');
+    }
+
+    #[test]
+    #[should_panic(expected="delimiters cannot contains whitespaces: `\t`")]
+    fn invalid_delimiter_test() {
+        Context::builder(Command::root()).delimiter('\t');
     }
 }

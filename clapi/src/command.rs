@@ -142,10 +142,7 @@ impl Command {
     /// # Panics:
     /// Panics if the `description` is blank or empty.
     pub fn description<S: Into<String>>(mut self, description: S) -> Self {
-        self.description = Some(assert_not_blank!(
-            description.into(),
-            "`description` cannot be blank or empty"
-        ));
+        self.description = Some(assert_not_blank!(description.into(), "`description` cannot be blank or empty"));
         self
     }
 
@@ -154,10 +151,7 @@ impl Command {
     /// # Panics:
     /// Panics if the `usage` is blank or empty.
     pub fn usage<S: Into<String>>(mut self, usage: S) -> Self {
-        self.usage = Some(assert_not_blank!(
-            usage.into(),
-            "`usage` cannot be blank or empty"
-        ));
+        self.usage = Some(assert_not_blank!(usage.into(), "`usage` cannot be blank or empty"));
         self
     }
 
@@ -166,10 +160,7 @@ impl Command {
     /// # Panics:
     /// Panics if the `help` is blank or empty.
     pub fn help<S: Into<String>>(mut self, help: S) -> Self {
-        self.usage = Some(assert_not_blank!(
-            help.into(),
-            "`help` cannot be blank or empty"
-        ));
+        self.help = Some(assert_not_blank!(help.into(), "`help` cannot be blank or empty"));
         self
     }
 

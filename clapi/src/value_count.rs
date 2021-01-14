@@ -3,6 +3,14 @@ use std::fmt::{Display, Formatter};
 use std::ops::{Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive, Sub, RangeBounds};
 use std::collections::Bound;
 
+/*
+#[derive(Debug, Default, Copy, Clone, Hash, Eq, PartialEq)]
+struct NumValues {
+    min_values: Option<usize>,
+    max_values: Option<usize>,
+}
+*/
+
 /**
 Represents the number of values an argument takes.
 */

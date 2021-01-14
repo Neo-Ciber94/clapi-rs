@@ -481,7 +481,7 @@ impl Serialize for CommandOption {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("CommandOption", 5)?;
+        let mut state = serializer.serialize_struct("CommandOption", 7)?;
         state.serialize_field("name", self.get_name())?;
 
         if self.get_aliases().count() == 1 {
@@ -494,8 +494,10 @@ impl Serialize for CommandOption {
         }
 
         state.serialize_field("description", &self.get_description())?;
-        state.serialize_field("required", &self.is_required())?;
         state.serialize_field("args", self.get_args())?;
+        state.serialize_field("required", &self.is_required())?;
+        state.serialize_field("hidden", &self.is_hidden())?;
+        state.serialize_field("multiple", &self.allow_multiple())?;
         state.end()
     }
 }
@@ -510,16 +512,20 @@ impl<'de> Deserialize<'de> for CommandOption {
             "alias",
             "aliases",
             "description",
-            "required",
             "args",
+            "required",
+            "hidden",
+            "multiple"
         ];
 
         enum Field {
             Name,
             Aliases,
             Description,
-            Required,
             Args,
+            Required,
+            Hidden,
+            Multiple,
         }
 
         impl<'de> Deserialize<'de> for Field {
@@ -545,8 +551,10 @@ impl<'de> Deserialize<'de> for CommandOption {
                             "name" => Ok(Field::Name),
                             "aliases" | "alias" => Ok(Field::Aliases),
                             "description" => Ok(Field::Description),
-                            "required" => Ok(Field::Required),
                             "args" => Ok(Field::Args),
+                            "required" => Ok(Field::Required),
+                            "hidden" => Ok(Field::Hidden),
+                            "multiple" => Ok(Field::Multiple),
                             _ => return Err(de::Error::unknown_field(v, FIELDS)),
                         }
                     }
@@ -631,8 +639,10 @@ impl<'de> Deserialize<'de> for CommandOption {
                 let mut name: Option<String> = None;
                 let mut aliases: Option<Vec<String>> = None;
                 let mut description: Option<Option<String>> = None;
-                let mut required: Option<bool> = None;
                 let mut args: Option<ArgumentList> = None;
+                let mut required: Option<bool> = None;
+                let mut hidden : Option<bool> = None;
+                let mut multiple : Option<bool> = None;
 
                 while let Some(key) = map.next_key()? {
                     match key {
@@ -661,6 +671,13 @@ impl<'de> Deserialize<'de> for CommandOption {
 
                             description = Some(map.next_value()?);
                         }
+                        Field::Args => {
+                            if args.is_some() {
+                                return Err(de::Error::duplicate_field("args"));
+                            }
+
+                            args = Some(map.next_value()?);
+                        }
                         Field::Required => {
                             if required.is_some() {
                                 return Err(de::Error::duplicate_field("required"));
@@ -668,12 +685,19 @@ impl<'de> Deserialize<'de> for CommandOption {
 
                             required = Some(map.next_value()?);
                         }
-                        Field::Args => {
-                            if args.is_some() {
-                                return Err(de::Error::duplicate_field("args"));
+                        Field::Hidden => {
+                            if hidden.is_some() {
+                                return Err(de::Error::duplicate_field("hidden"));
                             }
 
-                            args = Some(map.next_value()?);
+                            hidden = Some(map.next_value()?);
+                        }
+                        Field::Multiple => {
+                            if multiple.is_some() {
+                                return Err(de::Error::duplicate_field("multiple"));
+                            }
+
+                            multiple = Some(map.next_value()?);
                         }
                     }
                 }
@@ -696,12 +720,20 @@ impl<'de> Deserialize<'de> for CommandOption {
                     option = option.description(description);
                 }
 
+                if let Some(args) = args {
+                    option = option.args(args);
+                }
+
                 if let Some(required) = required {
                     option = option.required(required);
                 }
 
-                if let Some(args) = args {
-                    option = option.args(args);
+                if let Some(hidden) = hidden {
+                    option = option.hidden(hidden);
+                }
+
+                if let Some(multiple) = multiple {
+                    option = option.multiple(multiple);
                 }
 
                 Ok(option)
@@ -761,14 +793,12 @@ impl Serialize for Command {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("Command", 6)?;
+        let mut state = serializer.serialize_struct("Command", 7)?;
         state.serialize_field("name", self.get_name())?;
         state.serialize_field("description", &self.get_description())?;
-        state.serialize_field("about", &self.get_usage())?;
-        state.serialize_field(
-            "subcommands",
-            &self.get_children().cloned().collect::<Vec<Command>>(),
-        )?;
+        state.serialize_field("usage", &self.get_usage())?;
+        state.serialize_field("help", &self.get_help())?;
+        state.serialize_field("subcommands", &self.get_children().cloned().collect::<Vec<Command>>())?;
         state.serialize_field("options", &self.get_options())?;
         state.serialize_field("args", &self.get_args())?;
         state.end()
@@ -783,7 +813,8 @@ impl<'de> Deserialize<'de> for Command {
         const FIELDS: &'static [&'static str] = &[
             "name",
             "description",
-            "about",
+            "usage",
+            "help",
             "subcommands",
             "options",
             "args",
@@ -792,7 +823,8 @@ impl<'de> Deserialize<'de> for Command {
         enum Field {
             Name,
             Description,
-            About,
+            Usage,
+            Help,
             Subcommands,
             Options,
             Args,
@@ -820,7 +852,8 @@ impl<'de> Deserialize<'de> for Command {
                         match v {
                             "name" => Ok(Field::Name),
                             "description" => Ok(Field::Description),
-                            "about" => Ok(Field::About),
+                            "usage" => Ok(Field::Usage),
+                            "help" => Ok(Field::Help),
                             "subcommands" => Ok(Field::Subcommands),
                             "options" => Ok(Field::Options),
                             "args" => Ok(Field::Args),
@@ -835,7 +868,8 @@ impl<'de> Deserialize<'de> for Command {
                         match v {
                             b"name" => Ok(Field::Name),
                             b"description" => Ok(Field::Description),
-                            b"about" => Ok(Field::About),
+                            b"usage" => Ok(Field::Usage),
+                            b"help" => Ok(Field::Help),
                             b"subcommands" => Ok(Field::Subcommands),
                             b"options" => Ok(Field::Options),
                             b"args" => Ok(Field::Args),
@@ -871,21 +905,25 @@ impl<'de> Deserialize<'de> for Command {
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(1, &self))?;
 
-                let about: Option<String> = seq
+                let usage: Option<String> = seq
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(2, &self))?;
 
-                let subcommands: Vec<Command> = seq
+                let help: Option<String> = seq
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(3, &self))?;
 
-                let options: OptionList = seq
+                let subcommands: Vec<Command> = seq
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(4, &self))?;
 
-                let args: ArgumentList = seq
+                let options: OptionList = seq
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(5, &self))?;
+
+                let args: ArgumentList = seq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::invalid_length(6, &self))?;
 
                 let mut command = Command::new(name).options(options).args(args);
 
@@ -897,8 +935,12 @@ impl<'de> Deserialize<'de> for Command {
                     command = command.description(description);
                 }
 
-                if let Some(about) = about {
-                    command = command.usage(about);
+                if let Some(usage) = usage {
+                    command = command.usage(usage);
+                }
+
+                if let Some(help) = help {
+                    command = command.help(help);
                 }
 
                 Ok(command)
@@ -910,7 +952,8 @@ impl<'de> Deserialize<'de> for Command {
             {
                 let mut name: Option<String> = None;
                 let mut description: Option<Option<String>> = None;
-                let mut about: Option<Option<String>> = None;
+                let mut usage: Option<Option<String>> = None;
+                let mut help: Option<Option<String>> = None;
                 let mut subcommands: Option<Vec<Command>> = None;
                 let mut options: Option<OptionList> = None;
                 let mut args: Option<ArgumentList> = None;
@@ -931,12 +974,19 @@ impl<'de> Deserialize<'de> for Command {
 
                             description = Some(map.next_value()?);
                         }
-                        Field::About => {
-                            if about.is_some() {
-                                return Err(de::Error::duplicate_field("about"));
+                        Field::Usage => {
+                            if usage.is_some() {
+                                return Err(de::Error::duplicate_field("usage"));
                             }
 
-                            about = Some(map.next_value()?);
+                            usage = Some(map.next_value()?);
+                        }
+                        Field::Help => {
+                            if help.is_some() {
+                                return Err(de::Error::duplicate_field("help"));
+                            }
+
+                            help = Some(map.next_value()?);
                         }
                         Field::Subcommands => {
                             if subcommands.is_some() {
@@ -969,8 +1019,12 @@ impl<'de> Deserialize<'de> for Command {
                     command = command.description(description);
                 }
 
-                if let Some(Some(about)) = about {
-                    command = command.usage(about);
+                if let Some(Some(usage)) = usage {
+                    command = command.usage(usage);
+                }
+
+                if let Some(Some(help)) = help {
+                    command = command.help(help);
                 }
 
                 if let Some(subcommands) = subcommands {
@@ -1160,8 +1214,6 @@ mod internal {
 
 #[cfg(test)]
 mod tests {
-    use serde_test::Token;
-    use crate::serde::internal::ValidType;
 
     #[cfg(test)]
     mod arg_count_tests {
@@ -1231,10 +1283,11 @@ mod tests {
 
     #[cfg(test)]
     mod args_tests {
-        use super::*;
         use crate::{Argument, ArgumentList};
         use serde_test::Token;
         use crate::args::validator::{parse_validator, Type};
+        use crate::serde::serde_test_utils::ArgTokens;
+        use crate::serde::internal::ValidType;
 
         #[test]
         fn argument_test() {
@@ -1247,15 +1300,15 @@ mod tests {
 
             serde_test::assert_tokens(
                 &arg,
-                &args_tokens(
-                    "numbers",
-                    Some("A set of numbers"),
-                    Some(1),
-                    Some(10),
-                    Some(ValidType::I64),
-                    vec!["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-                    vec!["1", "2", "3"],
-                ),
+                ArgTokens::new("numbers")
+                    .description("A set of numbers")
+                    .min_count(1)
+                    .max_count(10)
+                    .valid_type(ValidType::I64)
+                    .valid_values(vec!["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"])
+                    .default_values(vec!["1", "2", "3"])
+                    .to_tokens()
+                    .as_slice(),
             );
         }
 
@@ -1263,15 +1316,13 @@ mod tests {
         fn argument_missing_fields_test1() {
             let arg = Argument::with_name("numbers");
 
-            serde_test::assert_tokens(&arg, &args_tokens(
-                "numbers",
-                None,
-                Some(1),
-                Some(1),
-                None,
-                vec![],
-                vec![]
-            ));
+            serde_test::assert_tokens(
+                &arg,
+                ArgTokens::new("numbers")
+                    .value_count(1)
+                    .to_tokens()
+                    .as_slice()
+            );
         }
 
         #[test]
@@ -1282,15 +1333,12 @@ mod tests {
 
             serde_test::assert_tokens(
                 &arg,
-                &args_tokens(
-                    "numbers",
-                    None,
-                    Some(1),
-                    Some(1),
-                    None,
-                    vec!["0", "1", "2", "3"],
-                    vec!["0"]
-                ),
+                ArgTokens::new("numbers")
+                    .value_count(1)
+                    .valid_values(vec!["0", "1", "2", "3"])
+                    .default_values(vec!["0"])
+                    .to_tokens()
+                    .as_slice()
             );
         }
 
@@ -1328,9 +1376,9 @@ mod tests {
 
             let mut tokens = Vec::new();
             tokens.push(Token::Seq { len: Some(3) });
-            tokens.extend(args_tokens("A", Some("a"), Some(1), Some(1), None, vec![], vec![]));
-            tokens.extend(args_tokens("B", None, Some(2), Some(2), None, vec![], vec![]));
-            tokens.extend(args_tokens("C", None, Some(1), Some(1), None, vec!["a", "b", "c"], vec![]));
+            tokens.extend(ArgTokens::new("A").value_count(1).description("a").to_tokens());
+            tokens.extend(ArgTokens::new("B").min_count(2).max_count(2).to_tokens());
+            tokens.extend(ArgTokens::new("C").value_count(1).valid_values(vec!["a", "b", "c"]).to_tokens());
             tokens.push(Token::SeqEnd);
 
             serde_test::assert_tokens(&args, tokens.as_slice());
@@ -1339,9 +1387,9 @@ mod tests {
 
     #[cfg(test)]
     mod options_tests {
-        use crate::serde::tests::{args_tokens, option_tokens};
         use crate::{ValueCount, Argument, CommandOption, OptionList};
         use serde_test::Token;
+        use crate::serde::serde_test_utils::{OptionTokens, ArgTokens};
 
         #[test]
         fn option_test() {
@@ -1350,29 +1398,21 @@ mod tests {
                 .alias("T")
                 .description("Number of times")
                 .required(false)
+                .multiple(true)
+                .hidden(false)
                 .arg(Argument::with_name("N"));
 
-            let mut args = Vec::new();
-            args.extend(args_tokens(
-                "N",
-                None,
-                Some(1),
-                Some(1),
-                None,
-                vec![],
-                vec![]
-            ));
-
-            serde_test::assert_tokens(
-                &opt,
-                &option_tokens(
-                    "time",
-                    vec!["t", "T"],
-                    Some("Number of times"),
-                    false,
-                    (1, args),
-                ),
-            );
+            serde_test::assert_tokens(&opt,
+            OptionTokens::new("time")
+                .alias("t")
+                .alias("T")
+                .description("Number of times")
+                .required(false)
+                .multiple(true)
+                .hidden(false)
+                .arg(ArgTokens::new("N").value_count(1))
+                .to_tokens()
+                .as_slice());
         }
 
         #[test]
@@ -1381,20 +1421,14 @@ mod tests {
                 .required(true)
                 .arg(Argument::with_name("color").valid_values(vec!["red", "blue", "green"]));
 
-            let args = Vec::from(args_tokens(
-                "color",
-                None,
-                Some(1),
-                Some(1),
-                None,
-                vec!["red", "blue", "green"],
-                vec![],
-            ));
-
-            serde_test::assert_tokens(
-                &option,
-                &option_tokens("color", vec![], None, true, (1, args)),
-            )
+            serde_test::assert_tokens(&option,
+            OptionTokens::new("color")
+                .required(true)
+                .arg(ArgTokens::new("color")
+                    .value_count(1)
+                    .valid_values(vec!["red", "blue", "green"]))
+                .to_tokens()
+                .as_slice());
         }
 
         #[test]
@@ -1441,8 +1475,7 @@ mod tests {
                 .add(CommandOption::new("A").description("generic description"))
                 .unwrap();
             option_list
-                .add(
-                    CommandOption::new("B")
+                .add(CommandOption::new("B")
                         .alias("b")
                         .arg(Argument::with_name("value")),
                 )
@@ -1450,28 +1483,12 @@ mod tests {
 
             let mut tokens = Vec::new();
             tokens.push(Token::Seq { len: Some(2) });
-            tokens.extend(option_tokens(
-                "A",
-                vec![],
-                Some("generic description"),
-                false,
-                (0, vec![]),
-            ));
-            tokens.extend(option_tokens(
-                "B",
-                vec!["b"],
-                None,
-                false,
-                (1, args_tokens(
-                    "value",
-                    None,
-                    Some(1),
-                    Some(1),
-                    None,
-                    vec![],
-                    vec![]
-                )),
-            ));
+            tokens.extend(OptionTokens::new("A").description("generic description").to_tokens());
+            tokens.extend(OptionTokens::new("B")
+                .alias("b")
+                .arg(ArgTokens::new("value")
+                    .value_count(1))
+                .to_tokens());
             tokens.push(Token::SeqEnd);
 
             serde_test::assert_tokens(&option_list, &tokens);
@@ -1480,14 +1497,18 @@ mod tests {
 
     #[cfg(test)]
     mod command_tests {
-        use crate::serde::tests::{args_tokens, command_tokens, option_tokens};
         use crate::{ValueCount, Argument, Command, CommandOption};
+        use crate::serde::serde_test_utils::{CommandTokens, OptionTokens, ArgTokens};
 
         #[test]
         fn command_test() {
             let command = Command::new("echo")
                 .description("Prints a value")
-                .usage("echo 1.0")
+                .usage("echo [VALUES]...")
+                .help("
+                echo 1.0
+                Prints value to the console
+                ")
                 .subcommand(Command::new("version").description("Shows the version of the app"))
                 .option(
                     CommandOption::new("color")
@@ -1495,54 +1516,25 @@ mod tests {
                 )
                 .arg(Argument::with_name("values").value_count(1..));
 
-            let subcommands = command_tokens(
-                "version",
-                Some("Shows the version of the app"),
-                None,
-                (0, vec![]),
-                (0, vec![]),
-                (0, vec![]),
-            );
-
-            let options = Vec::from(option_tokens(
-                "color",
-                vec![],
-                None,
-                false,
-                (
-                    1,
-                    args_tokens(
-                        "color",
-                        None,
-                        Some(1),
-                        Some(1),
-                        None,
-                        vec!["red", "green", "blue"],
-                        vec![]
-                    ),
-                ),
-            ));
-
-            let args = args_tokens(
-                "values",
-                None,
-                Some(1),
-                None,
-                None,
-                vec![],
-                vec![]
-            );
-
-            serde_test::assert_ser_tokens(
+            println!("{:#?}", command);
+            serde_test::assert_tokens(
                 &command,
-                &command_tokens(
-                    "echo",
-                    Some("Prints a value"),
-                    Some("echo 1.0"),
-                    (1, subcommands),
-                    (1, options),
-                    (1, args),
-                ),
+                CommandTokens::new("echo")
+                    .description("Prints a value")
+                    .usage("echo [VALUES]...")
+                    .help("
+                echo 1.0
+                Prints value to the console
+                ")
+                    .subcommand(CommandTokens::new("version")
+                        .description("Shows the version of the app"))
+                    .option(OptionTokens::new("color")
+                        .arg(ArgTokens::new("color")
+                            .value_count(1)
+                            .valid_values(vec!["red", "green", "blue"])))
+                    .arg(ArgTokens::new("values").min_count(1))
+                    .to_tokens()
+                    .as_slice()
             );
         }
 
@@ -1550,19 +1542,12 @@ mod tests {
         fn command_missing_fields_test() {
             let command = Command::new("echo").arg(Argument::with_name("value"));
 
-            let arg = args_tokens(
-                "value",
-                None,
-                Some(1),
-                Some(1),
-                None,
-                vec![],
-                vec![]
-            );
-
             serde_test::assert_tokens(
                 &command,
-                &command_tokens("echo", None, None, (0, vec![]), (0, vec![]), (1, arg)),
+                CommandTokens::new("echo")
+                    .arg(ArgTokens::new("value").value_count(1))
+                    .to_tokens()
+                    .as_slice()
             );
         }
 
@@ -1573,7 +1558,7 @@ mod tests {
                 {
                     "name": "echo",
                     "description" : "Prints a value",
-                    "about" : "echo 1.0",
+                    "usage" : "echo [VALUES]...",
                     "subcommands" : [
                         {
                             "name" : "version",
@@ -1604,7 +1589,7 @@ mod tests {
 
             assert_eq!(command.get_name(), "echo");
             assert_eq!(command.get_description(), Some("Prints a value"));
-            assert_eq!(command.get_usage(), Some("echo 1.0"));
+            assert_eq!(command.get_usage(), Some("echo [VALUES]..."));
 
             let subcommand = command.find_subcommand("version").unwrap();
             assert_eq!(subcommand.get_name(), "version");
@@ -1628,9 +1613,132 @@ mod tests {
             assert_eq!(arg.get_value_count(), &ValueCount::more_than(1));
         }
     }
+}
 
-    // Utilities
-    fn args_tokens(
+#[cfg(test)]
+mod serde_test_utils {
+    use serde_test::Token;
+    use crate::serde::internal::ValidType;
+
+    #[derive(Debug, Clone)]
+    pub struct OptionTokens {
+        name: &'static str,
+        aliases: Vec<&'static str>,
+        description: Option<&'static str>,
+        args: Vec<ArgTokens>,
+        required: bool,
+        hidden: bool,
+        multiple: bool,
+    }
+
+    impl OptionTokens {
+        pub fn new(name: &'static str) -> Self {
+            OptionTokens {
+                name,
+                aliases: vec![],
+                description: None,
+                args: vec![],
+                required: false,
+                hidden: false,
+                multiple: false
+            }
+        }
+
+        pub fn alias(mut self, alias: &'static str) -> Self {
+            self.aliases.push(alias);
+            self
+        }
+
+        pub fn description(mut self, description: &'static str) -> Self {
+            self.description = Some(description);
+            self
+        }
+
+        pub fn arg(mut self, arg: ArgTokens) -> Self {
+            self.args.push(arg);
+            self
+        }
+
+        pub fn required(mut self, required: bool) -> Self {
+            self.required = required;
+            self
+        }
+
+        pub fn hidden(mut self, hidden: bool) -> Self {
+            self.hidden = hidden;
+            self
+        }
+
+        pub fn multiple(mut self, multiple: bool) -> Self {
+            self.multiple = multiple;
+            self
+        }
+
+        pub fn to_tokens(&self) -> Vec<Token> {
+            let mut tokens = Vec::new();
+            tokens.push(Token::Struct {
+                name: "CommandOption",
+                len: 7,
+            });
+
+            // Option name
+            tokens.push(Token::Str("name"));
+            tokens.push(Token::String(self.name));
+
+            // Option aliases
+            if self.aliases.len() == 1 {
+                tokens.push(Token::Str("alias"));
+                tokens.push(Token::String(self.aliases[0]))
+            } else {
+                tokens.push(Token::Str("aliases"));
+                tokens.push(Token::Seq {
+                    len: Some(self.aliases.len()),
+                });
+                for alias in &self.aliases {
+                    tokens.push(Token::Str(alias));
+                }
+                tokens.push(Token::SeqEnd);
+            }
+
+            // Option description
+            tokens.push(Token::Str("description"));
+            if let Some(description) = self.description {
+                tokens.push(Token::Some);
+                tokens.push(Token::String(description));
+            } else {
+                tokens.push(Token::None);
+            }
+
+            // Option arguments
+            tokens.push(Token::Str("args"));
+            tokens.push(Token::Seq {
+                len: Some(self.args.len()),
+            });
+            for arg in &self.args {
+                tokens.extend(arg.to_tokens())
+            }
+            tokens.push(Token::SeqEnd);
+
+            // Option required
+            tokens.push(Token::Str("required"));
+            tokens.push(Token::Bool(self.required));
+
+            // Option hidden
+            tokens.push(Token::Str("hidden"));
+            tokens.push(Token::Bool(self.hidden));
+
+            // Option multiple
+            tokens.push(Token::Str("multiple"));
+            tokens.push(Token::Bool(self.multiple));
+
+            // End
+            tokens.push(Token::StructEnd);
+            tokens
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ArgTokens {
         name: &'static str,
         description: Option<&'static str>,
         min_count: Option<u64>,
@@ -1638,173 +1746,254 @@ mod tests {
         valid_type: Option<ValidType>,
         valid_values: Vec<&'static str>,
         default_values: Vec<&'static str>,
-    ) -> Vec<Token> {
-        let mut tokens = Vec::new();
-        tokens.push(Token::Struct {
-            name: "Argument",
-            len: 7,
-        });
-
-        tokens.push(Token::Str("name"));
-        tokens.push(Token::String(name));
-
-        tokens.push(Token::Str("description"));
-        if let Some(description) = description {
-            tokens.push(Token::Some);
-            tokens.push(Token::String(description));
-        } else {
-            tokens.push(Token::None);
-        }
-
-        tokens.push(Token::Str("min_count"));
-        if let Some(min_count) = min_count {
-            tokens.push(Token::Some);
-            tokens.push(Token::U64(min_count))
-        } else {
-            tokens.push(Token::None);
-        }
-
-        tokens.push(Token::Str("max_count"));
-        if let Some(max_count) = max_count {
-            tokens.push(Token::Some);
-            tokens.push(Token::U64(max_count))
-        } else {
-            tokens.push(Token::None);
-        }
-
-        tokens.push(Token::Str("type"));
-        if let Some(valid_type) = valid_type {
-            tokens.push(Token::Some);
-            tokens.push(Token::UnitVariant { name: "ValidType", variant: valid_type.as_str() });
-        } else {
-            tokens.push(Token::None);
-        }
-
-        tokens.push(Token::Str("valid_values"));
-        tokens.push(Token::Seq {
-            len: Some(valid_values.len()),
-        });
-        for value in valid_values {
-            tokens.push(Token::Str(value));
-        }
-        tokens.push(Token::SeqEnd);
-
-        tokens.push(Token::Str("default_values"));
-        tokens.push(Token::Seq {
-            len: Some(default_values.len()),
-        });
-        for value in default_values {
-            tokens.push(Token::Str(value));
-        }
-        tokens.push(Token::SeqEnd);
-
-        tokens.push(Token::StructEnd);
-        tokens
     }
 
-    fn option_tokens(
-        name: &'static str,
-        aliases: Vec<&'static str>,
-        description: Option<&'static str>,
-        required: bool,
-        args: (usize, Vec<Token>),
-    ) -> Vec<Token> {
-        let mut tokens = Vec::new();
-        tokens.push(Token::Struct {
-            name: "CommandOption",
-            len: 5,
-        });
+    impl ArgTokens {
+        pub fn new(name: &'static str) -> Self {
+            ArgTokens {
+                name,
+                description: None,
+                min_count: None,
+                max_count: None,
+                valid_type: None,
+                valid_values: vec![],
+                default_values: vec![]
+            }
+        }
 
-        tokens.push(Token::Str("name"));
-        tokens.push(Token::String(name));
+        pub fn description(mut self, description: &'static str) -> Self {
+            self.description = Some(description);
+            self
+        }
 
-        if aliases.len() == 1 {
-            tokens.push(Token::Str("alias"));
-            tokens.push(Token::String(aliases[0].clone()))
-        } else {
-            tokens.push(Token::Str("aliases"));
-            tokens.push(Token::Seq {
-                len: Some(aliases.len()),
+        pub fn min_count(mut self, min_count: u64) -> Self {
+            self.min_count = Some(min_count);
+            self
+        }
+
+        pub fn max_count(mut self, max_count: u64) -> Self {
+            self.max_count = Some(max_count);
+            self
+        }
+
+        pub fn value_count(mut self, value_count: u64) -> Self {
+            self.min_count = Some(value_count);
+            self.max_count = Some(value_count);
+            self
+        }
+
+        pub fn valid_type(mut self, valid_type: ValidType) -> Self {
+            self.valid_type = Some(valid_type);
+            self
+        }
+
+        pub fn valid_values(mut self, values: Vec<&'static str>) -> Self {
+            self.valid_values = values;
+            self
+        }
+
+        pub fn default_values(mut self, values: Vec<&'static str>) -> Self {
+            self.default_values = values;
+            self
+        }
+
+        pub fn to_tokens(&self) -> Vec<Token> {
+            let mut tokens = Vec::new();
+            tokens.push(Token::Struct {
+                name: "Argument",
+                len: 7,
             });
-            for value in aliases {
+
+            // Argument name
+            tokens.push(Token::Str("name"));
+            tokens.push(Token::String(self.name));
+
+            // Argument description
+            tokens.push(Token::Str("description"));
+            if let Some(description) = self.description {
+                tokens.push(Token::Some);
+                tokens.push(Token::String(description));
+            } else {
+                tokens.push(Token::None);
+            }
+
+            // Argument min count
+            tokens.push(Token::Str("min_count"));
+            if let Some(min_count) = self.min_count {
+                tokens.push(Token::Some);
+                tokens.push(Token::U64(min_count))
+            } else {
+                tokens.push(Token::None);
+            }
+
+            // Argument max count
+            tokens.push(Token::Str("max_count"));
+            if let Some(max_count) = self.max_count {
+                tokens.push(Token::Some);
+                tokens.push(Token::U64(max_count))
+            } else {
+                tokens.push(Token::None);
+            }
+
+            // Argument valid type
+            tokens.push(Token::Str("type"));
+            if let Some(valid_type) = &self.valid_type {
+                tokens.push(Token::Some);
+                tokens.push(Token::UnitVariant { name: "ValidType", variant: valid_type.as_str() });
+            } else {
+                tokens.push(Token::None);
+            }
+
+            // Argument valid values
+            tokens.push(Token::Str("valid_values"));
+            tokens.push(Token::Seq {
+                len: Some(self.valid_values.len()),
+            });
+            for value in &self.valid_values {
                 tokens.push(Token::Str(value));
             }
             tokens.push(Token::SeqEnd);
+
+            // Argument default values
+            tokens.push(Token::Str("default_values"));
+            tokens.push(Token::Seq {
+                len: Some(self.default_values.len()),
+            });
+            for value in &self.default_values {
+                tokens.push(Token::Str(value));
+            }
+            tokens.push(Token::SeqEnd);
+
+            // End
+            tokens.push(Token::StructEnd);
+            tokens
         }
-
-        tokens.push(Token::Str("description"));
-        if let Some(description) = description {
-            tokens.push(Token::Some);
-            tokens.push(Token::String(description));
-        } else {
-            tokens.push(Token::None);
-        }
-
-        tokens.push(Token::Str("required"));
-        tokens.push(Token::Bool(required));
-
-        tokens.push(Token::Str("args"));
-        tokens.push(Token::Seq { len: Some(args.0) });
-        tokens.extend(args.1);
-        tokens.push(Token::SeqEnd);
-
-        tokens.push(Token::StructEnd);
-        tokens
     }
 
-    fn command_tokens(
+    #[derive(Debug, Clone)]
+    pub struct CommandTokens {
         name: &'static str,
         description: Option<&'static str>,
-        about: Option<&'static str>,
-        subcommands: (usize, Vec<Token>),
-        options: (usize, Vec<Token>),
-        args: (usize, Vec<Token>),
-    ) -> Vec<Token> {
-        let mut tokens = Vec::new();
-        tokens.push(Token::Struct {
-            name: "Command",
-            len: 6,
-        });
+        usage: Option<&'static str>,
+        help: Option<&'static str>,
+        subcommands: Vec<CommandTokens>,
+        options: Vec<OptionTokens>,
+        args: Vec<ArgTokens>,
+    }
 
-        tokens.push(Token::Str("name"));
-        tokens.push(Token::String(name));
-
-        tokens.push(Token::Str("description"));
-        if let Some(description) = description {
-            tokens.push(Token::Some);
-            tokens.push(Token::String(description));
-        } else {
-            tokens.push(Token::None);
+    impl CommandTokens {
+        pub fn new(name: &'static str) -> Self {
+            CommandTokens {
+                name,
+                description: None,
+                usage: None,
+                help: None,
+                subcommands: vec![],
+                options: vec![],
+                args: vec![]
+            }
         }
 
-        tokens.push(Token::Str("about"));
-        if let Some(about) = about {
-            tokens.push(Token::Some);
-            tokens.push(Token::String(about));
-        } else {
-            tokens.push(Token::None);
+        pub fn description(mut self, description: &'static str) -> Self {
+            self.description = Some(description);
+            self
         }
 
-        tokens.push(Token::Str("subcommands"));
-        tokens.push(Token::Seq {
-            len: Some(subcommands.0),
-        });
-        tokens.extend(subcommands.1);
-        tokens.push(Token::SeqEnd);
+        pub fn usage(mut self, usage: &'static str) -> Self {
+            self.usage = Some(usage);
+            self
+        }
 
-        tokens.push(Token::Str("options"));
-        tokens.push(Token::Seq {
-            len: Some(options.0),
-        });
-        tokens.extend(options.1);
-        tokens.push(Token::SeqEnd);
+        pub fn help(mut self, help: &'static str) -> Self {
+            self.help = Some(help);
+            self
+        }
 
-        tokens.push(Token::Str("args"));
-        tokens.push(Token::Seq { len: Some(args.0) });
-        tokens.extend(args.1);
-        tokens.push(Token::SeqEnd);
+        pub fn subcommand(mut self, subcommand: CommandTokens) -> Self {
+            self.subcommands.push(subcommand);
+            self
+        }
 
-        tokens.push(Token::StructEnd);
-        tokens
+        pub fn option(mut self, option: OptionTokens) -> Self {
+            self.options.push(option);
+            self
+        }
+
+        pub fn arg(mut self, arg: ArgTokens) -> Self {
+            self.args.push(arg);
+            self
+        }
+
+        pub fn to_tokens(&self) -> Vec<Token> {
+            let mut tokens = Vec::new();
+            tokens.push(Token::Struct {
+                name: "Command",
+                len: 7,
+            });
+
+            // Command name
+            tokens.push(Token::Str("name"));
+            tokens.push(Token::String(self.name));
+
+            // Command description
+            tokens.push(Token::Str("description"));
+            if let Some(description) = self.description {
+                tokens.push(Token::Some);
+                tokens.push(Token::String(description));
+            } else {
+                tokens.push(Token::None);
+            }
+
+            // Command usage
+            tokens.push(Token::Str("usage"));
+            if let Some(usage) = self.usage {
+                tokens.push(Token::Some);
+                tokens.push(Token::String(usage));
+            } else {
+                tokens.push(Token::None);
+            }
+
+            // Command help
+            tokens.push(Token::Str("help"));
+            if let Some(help) = self.help {
+                tokens.push(Token::Some);
+                tokens.push(Token::String(help));
+            } else {
+                tokens.push(Token::None);
+            }
+
+            // Command children
+            tokens.push(Token::Str("subcommands"));
+            tokens.push(Token::Seq {
+                len: Some(self.subcommands.len()),
+            });
+
+            for subcommand in &self.subcommands {
+                tokens.extend(subcommand.to_tokens());
+            }
+            tokens.push(Token::SeqEnd);
+
+            // Command options
+            tokens.push(Token::Str("options"));
+            tokens.push(Token::Seq {
+                len: Some(self.options.len()),
+            });
+            for option in &self.options {
+                tokens.extend(option.to_tokens());
+            }
+            tokens.push(Token::SeqEnd);
+
+            // Command args
+            tokens.push(Token::Str("args"));
+            tokens.push(Token::Seq { len: Some(self.args.len()) });
+            for arg in &self.args {
+                tokens.extend(arg.to_tokens());
+            }
+            tokens.push(Token::SeqEnd);
+
+            // End
+            tokens.push(Token::StructEnd);
+            tokens
+        }
     }
 }

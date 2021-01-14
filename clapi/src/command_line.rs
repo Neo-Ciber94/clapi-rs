@@ -127,9 +127,6 @@ impl CommandLine {
             ErrorKind::FallthroughHelp => {
                 self.display_help(None)
             },
-
-            // Special case, if is an invalid argument count error,
-            // we display a help message with the error
             ErrorKind::InvalidArgumentCount /*| ErrorKind::InvalidArgument(_)*/ => {
                 use std::error::Error as StdError;
 
@@ -150,14 +147,14 @@ impl CommandLine {
 
                 Err(Error::new(error.kind().clone(), source))
             },
-            ErrorKind::UnrecognizedOption(_, _) => {
+            ErrorKind::UnrecognizedOption(_, _) if self.suggestions().is_some() => {
                 self.display_option_suggestions(parser, error)
             },
-            ErrorKind::UnrecognizedCommand(_) => {
+            ErrorKind::UnrecognizedCommand(_) if self.suggestions().is_some() => {
                 self.display_command_suggestions(parser, error)
             },
             _ => {
-                Err(Error::from(error))
+                Err(error)
             }
         }
     }
@@ -168,8 +165,9 @@ impl CommandLine {
             _ => unreachable!()
         };
 
-        // SAFETY: We check if the method is `Some` before enter
-        let provider = self.suggestions().unwrap();
+        // SAFETY: We ensure `suggestions` is some before calling this method
+        // check `CommandLine::handle_error`
+        let suggestions = self.suggestions().unwrap();
         let command_options = parser.command()
             .unwrap()
             .get_options()
@@ -177,21 +175,22 @@ impl CommandLine {
             .map(|o| o.get_name().to_string())
             .collect::<Vec<String>>();
 
-        let suggestions = provider
+        let msg = suggestions
             .suggestions_for(option, &command_options)
             .map(|result| {
-                provider.suggestion_message_for(result.map(|s| {
+                suggestions.suggestion_message_for(result.map(|s| {
                     let context = self.context();
                     let options = parser.command().unwrap().get_options();
                     prefix_option(context, options, s)
                 }))
             })
-            .flatten();
+            .flatten()
+            .map(|s| format!("\n\n{}\n", s));
 
-        if let Some(msg) = suggestions {
+        if let Some(msg) = msg {
             Err(Error::new(error.kind().clone(), msg))
         } else {
-            Err(Error::from(error))
+            Err(error)
         }
     }
 
@@ -201,29 +200,31 @@ impl CommandLine {
             _ => unreachable!()
         };
 
-        // SAFETY: We check if the method is `Some` before enter
-        let provider = self.suggestions().unwrap();
+        // SAFETY: We ensure `suggestions` is some before calling this method
+        // check `CommandLine::handle_error`
+        let suggestions = self.suggestions().unwrap();
         let command_options = parser.command()
             .unwrap()
             .get_children()
             .map(|c| c.get_name().to_string())
             .collect::<Vec<String>>();
 
-        let suggestions = provider
+        let msg = suggestions
             .suggestions_for(option, &command_options)
             .map(|result| {
-                provider.suggestion_message_for(result.map(|s| {
+                suggestions.suggestion_message_for(result.map(|s| {
                     let context = self.context();
                     let options = parser.command().unwrap().get_options();
                     prefix_option(context, options, s)
                 }))
             })
-            .flatten();
+            .flatten()
+            .map(|s| format!("\n\n{}\n", s));
 
-        if let Some(msg) = suggestions {
+        if let Some(msg) = msg {
             Err(Error::new(error.kind().clone(), msg))
         } else {
-            Err(Error::from(error))
+            Err(error)
         }
     }
 
