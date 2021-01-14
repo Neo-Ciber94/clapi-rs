@@ -93,7 +93,7 @@ impl Argument {
     }
 
     /// Returns the number of values this argument takes.
-    pub fn get_value_count(&self) -> &ValueCount {
+    pub fn get_value_count(&self) -> &ValueCount { // todo: get_num_of_values(), get_num_values()
         &self.count
     }
 

@@ -71,7 +71,7 @@ impl Tokenizer {
               I: IntoIterator<Item = S> {
         let mut iterator = args
             .into_iter()
-            .filter(|s| !s.borrow().is_empty())
+            .filter(|s| !s.borrow().is_empty()) //todo: allow whitespaces?
             .peekable();
 
         // Quick path
@@ -182,10 +182,10 @@ struct OptionAndArgs {
     args: Option<Vec<String>>,
 }
 
-fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAndArgs> {
-    // Check if the value contains a delimiter
-    if let Some(arg_assign) = context.value_assign().cloned().find(|d| value.contains(*d)) {
-        let option_and_args = value
+fn try_split_option_and_args(context: &Context, prefixed_option: &str) -> Result<OptionAndArgs> {
+    // Check if the value contains an assign operator like: --times=1
+    if let Some(arg_assign) = context.value_assign().cloned().find(|d| prefixed_option.contains(*d)) {
+        let option_and_args = prefixed_option
             .split(arg_assign)
             .map(|s| s.to_string())
             .filter(|s| !s.is_empty())
@@ -222,7 +222,7 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
             if args.iter().any(|s| s.is_empty()) {
                 return Err(Error::new(
                     ErrorKind::InvalidExpression,
-                    value,
+                    prefixed_option,
                 ));
             }
 
@@ -233,7 +233,7 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
             })
         };
     } else {
-        let (prefix, option) = context.trim_option_prefix(value);
+        let (prefix, option) = context.trim_option_prefix(prefixed_option);
 
         if option.is_empty() {
             return Err(Error::new(ErrorKind::InvalidExpression, "option is empty"));

@@ -15,7 +15,7 @@ pub struct Context {
     suggestions: Option<Rc<dyn SuggestionProvider + 'static>>,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
-    value_assign: LinkedHashSet<char>,
+    value_assign: LinkedHashSet<char>, // fixme: assign_operators, assign_ops
     delimiter: char,
 }
 

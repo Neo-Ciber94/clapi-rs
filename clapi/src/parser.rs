@@ -13,7 +13,7 @@ use crate::utils::Then;
 use crate::Argument;
 
 /// A command-line argument parser.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Parser<'a> {
     context: &'a Context,
     state: ParseState,
@@ -71,6 +71,12 @@ impl<'a> Parser<'a> {
     pub fn parse<S, I>(&mut self, args: I) -> Result<ParseResult>
         where S: Borrow<str>,
               I: IntoIterator<Item = S> {
+        // We prevent to run the parser twice due it maintain
+        // the state of the last parse in case an error have occurred.
+        if self.state != ParseState::Uninitialized {
+            panic!("Parser have been used");
+        }
+
         let tokens = Tokenizer
             .tokenize(&self.context, args)
             .map_err(|error| {
@@ -91,6 +97,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_tokens(&mut self, tokens: Vec<Token>) -> Result<ParseResult> {
+        // We takes an iterator over the tokens to parse, and parse the command, options and args,
+        // the order of these operations matters due the commands are expected as:
+        // <subcommands> <options> <option_arguments> <end of options> <command_arguments>
         let mut iterator = tokens.iter().peekable();
 
         // Parse executing command

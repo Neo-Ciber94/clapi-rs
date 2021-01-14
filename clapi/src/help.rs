@@ -110,11 +110,7 @@ impl Display for Buffer {
 pub struct DefaultHelp<'a> {
     indent: &'a [u8],
     kind: HelpKind,
-    letter_case: LetterCase,
-    help_message_source: MessageSource,
-    usage_message_source: MessageSource,
-    show_after_help_message: bool,
-    after_help_message: Option<&'a str>,
+    after_help_message: Option<Option<&'a str>>,
 }
 
 impl<'a> Default for DefaultHelp<'a>{
@@ -140,59 +136,25 @@ impl<'a> DefaultHelp<'a> {
         DefaultHelp {
             indent,
             kind,
-            letter_case: LetterCase::Upper,
-            help_message_source: MessageSource::Overwrite,
-            usage_message_source: MessageSource::Overwrite,
-            show_after_help_message: true,
             after_help_message: None,
         }
     }
 
-    pub const fn letter_case(mut self, letter_case: LetterCase) -> Self {
-        self.letter_case = letter_case;
-        self
-    }
-
-    pub const fn help_message_source(mut self, help_message_source: MessageSource) -> Self {
-        self.help_message_source = help_message_source;
-        self
-    }
-
-    pub const fn usage_message_source(mut self, usage_message_source: MessageSource) -> Self {
-        self.usage_message_source = usage_message_source;
-        self
-    }
-
-    pub const fn after_help_message(mut self, after_help_message: &'a str) -> Self {
+    #[inline]
+    pub const fn after_help_message(mut self, after_help_message: Option<&'a str>) -> Self {
         self.after_help_message = Some(after_help_message);
         self
     }
 
-    pub const fn show_after_help_message(mut self, show_after_help_message: bool) -> Self {
-        self.show_after_help_message = show_after_help_message;
-        self
-    }
-}
-
-impl<'a> Help for DefaultHelp<'a> {
-    fn help(&self, buf: &mut Buffer, context: &Context, command: &Command) {
-        match self.help_message_source {
-            source @ MessageSource::UseCommand |
-            source @ MessageSource::Overwrite => {
-                if let Some(help) = command.get_help() {
-                    buf.write_str(help).unwrap();
-                }
-
-                if source == MessageSource::UseCommand {
-                    return;
-                }
-            }
-            MessageSource::UseHelp => {}
+    fn get_after_help_message(&self, context: &Context) -> Option<String> {
+        match self.after_help_message {
+            Some(Some(msg)) => Some(msg.to_owned()),
+            Some(None) => None,
+            None => after_help_message(context)
         }
+    }
 
-        // Help letter case
-        let letter_case = self.letter_case;
-
+    fn command_help(&self, buf: &mut Buffer, context: &Context, command: &Command) {
         // Command name
         writeln!(buf, "{}", command.get_name()).unwrap();
 
@@ -207,16 +169,13 @@ impl<'a> Help for DefaultHelp<'a> {
         let subcommand_count = count_subcommands(&command);
 
         // Command usage
-        if command.take_args() || subcommand_count > 0 || option_count > 0 {
-            // We check again for args, options and children to add a newline
-            writeln!(buf).unwrap();
-            self.usage(buf, context, command);
-        }
+        // Write into the buffer the command usage
+        self.command_usage(buf, context, command, false);
 
-        // Options
+        // Command Options
         if option_count > 0 {
             writeln!(buf).unwrap();
-            writeln!(buf, "{}:", letter_case.format("OPTIONS")).unwrap();
+            writeln!(buf, "OPTIONS:").unwrap();
 
             for option in command.get_options().iter().filter(|o| !o.is_hidden()) {
                 write_indent(buf, self.indent);
@@ -224,61 +183,27 @@ impl<'a> Help for DefaultHelp<'a> {
             }
         }
 
-        // Subcommands
+        // Command Subcommands
         if subcommand_count > 0 {
             writeln!(buf).unwrap();
-            writeln!(buf, "{}:", letter_case.format("SUBCOMMANDS")).unwrap();
+            writeln!(buf, "SUBCOMMANDS:").unwrap();
 
             for command in command.get_children().filter(|c| !c.is_hidden()) {
                 write_indent(buf, self.indent);
                 writeln!(buf, "{}", command_to_string(command)).unwrap();
             }
         }
-
-        if let Some(about) = command.get_usage() {
-            writeln!(buf).unwrap();
-            writeln!(buf, "{}", about).unwrap();
-        }
-
-        // Help usage message
-        if self.show_after_help_message {
-            match self.after_help_message {
-                Some(msg) => {
-                    writeln!(buf).unwrap();
-                    writeln!(buf, "{}", msg).unwrap();
-                }
-                None => {
-                    if let Some(msg) = after_help_message(context) {
-                        writeln!(buf).unwrap();
-                        writeln!(buf, "{}", msg).unwrap();
-                    }
-                }
-            }
-        }
     }
 
-    fn usage(&self, buf: &mut Buffer, _: &Context, command: &Command) {
-        match self.usage_message_source {
-            source @ MessageSource::UseCommand |
-            source @ MessageSource::Overwrite => {
-                if let Some(usage) = command.get_usage() {
-                    buf.write_str(usage).unwrap();
-                }
-
-                if source == MessageSource::UseCommand {
-                    return;
-                }
-            }
-            MessageSource::UseHelp => {}
-        }
-
+    fn command_usage(&self, buf: &mut Buffer, context: &Context, command: &Command, after_help_message: bool) {
         // Number of no-hidden options and subcommands
         let option_count = count_options(command.get_options());
         let subcommand_count = count_subcommands(&command);
-        let letter_case = self.letter_case;
 
         if command.take_args() || subcommand_count > 0 || option_count > 0 {
-            writeln!(buf, "{}:", self.letter_case.format("USAGE")).unwrap();
+            writeln!(buf).unwrap();
+            writeln!(buf, "USAGE:").unwrap();
+
             // command [OPTIONS] [ARGS]...
             {
                 write_indent(buf, self.indent);
@@ -286,17 +211,18 @@ impl<'a> Help for DefaultHelp<'a> {
 
                 if option_count > 1 {
                     if option_count == 1 {
-                        write!(buf, " [{}]", letter_case.format("OPTION")).unwrap();
+                        write!(buf, " [OPTION]").unwrap();
                     } else {
-                        write!(buf, " [{}]", letter_case.format("OPTIONS")).unwrap();
+                        write!(buf, " [OPTIONS]").unwrap();
                     }
                 }
 
                 for arg in command.get_args() {
+                    let arg_name = arg.get_name().to_uppercase();
                     if arg.get_value_count().max() > 1 {
-                        write!(buf, " [{}]...", letter_case.format(arg.get_name())).unwrap();
+                        write!(buf, " [{}]...", arg_name).unwrap();
                     } else {
-                        write!(buf, " [{}] ", letter_case.format(arg.get_name())).unwrap();
+                        write!(buf, " [{}] ", arg_name).unwrap();
                     }
                 }
 
@@ -306,57 +232,59 @@ impl<'a> Help for DefaultHelp<'a> {
             // command [SUBCOMMAND] [OPTIONS] [ARGS]...
             if subcommand_count > 0 {
                 write_indent(buf, self.indent);
-                write!(buf, "{} [{}]", command.get_name(), letter_case.format("SUBCOMMAND")).unwrap();
+                write!(buf, "{} [SUBCOMMAND]", command.get_name()).unwrap();
 
                 if command.get_children().any(|c| count_options(c.get_options()) > 0) {
-                    write!(buf, " [{}]", letter_case.format("OPTIONS")).unwrap();
+                    write!(buf, " [OPTIONS]").unwrap();
                 }
 
                 if command.get_children()
                     .filter(|c| !c.is_hidden())
                     .any(|c| c.take_args()) {
-                    write!(buf, " [{}]", letter_case.format("ARGS")).unwrap();
+                    write!(buf, " [ARGS]").unwrap();
                 }
 
                 writeln!(buf).unwrap();
             }
+
+            if after_help_message {
+                // After help message
+                if let Some(msg) = self.get_after_help_message(context) {
+                    writeln!(buf).unwrap();
+                    writeln!(buf, "{}", msg).unwrap();
+                }
+            }
+        }
+    }
+}
+
+impl<'a> Help for DefaultHelp<'a> {
+    fn help(&self, buf: &mut Buffer, context: &Context, command: &Command) {
+        match command.get_help() {
+            Some(s) => buf.write_str(s).unwrap(),
+            None => self.command_help(buf, context, command),
+        }
+
+        // After help message
+        if let Some(msg) = self.get_after_help_message(context) {
+            writeln!(buf).unwrap();
+            writeln!(buf, "{}", msg).unwrap();
+        }
+    }
+
+    fn usage(&self, buf: &mut Buffer, context: &Context, command: &Command) {
+        match command.get_usage() {
+            Some(s) => {
+                writeln!(buf).unwrap();
+                writeln!(buf, "USAGE:").unwrap();
+                buf.write_str(s).unwrap()
+            },
+            None => self.command_usage(buf, context, command, true)
         }
     }
 
     fn kind(&self) -> HelpKind {
         self.kind
-    }
-}
-
-/// Represents the source of a `usage` or `help` message.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum MessageSource {
-    /// Use the command as the source of the message.
-    UseCommand,
-    /// Use the `Help` implementation message.
-    UseHelp,
-    /// Use the command message if available otherwise the `Help`.
-    Overwrite
-}
-
-/// Represents the letter case of a `String`.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum LetterCase {
-    /// Uppercase
-    Upper,
-    /// Lowercase
-    Lower,
-    /// No change case
-    None
-}
-
-impl LetterCase {
-    pub fn format(&self, s: &str) -> String {
-        match self {
-            LetterCase::Upper => s.to_uppercase(),
-            LetterCase::Lower => s.to_lowercase(),
-            LetterCase::None => s.to_owned()
-        }
     }
 }
 
@@ -377,8 +305,6 @@ fn count_subcommands(parent: &Command) -> usize {
 // Add indentation to the buffer
 fn write_indent(buf: &mut Buffer, indent: &[u8]) {
     buf.buffer_mut().extend_from_slice(indent);
-    // 3 spaces
-    //write!(buf, "{}", std::str::from_utf8(indent).unwrap()).unwrap()
 }
 
 // -v, --version        Shows the version
