@@ -50,24 +50,24 @@ impl CommandLine {
         self.context.suggestions()
     }
 
-    /// Sets the default `HelpCommand`.
+    /// Sets the default `Help`.
     pub fn use_default_help(self) -> Self {
-        self.set_help(DefaultHelp::default())
+        self.use_help(DefaultHelp::default())
     }
 
-    /// Sets the specified `HelpProvider`.
-    pub fn set_help<H: Help + 'static>(mut self, help: H) -> Self {
+    /// Sets the specified `Help`.
+    pub fn use_help<H: Help + 'static>(mut self, help: H) -> Self {
         self.context.set_help(help);
         self
     }
 
     /// Sets the default `SuggestionProvider`.
     pub fn use_default_suggestions(self) -> Self {
-        self.set_suggestions(SingleSuggestionProvider)
+        self.use_suggestions(SingleSuggestionProvider)
     }
 
     /// Sets the specified `SuggestionProvider`.
-    pub fn set_suggestions<S: SuggestionProvider + 'static>(mut self, suggestions: S) -> Self {
+    pub fn use_suggestions<S: SuggestionProvider + 'static>(mut self, suggestions: S) -> Self {
         self.context.set_suggestions(suggestions);
         self
     }
@@ -86,8 +86,7 @@ impl CommandLine {
     pub fn run_with<S, I>(&mut self, args: I) -> Result<()>
         where
             S: Borrow<str>,
-            I: IntoIterator<Item = S>,
-    {
+            I: IntoIterator<Item = S> {
         let mut parser = Parser::new(&self.context);
         let result = parser.parse(args);
         let parse_result = match result {
@@ -123,11 +122,11 @@ impl CommandLine {
 
         match error.kind() {
             // Special case, the caller can returns `ErrorKind::FallthroughHelp`
-            // to indicates the `CommandLine` to show a help message.
+            // to indicates the `CommandLine` to show a help message about the current command
             ErrorKind::FallthroughHelp => {
                 self.display_help(None)
             },
-            ErrorKind::InvalidArgumentCount | ErrorKind::InvalidArgument(_) => {
+            ErrorKind::InvalidArgumentCount | ErrorKind::InvalidArgument(_) if self.context.help().is_some() => {
                 let usage_message = self.get_help_message(None, MessageKind::Usage)?;
                 Err(error.join(&format!("\n{}", &usage_message)))
             },
@@ -139,6 +138,47 @@ impl CommandLine {
             },
             _ => {
                 Err(error)
+            }
+        }
+    }
+
+    /// Checks if the `ParseResult` or `Parser` require to show a help message.
+    /// We use `std::result::Result` where `Ok` is a completed parse operation
+    /// and `Err` is a failed one.
+    fn requires_help(&self, result: StdResult<&ParseResult, &Parser<'_>>) -> bool {
+        let help = match self.context.help() {
+            Some(h) => h.as_ref(),
+            None => return false,
+        };
+
+        match result {
+            Ok(parse_result) => {
+                match help.kind() {
+                    HelpKind::Subcommand => {
+                        is_help_subcommand(help, parse_result.executing_command())
+                    },
+                    HelpKind::Option => {
+                        is_help_option(help, parse_result.options())
+                    },
+                    HelpKind::Any => {
+                        is_help_subcommand(help, parse_result.executing_command())
+                            || is_help_option(help, parse_result.options())
+                    }
+                }
+            },
+            Err(parser) => {
+                match help.kind() {
+                    HelpKind::Subcommand => {
+                        is_help_subcommand(help, parser.command().unwrap())
+                    }
+                    HelpKind::Option => {
+                        is_help_option(help, parser.options().unwrap())
+                    }
+                    HelpKind::Any => {
+                        is_help_subcommand(help, parser.command().unwrap())
+                            || is_help_option(help, parser.options().unwrap())
+                    }
+                }
             }
         }
     }
@@ -186,47 +226,6 @@ impl CommandLine {
         } else {
             // handler for: help [subcommand]
             self.display_help(parse_result.arg())
-        }
-    }
-
-    /// Checks if the `ParseResult` or `Parser` require to show a help message.
-    /// We use `std::result::Result` where `Ok` is a completed parse operation
-    /// and `Err` is a failed one.
-    fn requires_help(&self, result: StdResult<&ParseResult, &Parser<'_>>) -> bool {
-        let help = match self.context.help() {
-            Some(h) => h.as_ref(),
-            None => return false,
-        };
-
-        match result {
-            Ok(parse_result) => {
-                match help.kind() {
-                    HelpKind::Subcommand => {
-                        is_help_subcommand(help, parse_result.executing_command())
-                    },
-                    HelpKind::Option => {
-                        is_help_option(help, parse_result.options())
-                    },
-                    HelpKind::Any => {
-                        is_help_subcommand(help, parse_result.executing_command())
-                            || is_help_option(help, parse_result.options())
-                    }
-                }
-            },
-            Err(parser) => {
-                match help.kind() {
-                    HelpKind::Subcommand => {
-                        is_help_subcommand(help, parser.command().unwrap())
-                    }
-                    HelpKind::Option => {
-                        is_help_option(help, parser.options().unwrap())
-                    }
-                    HelpKind::Any => {
-                        is_help_subcommand(help, parser.command().unwrap())
-                            || is_help_option(help, parser.options().unwrap())
-                    }
-                }
-            }
         }
     }
 

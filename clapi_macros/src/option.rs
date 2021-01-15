@@ -71,7 +71,6 @@ impl OptionAttrData {
                             .to_string_literal()
                             .expect("option `description` must be a string literal");
 
-                        //args.set_description(description.clone());
                         option.set_description(description);
                     }
                     attr::MIN => {

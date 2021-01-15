@@ -39,10 +39,11 @@ pub struct CommandAttrData {
     help: Option<String>,
     item_fn: Option<ItemFn>,
     children: Vec<CommandAttrData>,
+    is_hidden: Option<bool>,
     options: Vec<OptionAttrData>,
     args: Vec<ArgAttrData>,
     vars: Vec<ArgLocalVar>,
-    help_impl: Option<ItemStatic>
+    help_impl: Option<ItemStatic>,
 }
 
 impl CommandAttrData {
@@ -60,7 +61,8 @@ impl CommandAttrData {
             options: vec![],
             vars: vec![],
             args: vec![],
-            help_impl: None
+            help_impl: None,
+            is_hidden: None
         }
     }
 
@@ -98,6 +100,14 @@ impl CommandAttrData {
         }
 
         self.children.push(command);
+    }
+
+    pub fn set_hidden(&mut self, is_hidden: bool) {
+        if is_hidden {
+            assert!(self.is_child, "only subcommands can be hidden");
+        }
+
+        self.is_hidden = Some(is_hidden);
     }
 
     pub fn set_option(&mut self, option: OptionAttrData) {
@@ -195,12 +205,18 @@ impl CommandAttrData {
             .map(|s| quote! { #s })
             .map(|tokens| quote! { .description(#tokens)});
 
+        // todo: merge
         // Command usage
         let usage = self
             .usage
             .as_ref()
             .map(|s| quote! { #s })
             .map(|tokens| quote! { .usage(#tokens)});
+
+        // Command hidden
+        let hidden = self.is_hidden
+            .as_ref()
+            .map(|s| quote! { .hidden(#s) });
 
         // Command help
         let help = self
@@ -269,6 +285,7 @@ impl CommandAttrData {
             #command
                 #description
                 #usage
+                #hidden
                 #help
                 #version
                 #(#args)*
@@ -287,7 +304,7 @@ impl CommandAttrData {
             let help = if self.help_impl.is_some() {
                 let help_body = self.get_help_impl();
                 quote!{
-                    .set_help({ #help_body })
+                    .use_help({ #help_body })
                 }
             } else {
                 quote! { .use_default_help() }
@@ -614,7 +631,14 @@ mod imp {
                         .to_string_literal()
                         .expect("`usage` must be a string literal");
                     command.set_usage(usage);
-                }
+                },
+                crate::attr::HIDDEN => {
+                    let hidden = value
+                        .clone()
+                        .to_bool_literal()
+                        .expect("`hidden` must be a bool literal");
+                    command.set_hidden(hidden);
+                },
                 crate::attr::HELP => {
                     let help = value
                         .clone()
