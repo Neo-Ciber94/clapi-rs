@@ -96,18 +96,12 @@ impl CommandLine {
         };
 
         // Check if the command requires to display help
-        // if self.contains_help(&parse_result) {
-        //     return self.handle_help_from_parse_result(&parse_result);
-        // }
         if self.requires_help(Ok(&parse_result)) {
             return self.handle_help_from_parse_result(&parse_result);
         }
 
-        // fixme: merge with handler?
-        let command = parse_result.executing_command();
-
         // We borrow the value from the Option to avoid create a temporary
-        let handler = command.get_handler();
+        let handler = parse_result.executing_command().get_handler();
 
         if let Some(mut handler) = handler {
             let options = parse_result.options();
@@ -138,7 +132,8 @@ impl CommandLine {
             ErrorKind::FallthroughHelp => {
                 self.display_help(None)
             },
-            ErrorKind::InvalidArgumentCount /*| ErrorKind::InvalidArgument(_)*/ => {
+            //ErrorKind::InvalidArgumentCount => {
+            ErrorKind::InvalidArgumentCount | ErrorKind::InvalidArgument(_) => {
                 use std::error::Error as StdError;
 
                 let usage_message = self.get_help_message(None, MessageKind::Usage)?;

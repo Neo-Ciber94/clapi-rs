@@ -314,7 +314,7 @@ impl ContextBuilder {
                 self.alias_prefixes
             },
 
-            // Assign char
+            // Assign operator
             value_assign: {
                 if self.value_assign_chars.is_empty() {
                     self.value_assign_chars.insert('=');

@@ -57,13 +57,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.inner {
             Inner::Simple(kind) => Display::fmt(kind, f),
-            Inner::Custom(custom) => {
-                if matches!(custom.kind, ErrorKind::Other) {
-                    write!(f, "{}", custom.error)
-                } else {
-                    write!(f, "{}: {}", custom.kind, custom.error)
-                }
-            }
+            Inner::Custom(custom) => Display::fmt(&custom.error, f),
         }
     }
 }
