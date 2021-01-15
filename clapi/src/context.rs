@@ -119,11 +119,8 @@ impl Context {
     pub fn is_option_prefixed(&self, value: &str) -> bool {
         self.name_prefixes
             .iter()
+            .chain(self.alias_prefixes.iter())
             .any(|prefix| value.starts_with(prefix))
-            || self
-                .alias_prefixes
-                .iter()
-                .any(|prefix| value.starts_with(prefix))
     }
 
     /// Returns `true` if the `name` match with the `help` provider.
@@ -148,32 +145,13 @@ impl Context {
         &self.root
     }
 
-    /// Splits the value and gets the value and its option prefix.
-    pub(crate) fn trim_option_prefix<'a>(&self, value: &'a str) -> (&'a str, &'a str) {
-        if let Some(prefix) = self.name_prefixes
-            .iter()
-            .find(|prefix| value.starts_with(prefix.as_str())) {
-            if let Some(prefix_index) = value.find(prefix) {
-                return value.split_at(prefix_index + prefix.len());
-            }
-        }
-
-        if let Some(prefix) = self.alias_prefixes
-            .iter()
-            .find(|prefix| value.starts_with(prefix.as_str())) {
-            if let Some(prefix_index) = value.find(prefix) {
-                return value.split_at(prefix_index + prefix.len());
-            }
-        }
-
-        let prefixes = self.name_prefixes
-            .iter()
+    /// Removes the prefix from the given option
+    pub(crate) fn trim_prefix<'a>(&self, option: &'a str) -> &'a str {
+        self.name_prefixes.iter()
             .chain(self.alias_prefixes.iter())
-            .map(|s| format!("`{}`", s))
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        panic!("`{}` do not contains a prefix, valid prefixes: [{}]", value, prefixes);
+            .find(|prefix| option.starts_with(prefix.as_str()))
+            .map(|prefix| option.trim_start_matches(prefix))
+            .unwrap_or(option)
     }
 }
 

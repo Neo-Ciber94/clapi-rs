@@ -8,8 +8,8 @@ use std::fmt::{Display, Formatter};
 pub enum Token {
     // A command
     Cmd(String),
-    // An prefix and option
-    Opt(String, String),
+    // A prefixed option
+    Opt(String),
     // An argument
     Arg(String),
     // End of options
@@ -26,7 +26,7 @@ impl Token {
 
     /// Returns `true` if the token is an option.
     pub fn is_option(&self) -> bool {
-        matches!(self, Token::Opt(_, _))
+        matches!(self, Token::Opt(_))
     }
 
     /// Returns `true` if the token is an argument.
@@ -43,7 +43,7 @@ impl Token {
     pub fn into_string(self) -> String {
         match self {
             Token::Cmd(s) => s,
-            Token::Opt(_, s) => s,
+            Token::Opt(s) => s,
             Token::Arg(s) => s,
             Token::EOO => String::from(END_OF_OPTIONS),
         }
@@ -54,7 +54,7 @@ impl Display for Token {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Token::Cmd(name) => write!(f, "{}", name),
-            Token::Opt(prefix, name) => write!(f, "{}{}", prefix, name),
+            Token::Opt(name) => write!(f, "{}", name),
             Token::Arg(name) => write!(f, "{}", name),
             Token::EOO => write!(f, "{}", END_OF_OPTIONS)
         }
@@ -118,19 +118,20 @@ impl Tokenizer {
 
             if context.is_option_prefixed(value) {
                 let OptionAndArgs {
-                    prefix,
-                    option,
+                    prefixed_option,
                     args,
                 } = try_split_option_and_args(context, value)?;
-
-                tokens.push(Token::Opt(prefix, option.clone()));
 
                 // Moves to the next value
                 iterator.next();
 
                 if let Some(args) = args {
+                    tokens.push(Token::Opt(prefixed_option.clone()));
                     tokens.extend(args.into_iter().map(Token::Arg));
-                } else if let Some(opt) = current_command.get_options().get(option.as_str()) {
+                } else if let Some(opt) = current_command
+                    .get_options()
+                    .get(context.trim_prefix(&prefixed_option)) {
+                    tokens.push(Token::Opt(prefixed_option.clone()));
                     for arg in opt.get_args() {
                         let max_arg_count = arg.get_value_count().max();
                         let mut count = 0;
@@ -151,6 +152,8 @@ impl Tokenizer {
                             }
                         }
                     }
+                } else {
+                    tokens.push(Token::Opt(prefixed_option.clone()));
                 }
             } else {
                 break;
@@ -177,24 +180,25 @@ impl Tokenizer {
 }
 
 struct OptionAndArgs {
-    prefix: String,
-    option: String,
-    args: Option<Vec<String>>,
+    prefixed_option: String,
+    args: Option<Vec<String>>
 }
 
-fn try_split_option_and_args(context: &Context, prefixed_option: &str) -> Result<OptionAndArgs> {
+fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAndArgs> {
     // Check if the value contains an assign operator like: --times=1
-    if let Some(arg_assign) = context.value_assign().cloned().find(|d| prefixed_option.contains(*d)) {
-        let option_and_args = prefixed_option
-            .split(arg_assign)
+    if let Some(assign_op) = context.value_assign().cloned().find(|d| value.contains(*d)) {
+        let option_and_args = value
+            .split(assign_op)
             .map(|s| s.to_string())
             .filter(|s| !s.is_empty())
             .collect::<Vec<String>>();
 
+        // We expect 2 parts: `option` = `arg1`
         return if option_and_args.len() != 2 {
             Err(Error::from(ErrorKind::InvalidExpression))
         } else {
-            let (prefix, option) = context.trim_option_prefix(&option_and_args[0]);
+            // We use the unprefixed option to do checks
+            let unprefixed_option = context.trim_prefix(&option_and_args[0]);
 
             let args = option_and_args[1]
                 .split(context.delimiter())
@@ -202,15 +206,15 @@ fn try_split_option_and_args(context: &Context, prefixed_option: &str) -> Result
                 .map(|s| s.to_string())
                 .collect::<Vec<String>>();
 
-            // Error when: =1,2,3
-            if option.is_empty() {
+            // Error when: `=1,2,3`
+            if unprefixed_option.is_empty() {
                 return Err(Error::new(
                     ErrorKind::InvalidExpression,
                     "no option specified",
                 ));
             }
 
-            // Error when: --option=
+            // Error when: `--option=`
             if args.is_empty() {
                 return Err(Error::new(
                     ErrorKind::InvalidExpression,
@@ -218,30 +222,29 @@ fn try_split_option_and_args(context: &Context, prefixed_option: &str) -> Result
                 ));
             }
 
-            // Error when: --option=1,,,3
+            // Error when: `--option=1,,,3`
             if args.iter().any(|s| s.is_empty()) {
                 return Err(Error::new(
                     ErrorKind::InvalidExpression,
-                    prefixed_option,
+                    value,
                 ));
             }
 
             Ok(OptionAndArgs {
-                prefix: prefix.to_owned(),
-                option: option.to_owned(),
+                prefixed_option: option_and_args[0].clone(),
                 args: Some(args),
             })
         };
     } else {
-        let (prefix, option) = context.trim_option_prefix(prefixed_option);
-
-        if option.is_empty() {
-            return Err(Error::new(ErrorKind::InvalidExpression, "option is empty"));
+        if context.trim_prefix(value).is_empty() {
+            return Err(Error::new(
+                ErrorKind::InvalidExpression,
+                "no option specified",
+            ));
         }
 
         Ok(OptionAndArgs {
-            prefix: prefix.to_owned(),
-            option: option.to_owned(),
+            prefixed_option: value.to_owned(),
             args: None,
         })
     }
@@ -269,9 +272,9 @@ mod tests {
 
         let tokens1 = tokenize(command.clone(), "--range 1 -e").unwrap();
         assert_eq!(tokens1.len(), 3);
-        assert_eq!(tokens1[0], Token::Opt("--".to_owned(), "range".to_owned()));
+        assert_eq!(tokens1[0], Token::Opt("--range".to_owned()));
         assert_eq!(tokens1[1], Token::Arg("1".to_owned()));
-        assert_eq!(tokens1[2], Token::Opt("-".to_owned(), "e".to_owned()));
+        assert_eq!(tokens1[2], Token::Opt("-e".to_owned()));
 
         let tokens2 = tokenize(command.clone(), "version").unwrap();
         assert_eq!(tokens2.len(), 1);
@@ -279,7 +282,7 @@ mod tests {
 
         let tokens3 = tokenize(command.clone(), "--range 0 10 -- a b c").unwrap();
         assert_eq!(tokens3.len(), 7);
-        assert_eq!(tokens3[0], Token::Opt("--".to_owned(), "range".to_owned()));
+        assert_eq!(tokens3[0], Token::Opt("--range".to_owned()));
         assert_eq!(tokens3[1], Token::Arg("0".to_owned()));
         assert_eq!(tokens3[2], Token::Arg("10".to_owned()));
         assert_eq!(tokens3[3], Token::EOO);
@@ -305,12 +308,9 @@ mod tests {
 
         let tokens1 = tokenize(command.clone(), "-t=1 --numbers=2,4,6 --").unwrap();
         assert_eq!(tokens1.len(), 7);
-        assert_eq!(tokens1[0], Token::Opt("-".to_owned(), "t".to_owned()));
+        assert_eq!(tokens1[0], Token::Opt("-t".to_owned()));
         assert_eq!(tokens1[1], Token::Arg("1".to_owned()));
-        assert_eq!(
-            tokens1[2],
-            Token::Opt("--".to_owned(), "numbers".to_owned())
-        );
+        assert_eq!(tokens1[2], Token::Opt("--numbers".to_owned()));
         assert_eq!(tokens1[3], Token::Arg("2".to_owned()));
         assert_eq!(tokens1[4], Token::Arg("4".to_owned()));
         assert_eq!(tokens1[5], Token::Arg("6".to_owned()));

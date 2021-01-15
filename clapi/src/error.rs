@@ -42,6 +42,25 @@ impl Error {
             Inner::Custom(custom) => &custom.kind,
         }
     }
+
+    /// Returns a copy of this `Error` adding a message at the end.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Error, ErrorKind};
+    ///
+    /// let error = Error::from(ErrorKind::InvalidArgument("xyz".to_string()));
+    /// let new_error = error.join(", expected a number");
+    /// assert_eq!(new_error.to_string(), "invalid argument: 'xyz', expected a number".to_string())
+    /// ```
+    pub fn join(&self, msg: &str) -> Self {
+        let source = match std::error::Error::source(self) {
+            Some(s) => s.to_string(),
+            None => self.to_string()
+        };
+
+        Error::new(self.kind().clone(), format!("{}{}", source, msg))
+    }
 }
 
 impl std::error::Error for Error {
@@ -86,7 +105,7 @@ pub enum ErrorKind {
     /// The expression is invalid.
     InvalidExpression,
     /// The option is not found in the command.
-    UnrecognizedOption(String, String),
+    UnrecognizedOption(String),
     /// The command is not found in the parent.
     UnrecognizedCommand(String),
     /// The option is required.
@@ -104,7 +123,7 @@ impl Display for ErrorKind {
             ErrorKind::InvalidArgument(s) => write!(f, "invalid argument: '{}'", s),
             ErrorKind::InvalidArgumentCount => write!(f, "invalid argument count"),
             ErrorKind::InvalidExpression => write!(f, "invalid expression"),
-            ErrorKind::UnrecognizedOption(p, s) => write!(f, "unrecognized option: '{}{}'", p, s),
+            ErrorKind::UnrecognizedOption(s) => write!(f, "unrecognized option: '{}'", s),
             ErrorKind::UnrecognizedCommand(s) => write!(f, "unrecognized command: '{}'", s),
             ErrorKind::MissingOption(s) => write!(f, "'{}' is required", s),
             ErrorKind::Other => write!(f, "unknown error"),

@@ -176,8 +176,8 @@ impl<'a> Parser<'a> {
     fn parse_options<'b, I>(&mut self, iterator: &mut Peekable<I>) -> Result<()> where I: Iterator<Item=&'b Token> + Clone {
         let command = self.command.as_ref().unwrap();
 
-        while let Some(Token::Opt(prefix, s)) = iterator.peek() {
-            if let Some(option) = get_option_prefixed(&self.context, command, prefix, s) {
+        while let Some(Token::Opt(s)) = iterator.peek() {
+            if let Some(option) = find_prefixed_option(&self.context, command, s) {
                 // Consumes option token
                 iterator.next();
 
@@ -249,7 +249,7 @@ impl<'a> Parser<'a> {
                     add_option(self.options.as_mut().unwrap(), option).unwrap();
                 }
             } else {
-                return Err(Error::from(ErrorKind::UnrecognizedOption(prefix.clone(), s.clone())));
+                return Err(Error::from(ErrorKind::UnrecognizedOption(s.clone())));
             }
         }
 
@@ -371,14 +371,16 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub(crate) fn get_option_prefixed<'a>(
+pub(crate) fn find_prefixed_option<'a>(
     context: &'a Context,
     command: &'a Command,
-    prefix: &'a str,
-    option: &'a str,
+    prefixed_option: &'a str,
 ) -> Option<CommandOption> {
-    if context.is_help(option) {
-        if let Some(opt) = command.get_options().get(option){
+    let unprefixed_option = context.trim_prefix(prefixed_option);
+
+    // Check if the option is a help, like: `--help`
+    if context.is_help(unprefixed_option) {
+        if let Some(opt) = command.get_options().get(unprefixed_option){
             panic!("duplicated option: `{}`", opt.get_name());
         }
 
@@ -390,15 +392,8 @@ pub(crate) fn get_option_prefixed<'a>(
         }
     }
 
-    if context.is_name_prefix(prefix) {
-        return command.get_options().get_by_name(option).cloned();
-    }
-
-    if context.is_alias_prefix(prefix) {
-        return command.get_options().get_by_alias(option).cloned();
-    }
-
-    None
+    // Finds and return the option from the context
+    context.get_option(unprefixed_option).cloned()
 }
 
 fn add_option(options: &mut OptionList, new_option: CommandOption) -> Result<()> {

@@ -115,11 +115,6 @@ impl CommandLine {
     }
 
     fn handle_error(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
-        // InvalidArgumentCount -> error + usage
-        // InvalidArgument -> error + usage
-        // UnrecognizedCommand -> error + suggestion
-        // UnrecognizedOption -> error + suggestion
-
         debug_assert!(parser.is_failed());
 
         if self.requires_help(Err(parser)) {
@@ -132,22 +127,11 @@ impl CommandLine {
             ErrorKind::FallthroughHelp => {
                 self.display_help(None)
             },
-            //ErrorKind::InvalidArgumentCount => {
             ErrorKind::InvalidArgumentCount | ErrorKind::InvalidArgument(_) => {
-                use std::error::Error as StdError;
-
                 let usage_message = self.get_help_message(None, MessageKind::Usage)?;
-                let error_message = match StdError::source(&error) {
-                    Some(source) => source.to_string(),
-                    None => error.to_string()
-                };
-
-                Err(Error::new(
-                    error.kind().clone(),
-                    format!("{}\n{}", error_message, usage_message))
-                )
+                Err(error.join(&format!("\n{}", &usage_message)))
             },
-            ErrorKind::UnrecognizedOption(_, _) if self.suggestions().is_some() => {
+            ErrorKind::UnrecognizedOption(_) if self.suggestions().is_some() => {
                 self.display_option_suggestions(parser, error)
             },
             ErrorKind::UnrecognizedCommand(_) if self.suggestions().is_some() => {
@@ -291,10 +275,11 @@ impl CommandLine {
     }
 
     fn display_option_suggestions(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
-        let option = match error.kind() {
-            ErrorKind::UnrecognizedOption(_, s) => s,
+        let prefixed_option = match error.kind() {
+            ErrorKind::UnrecognizedOption(s) => s,
             _ => unreachable!()
         };
+        let unprefixed_option = self.context.trim_prefix(prefixed_option);
 
         // SAFETY: We ensure `suggestions` is some before calling this method
         // check `CommandLine::handle_error`
@@ -307,7 +292,7 @@ impl CommandLine {
             .collect::<Vec<String>>();
 
         let msg = suggestions
-            .suggestions_for(option, &command_options)
+            .suggestions_for(unprefixed_option, &command_options)
             .map(|result| {
                 suggestions.suggestion_message_for(result.map(|s| {
                     let context = self.context();
@@ -319,17 +304,18 @@ impl CommandLine {
             .map(|s| format!("\n\n{}\n", s));
 
         if let Some(msg) = msg {
-            Err(Error::new(error.kind().clone(), msg))
+            Err(error.join(&msg))
         } else {
             Err(error)
         }
     }
 
     fn display_command_suggestions(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
-        let option = match error.kind() {
+        let prefixed_option = match error.kind() {
             ErrorKind::UnrecognizedCommand(s) => s,
             _ => unreachable!()
         };
+        let unprefixed_option = self.context.trim_prefix(prefixed_option);
 
         // SAFETY: We ensure `suggestions` is some before calling this method
         // check `CommandLine::handle_error`
@@ -341,7 +327,7 @@ impl CommandLine {
             .collect::<Vec<String>>();
 
         let msg = suggestions
-            .suggestions_for(option, &command_options)
+            .suggestions_for(unprefixed_option, &command_options)
             .map(|result| {
                 suggestions.suggestion_message_for(result.map(|s| {
                     let context = self.context();
@@ -353,7 +339,7 @@ impl CommandLine {
             .map(|s| format!("\n\n{}\n", s));
 
         if let Some(msg) = msg {
-            Err(Error::new(error.kind().clone(), msg))
+            Err(error.join(&msg))
         } else {
             Err(error)
         }

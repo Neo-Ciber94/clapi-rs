@@ -482,7 +482,7 @@ mod tests {
         assert!(matches!(err_kind("--range 1 2 3 -- "),ErrorKind::InvalidArgumentCount));
         assert!(matches!(err_kind("-r:0:1"), ErrorKind::InvalidExpression));
         assert!(matches!(err_kind("--range 10 b"), ErrorKind::InvalidArgument(x) if x == "b"));
-        assert!(matches!(err_kind("--C"), ErrorKind::UnrecognizedOption(p, o) if p == "--" && o == "C"));
+        assert!(matches!(err_kind("--C"), ErrorKind::UnrecognizedOption(o) if o == "--C"));
         assert!(matches!(err_kind("data write"), ErrorKind::UnrecognizedCommand(x) if x == "write"));
         assert!(matches!(err_kind("read"), ErrorKind::MissingOption(x) if x == "mode"));
         assert!(matches!(err_kind("read --mode lo"), ErrorKind::InvalidArgument(x) if x == "lo"));
