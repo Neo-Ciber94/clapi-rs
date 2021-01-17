@@ -387,6 +387,7 @@ impl Debug for Command {
                     "FnMut(&OptionList, &ArgumentList) -> Result<()>",
                 ),
             )
+            .field("is_hidden", &self.is_hidden())
             .field("children", &self.get_children())
             .finish()
     }

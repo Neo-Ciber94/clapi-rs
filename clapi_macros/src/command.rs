@@ -228,6 +228,8 @@ impl CommandAttrData {
         // Get the function body
         let body = self.get_body(vars.as_slice());
 
+        //todo: allow custom names for command, subcommands, options and args.
+
         // Instantiate `Command` or `RootCommand`
         let mut command = if self.is_child {
             let command_name = quote_expr!(self.fn_name.name());

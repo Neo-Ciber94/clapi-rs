@@ -486,9 +486,9 @@ impl Hash for Argument {
 impl Debug for Argument {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Argument")
-            .field("name", &self.name)
-            .field("description", &self.description)
-            .field("arg_count", &self.values_count)
+            .field("name", &self.get_name())
+            .field("description", &self.get_description())
+            .field("values_count", &self.get_values_count())
             .field(
                 "validator",
                 &if self.validator.is_some() {
@@ -497,7 +497,8 @@ impl Debug for Argument {
                     "None"
                 },
             )
-            .field("default_values", &self.default_values)
+            .field("default_values", &self.get_default_values())
+            .field("valid_values", &self.get_valid_values())
             .field("values", &self.values)
             .finish()
     }

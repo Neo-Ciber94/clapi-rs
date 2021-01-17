@@ -186,7 +186,7 @@ struct OptionAndArgs {
 
 fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAndArgs> {
     // Check if the value contains an assign operator like: --times=1
-    if let Some(assign_op) = context.value_assign().cloned().find(|d| value.contains(*d)) {
+    if let Some(assign_op) = context.assign_operators().cloned().find(|d| value.contains(*d)) {
         let option_and_args = value
             .split(assign_op)
             .map(|s| s.to_string())

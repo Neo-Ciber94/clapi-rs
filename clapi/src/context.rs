@@ -15,9 +15,17 @@ pub struct Context {
     suggestions: Option<Rc<dyn SuggestionProvider + 'static>>,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
-    value_assign: LinkedHashSet<char>, // fixme: assign_operators, assign_ops
+    assign_operators: LinkedHashSet<char>,
     delimiter: char,
 }
+
+/*
+struct Config {
+    enum ContextOptions {
+        AllowWhitespaces,
+    }
+}
+*/
 
 impl Context {
     /// Constructs a new `Context` with the `RootCommand`.
@@ -46,8 +54,8 @@ impl Context {
     }
 
     /// Returns an `Iterator` over the value assign `char`s.
-    pub fn value_assign(&self) -> impl ExactSizeIterator<Item = &char> {
-        self.value_assign.iter()
+    pub fn assign_operators(&self) -> impl ExactSizeIterator<Item = &char> {
+        self.assign_operators.iter()
     }
 
     /// Returns the delimiter used in this context.
@@ -163,7 +171,7 @@ impl Debug for Context {
             .field("suggestions", &debug_option(&self.suggestions, "SuggestionProvider"))
             .field("name_prefixes", &self.name_prefixes)
             .field("alias_prefixes", &self.alias_prefixes)
-            .field("arg_assign", &self.value_assign)
+            .field("arg_assign", &self.assign_operators)
             .field("delimiter", &self.delimiter)
             .finish()
     }
@@ -195,7 +203,7 @@ pub struct ContextBuilder {
     suggestions: Option<Rc<dyn SuggestionProvider>>,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
-    value_assign_chars: LinkedHashSet<char>,
+    assign_operators: LinkedHashSet<char>,
     delimiter: Option<char>,
 }
 
@@ -207,7 +215,7 @@ impl ContextBuilder {
             suggestions: None,
             name_prefixes: Default::default(),
             alias_prefixes: Default::default(),
-            value_assign_chars: Default::default(),
+            assign_operators: Default::default(),
             delimiter: None,
         }
     }
@@ -226,10 +234,10 @@ impl ContextBuilder {
         self
     }
 
-    pub fn value_assign(mut self, value: char) -> Self {
+    pub fn assign_operator(mut self, value: char) -> Self {
         // A char is always 4 bytes
         assert_valid_symbol("assign chars", value.encode_utf8(&mut [0;4]));
-        self.value_assign_chars.insert(value);
+        self.assign_operators.insert(value);
         self
     }
 
@@ -292,13 +300,12 @@ impl ContextBuilder {
                 self.alias_prefixes
             },
 
-            // Assign operator
-            value_assign: {
-                if self.value_assign_chars.is_empty() {
-                    self.value_assign_chars.insert('=');
-                    self.value_assign_chars.insert(':');
+            // Assign operators
+            assign_operators: {
+                if self.assign_operators.is_empty() {
+                    self.assign_operators.insert('=');
                 }
-                self.value_assign_chars
+                self.assign_operators
             },
         }
     }
@@ -326,8 +333,7 @@ mod tests {
         let context = Context::new(Command::root());
         assert!(context.is_name_prefix("--"));
         assert!(context.is_alias_prefix("-"));
-        assert!(context.value_assign().any(|c| *c == ':'));
-        assert!(context.value_assign().any(|c| *c == '='));
+        assert!(context.assign_operators().any(|c| *c == '='));
         assert_eq!(context.delimiter(), ',');
     }
 
@@ -336,13 +342,13 @@ mod tests {
         let context = Context::builder(Command::root())
             .name_prefix("#")
             .alias_prefix("##")
-            .value_assign('>')
+            .assign_operator('>')
             .delimiter('-')
             .build();
 
         assert!(context.is_name_prefix("#"));
         assert!(context.is_alias_prefix("##"));
-        assert!(context.value_assign().any(|c| *c == '>'));
+        assert!(context.assign_operators().any(|c| *c == '>'));
         assert_eq!(context.delimiter(), '-');
     }
 
@@ -361,7 +367,7 @@ mod tests {
     #[test]
     #[should_panic(expected="assign chars cannot contains whitespaces: `\t`")]
     fn invalid_assign_chars_test() {
-        Context::builder(Command::root()).value_assign('\t');
+        Context::builder(Command::root()).assign_operator('\t');
     }
 
     #[test]
