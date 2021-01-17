@@ -1,6 +1,6 @@
 #![allow(clippy::len_zero)]
 use crate::error::Result;
-use crate::{ValueCount, Error, ErrorKind};
+use crate::{ArgCount, Error, ErrorKind};
 use linked_hash_set::LinkedHashSet;
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display, Formatter};
@@ -16,7 +16,7 @@ use validator::Validator;
 pub struct Argument {
     name: Option<String>,
     description: Option<String>,
-    count: ValueCount,
+    values_count: Option<ArgCount>,
     validator: Option<Rc<dyn Validator>>,
     default_values: Vec<String>,
     valid_values: Vec<String>,
@@ -24,12 +24,12 @@ pub struct Argument {
 }
 
 impl Argument {
-    /// Constructs a new `Argument`.
+    /// Constructs a new `Argument` that takes 1 value.
     pub fn new() -> Self {
         Argument {
             name: None,
             description: None,
-            count: ValueCount::exactly(1),
+            values_count: None,
             validator: None,
             default_values: vec![],
             valid_values: vec![],
@@ -37,7 +37,7 @@ impl Argument {
         }
     }
 
-    /// Constructs a new `Argument` with the given name.
+    /// Constructs a new `Argument` with the given name that takes 1 value.
     ///
     /// # Panics:
     /// Panics if the argument `name` is blank or empty.
@@ -47,7 +47,7 @@ impl Argument {
         Argument {
             name: Some(name),
             description: None,
-            count: ValueCount::exactly(1),
+            values_count: None,
             validator: None,
             default_values: vec![],
             valid_values: vec![],
@@ -61,7 +61,7 @@ impl Argument {
     /// Panics if the argument `name` is blank or empty.
     #[inline]
     pub fn zero_or_one<S: Into<String>>(name: S) -> Self {
-        Self::with_name(name).value_count(0..=1)
+        Self::with_name(name).values_count(0..=1)
     }
 
     /// Constructs a new `Argument` that takes 0 or more values.
@@ -70,7 +70,7 @@ impl Argument {
     /// Panics if the argument `name` is blank or empty.
     #[inline]
     pub fn zero_or_more<S: Into<String>>(name: S) -> Self {
-        Self::with_name(name).value_count(0..)
+        Self::with_name(name).values_count(0..)
     }
 
     /// Constructs a new `Argument` that takes 1 or more values.
@@ -79,12 +79,12 @@ impl Argument {
     /// Panics if the argument `name` is blank or empty.
     #[inline]
     pub fn one_or_more<S: Into<String>>(name: S) -> Self {
-        Self::with_name(name).value_count(1..)
+        Self::with_name(name).values_count(1..)
     }
 
     /// Returns the name of this argument.
     pub fn get_name(&self) -> &str {
-        self.name.as_deref().unwrap_or("args")
+        self.name.as_deref().unwrap_or("arg")
     }
 
     /// Returns the description of this argument.
@@ -93,8 +93,8 @@ impl Argument {
     }
 
     /// Returns the number of values this argument takes.
-    pub fn get_value_count(&self) -> &ValueCount { // todo: get_num_of_values(), get_num_values()
-        &self.count
+    pub fn get_values_count(&self) -> ArgCount {
+        self.values_count.unwrap_or_else(|| ArgCount::one())
     }
 
     /// Returns the value `Validator` used by this argument.
@@ -156,11 +156,35 @@ impl Argument {
     ///
     /// # Panics
     /// If the value is exactly 0, an argument must take from 0 to 1 values.
-    pub fn value_count<A: Into<ValueCount>>(mut self, value_count: A) -> Self {
+    pub fn values_count<A: Into<ArgCount>>(mut self, value_count: A) -> Self {
         let count = value_count.into();
         assert!(!count.takes_exactly(0), "`{}` cannot takes 0 values", self.get_name());
-        self.count = count;
+        self.values_count = Some(count);
         self
+    }
+
+    /// Sets the min number of values this argument takes.
+    pub fn min_values(self, min: usize) -> Self {
+        match self.values_count {
+            Some(n) => {
+                self.values_count(n.with_min(min))
+            },
+            None => {
+                self.values_count(ArgCount::new(Some(min), None))
+            },
+        }
+    }
+
+    /// Sets the max number of values this argument takes.
+    pub fn max_values(self, max: usize) -> Self {
+        match self.values_count {
+            Some(n) => {
+                self.values_count(n.with_max(max))
+            },
+            None => {
+                self.values_count(ArgCount::new(None, Some(max)))
+            },
+        }
     }
 
     /// Sets the description of this argument.
@@ -259,9 +283,9 @@ impl Argument {
 
         assert!(self.get_values().is_empty(), "already contains values");
         assert!(
-            self.count.takes(values.len()),
+            self.get_values_count().takes(values.len()),
             "invalid value count expected {} but was {}",
-            self.count,
+            self.get_values_count(),
             values.len()
         );
 
@@ -299,13 +323,13 @@ impl Argument {
             .map(|s| s.to_string())
             .collect::<Vec<String>>();
 
-        if !self.count.takes(values.len()) {
+        if !self.get_values_count().takes(values.len()) {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
                 format!(
                     "`{}` expect {} but was {}",
                     self.get_name(),
-                    self.count,
+                    self.get_values_count(),
                     values.len()
                 ),
             ));
@@ -464,7 +488,7 @@ impl Debug for Argument {
         f.debug_struct("Argument")
             .field("name", &self.name)
             .field("description", &self.description)
-            .field("arg_count", &self.count)
+            .field("arg_count", &self.values_count)
             .field(
                 "validator",
                 &if self.validator.is_some() {
@@ -701,7 +725,7 @@ impl ArgumentList {
         if self.inner.iter().any(|a| a.has_default_values()) {
             if let Some(arg) = self.inner.iter()
                 .filter(|arg| !arg.has_default_values())
-                .find(|arg| !arg.count.is_exact()) {
+                .find(|arg| !arg.get_values_count().is_exact()) {
                 panic!("arguments is variable values is no allowed if there is default values: `{}` contains variable values", arg.get_name())
             }
         }
@@ -712,10 +736,10 @@ impl ArgumentList {
         // For example: we have 2 arguments: `numbers` (takes 1 to 3) and `ages` (takes 1 to 10)
         // if we pass: -1 0 2 25 10, is no possible to know to what argument the values are being
         // passed
-        if self.inner.iter().filter(|a| !a.get_value_count().is_exact()).count() > 1 {
+        if self.inner.iter().filter(|a| !a.get_values_count().is_exact()).count() > 1 {
             let arg = self.inner
                 .iter()
-                .filter(|a| !a.get_value_count().is_exact())
+                .filter(|a| !a.get_values_count().is_exact())
                 .nth(1)
                 .unwrap();
             panic!("multiple arguments that takes variable arguments is not allowed: `{}` contains variable values", arg.get_name());
@@ -992,16 +1016,26 @@ mod tests {
     fn arg_test() {
         let arg = Argument::with_name("number")
             .description("the values to use")
-            .value_count(1..)
+            .values_count(1..)
             .validator(parse_validator::<i64>())
             .default(1);
 
         assert_eq!(arg.get_name(), "number");
         assert_eq!(arg.get_description(), Some("the values to use"));
-        assert_eq!(arg.get_value_count(), &ValueCount::more_than(1));
+        assert_eq!(arg.get_values_count(), ArgCount::more_than(1));
         assert!(arg.get_validator().is_some());
         assert_eq!(arg.get_default_values()[0].clone(), "1".to_owned());
         assert!(!arg.is_set());
+    }
+
+    #[test]
+    fn arg_min_max_values_test() {
+        let arg = Argument::with_name("number")
+            .min_values(5)
+            .max_values(10);
+
+        assert_eq!(arg.get_values_count().min(), Some(5));
+        assert_eq!(arg.get_values_count().max(), Some(10));
     }
 
     #[test]
@@ -1065,7 +1099,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected="multiple arguments with default values is not allowed: `max` contains default values")]
     fn argument_list_with_default_values_test(){
         let mut args = ArgumentList::new();
         assert!(args.add(Argument::with_name("min").default(0)).is_ok());
@@ -1073,25 +1107,25 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected="arguments is variable values is no allowed if there is default values: `words` contains variable values")]
     fn argument_list_with_default_values_and_variable_args_test(){
         let mut args = ArgumentList::new();
         assert!(args.add(Argument::with_name("greeting").default("Hello")).is_ok());
-        assert!(args.add(Argument::with_name("words").value_count(1..)).is_ok());
+        assert!(args.add(Argument::with_name("words").values_count(1..)).is_ok());
     }
 
     #[test]
     fn argument_list_with_default_values_and_exact_args_test(){
         let mut args = ArgumentList::new();
         assert!(args.add(Argument::with_name("greeting").default("Hello")).is_ok());
-        assert!(args.add(Argument::with_name("words").value_count(3)).is_ok());
+        assert!(args.add(Argument::with_name("words").values_count(3)).is_ok());
     }
 
     #[test]
     #[should_panic]
     fn argument_list_with_variable_args_test(){
         let mut args = ArgumentList::new();
-        assert!(args.add(Argument::with_name("numbers").value_count(1..10)).is_ok());
-        assert!(args.add(Argument::with_name("characters").value_count(1..4)).is_ok());
+        assert!(args.add(Argument::with_name("numbers").values_count(1..10)).is_ok());
+        assert!(args.add(Argument::with_name("characters").values_count(1..4)).is_ok());
     }
 }

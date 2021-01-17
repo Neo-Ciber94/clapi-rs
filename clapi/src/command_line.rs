@@ -106,7 +106,18 @@ impl CommandLine {
             let options = parse_result.options();
             let args = parse_result.args();
             // Calls the handler and pass the arguments
-            (*handler)(options, args)
+            match (*handler)(options, args) {
+                Ok(_) => Ok(()),
+                Err(error) => {
+                    // Special case, the caller can returns `ErrorKind::FallthroughHelp`
+                    // to indicates the `CommandLine` to show a help message about the current command.
+                    if matches!(error.kind(), ErrorKind::FallthroughHelp) {
+                        self.display_help(None)
+                    } else {
+                        Err(error)
+                    }
+                }
+            }
         } else {
             // Shows a help message if there is no handler
             self.display_help(None)
@@ -121,11 +132,6 @@ impl CommandLine {
         }
 
         match error.kind() {
-            // Special case, the caller can returns `ErrorKind::FallthroughHelp`
-            // to indicates the `CommandLine` to show a help message about the current command
-            ErrorKind::FallthroughHelp => {
-                self.display_help(None)
-            },
             ErrorKind::InvalidArgumentCount | ErrorKind::InvalidArgument(_) if self.context.help().is_some() => {
                 let usage_message = self.get_help_message(None, MessageKind::Usage)?;
                 Err(error.join(&format!("\n{}", &usage_message)))
@@ -142,9 +148,9 @@ impl CommandLine {
         }
     }
 
-    /// Checks if the `ParseResult` or `Parser` require to show a help message.
-    /// We use `std::result::Result` where `Ok` is a completed parse operation
-    /// and `Err` is a failed one.
+    // Checks if the `ParseResult` or `Parser` requires to show a help message.
+    // We use `std::result::Result` where `Ok` is a completed parse operation
+    // and `Err` is a failed one.
     fn requires_help(&self, result: StdResult<&ParseResult, &Parser<'_>>) -> bool {
         let help = match self.context.help() {
             Some(h) => h.as_ref(),

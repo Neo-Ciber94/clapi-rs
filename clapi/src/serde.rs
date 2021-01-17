@@ -1,5 +1,5 @@
 use crate::serde::internal::{AnyToString, StringOrList, ValidType};
-use crate::{ValueCount, Argument, ArgumentList, Command, CommandOption, OptionList};
+use crate::{ArgCount, Argument, ArgumentList, Command, CommandOption, OptionList};
 use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::export::{Formatter, Result};
 use serde::ser::{SerializeSeq, SerializeStruct};
@@ -7,24 +7,24 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 
 // ArgCount
-impl Serialize for ValueCount {
+impl Serialize for ArgCount {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         let mut state = serializer.serialize_struct("ArgCount", 2)?;
-        state.serialize_field("min_count", &self.min_count())?;
-        state.serialize_field("max_count", &self.max_count())?;
+        state.serialize_field("min_values", &self.min())?;
+        state.serialize_field("max_values", &self.max())?;
         state.end()
     }
 }
 
-impl<'de> Deserialize<'de> for ValueCount {
+impl<'de> Deserialize<'de> for ArgCount {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        const FIELDS: &'static [&'static str] = &["min_count", "max_count"];
+        const FIELDS: &'static [&'static str] = &["min_values", "max_values"];
 
         enum Field {
             Min,
@@ -41,7 +41,7 @@ impl<'de> Deserialize<'de> for ValueCount {
                     type Value = Field;
 
                     fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-                        formatter.write_str("`min_count` or `max_count`")
+                        formatter.write_str("`min_values` or `max_values`")
                     }
 
                     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -49,8 +49,8 @@ impl<'de> Deserialize<'de> for ValueCount {
                         E: de::Error,
                     {
                         match v {
-                            "min_count" => Ok(Field::Min),
-                            "max_count" => Ok(Field::Max),
+                            "min_values" => Ok(Field::Min),
+                            "max_values" => Ok(Field::Max),
                             _ => Err(de::Error::unknown_field(v, FIELDS)),
                         }
                     }
@@ -60,8 +60,8 @@ impl<'de> Deserialize<'de> for ValueCount {
                         E: de::Error,
                     {
                         match v {
-                            b"min_count" => Ok(Field::Min),
-                            b"max_count" => Ok(Field::Max),
+                            b"min_values" => Ok(Field::Min),
+                            b"max_values" => Ok(Field::Max),
                             _ => {
                                 let value = String::from_utf8_lossy(v);
                                 Err(de::Error::unknown_field(&value, FIELDS))
@@ -76,7 +76,7 @@ impl<'de> Deserialize<'de> for ValueCount {
 
         struct ArgCountVisitor;
         impl<'de> Visitor<'de> for ArgCountVisitor {
-            type Value = ValueCount;
+            type Value = ArgCount;
 
             fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
                 formatter.write_str("struct ArgCount")
@@ -93,7 +93,7 @@ impl<'de> Deserialize<'de> for ValueCount {
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(1, &self))?;
 
-                Ok(ValueCount::new_checked(min, max).expect("min < max"))
+                Ok(ArgCount::new(min, max))
             }
 
             fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
@@ -107,13 +107,13 @@ impl<'de> Deserialize<'de> for ValueCount {
                     match key {
                         Field::Min => {
                             if min.is_some() {
-                                return Err(de::Error::duplicate_field("min_count"));
+                                return Err(de::Error::duplicate_field("min_values"));
                             }
                             min = Some(map.next_value()?);
                         }
                         Field::Max => {
                             if max.is_some() {
-                                return Err(de::Error::duplicate_field("max_count"));
+                                return Err(de::Error::duplicate_field("max_values"));
                             }
 
                             max = Some(map.next_value()?);
@@ -121,7 +121,7 @@ impl<'de> Deserialize<'de> for ValueCount {
                     }
                 }
 
-                Ok(ValueCount::new_checked(min.flatten(), max.flatten()).expect("min < max"))
+                Ok(ArgCount::new(min.flatten(), max.flatten()))
             }
         }
 
@@ -151,8 +151,8 @@ impl Serialize for Argument {
         let mut state = serializer.serialize_struct("Argument", 7)?;
         state.serialize_field("name", &self.get_name())?;
         state.serialize_field("description", &self.get_description())?;
-        state.serialize_field("min_count", &self.get_value_count().min_count())?;
-        state.serialize_field("max_count", &self.get_value_count().max_count())?;
+        state.serialize_field("min_values", &self.get_values_count().min())?;
+        state.serialize_field("max_values", &self.get_values_count().max())?;
         state.serialize_field("type", &get_valid_type(self.get_validator()))?;
         state.serialize_field("valid_values", &self.get_valid_values())?;
         state.serialize_field("default_values", &self.get_default_values())?;
@@ -168,8 +168,8 @@ impl<'de> Deserialize<'de> for Argument {
         const FIELDS: &'static [&'static str] = &[
             "name",
             "description",
-            "min_count",
-            "max_count",
+            "min_values",
+            "max_values",
             "type",
             "valid_values",
             "default_values",
@@ -195,7 +195,7 @@ impl<'de> Deserialize<'de> for Argument {
                     type Value = Field;
 
                     fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-                        formatter.write_str("`name`, `description`, `min_count`, `max_count`, `type`, `valid_values` or `default_values`")
+                        formatter.write_str("`name`, `description`, `min_values`, `max_values`, `type`, `valid_values` or `default_values`")
                     }
 
                     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -205,8 +205,8 @@ impl<'de> Deserialize<'de> for Argument {
                         match v {
                             "name" => Ok(Field::Name),
                             "description" => Ok(Field::Description),
-                            "min_count" => Ok(Field::MinCount),
-                            "max_count" => Ok(Field::MaxCount),
+                            "min_values" => Ok(Field::MinCount),
+                            "max_values" => Ok(Field::MaxCount),
                             "type" => Ok(Field::Type),
                             "valid_values" => Ok(Field::ValidValues),
                             "default_values" => Ok(Field::DefaultValues),
@@ -221,8 +221,8 @@ impl<'de> Deserialize<'de> for Argument {
                         match v {
                             b"name" => Ok(Field::Name),
                             b"description" => Ok(Field::Description),
-                            b"min_count" => Ok(Field::MinCount),
-                            b"max_count" => Ok(Field::MaxCount),
+                            b"min_values" => Ok(Field::MinCount),
+                            b"max_values" => Ok(Field::MaxCount),
                             b"type" => Ok(Field::Type),
                             b"valid_values" => Ok(Field::ValidValues),
                             b"default_values" => Ok(Field::DefaultValues),
@@ -250,6 +250,10 @@ impl<'de> Deserialize<'de> for Argument {
             where
                 A: SeqAccess<'de>,
             {
+                // let name: Option<String> = seq
+                //     .next_element()?
+                //     .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+
                 let name: String = seq
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(0, &self))?;
@@ -258,11 +262,11 @@ impl<'de> Deserialize<'de> for Argument {
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(1, &self))?;
 
-                let min_count: Option<usize> = seq
+                let min_values: Option<usize> = seq
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(2, &self))?;
 
-                let max_count: Option<usize> = seq
+                let max_values: Option<usize> = seq
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(3, &self))?;
 
@@ -278,19 +282,32 @@ impl<'de> Deserialize<'de> for Argument {
                     .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(6, &self))?;
 
+                // let mut argument = match name {
+                //     Some(name) => Argument::with_name(name),
+                //     None => Argument::new()
+                // };
+
                 let mut argument = Argument::with_name(name);
 
-                match (min_count, max_count) {
-                    (Some(min), Some(max)) => {
-                        argument = argument.value_count(ValueCount::new(min, max));
-                    },
-                    (Some(min), None) => {
-                        argument = argument.value_count(ValueCount::more_than(min));
-                    },
-                    (None, Some(max)) => {
-                        argument = argument.value_count(ValueCount::less_than(max));
+                // todo: remove
+                // match (min_values, max_values) {
+                //     (Some(min), Some(max)) => {
+                //         argument = argument.value_count(ValueCount::new(min, max));
+                //     },
+                //     (Some(min), None) => {
+                //         argument = argument.value_count(ValueCount::more_than(min));
+                //     },
+                //     (None, Some(max)) => {
+                //         argument = argument.value_count(ValueCount::less_than(max));
+                //     }
+                //     (None, None) => { /*By default an `Argument` takes 1 value */ }
+                // }
+
+                match (min_values, max_values) {
+                    (None, None) => { /*By default an `Argument` takes 1 value */ },
+                    (min, max) => {
+                        argument = argument.values_count(ArgCount::new(min, max))
                     }
-                    (None, None) => { /*By default an `Argument` takes 1 value */ }
                 }
 
                 if let Some(description) = description {
@@ -316,10 +333,11 @@ impl<'de> Deserialize<'de> for Argument {
             where
                 A: MapAccess<'de>,
             {
+                //let mut name: Option<Option<String>> = None;
                 let mut name: Option<String> = None;
                 let mut description: Option<Option<String>> = None;
-                let mut min_count: Option<Option<usize>> = None;
-                let mut max_count: Option<Option<usize>> = None;
+                let mut min_values: Option<Option<usize>> = None;
+                let mut max_values: Option<Option<usize>> = None;
                 let mut valid_type : Option<Option<ValidType>> = None;
                 let mut valid_values: Option<Vec<String>> = None;
                 let mut default_values: Option<Vec<String>> = None;
@@ -341,18 +359,18 @@ impl<'de> Deserialize<'de> for Argument {
                             description = Some(map.next_value()?);
                         }
                         Field::MinCount => {
-                            if min_count.is_some() {
-                                return Err(de::Error::duplicate_field("min_count"));
+                            if min_values.is_some() {
+                                return Err(de::Error::duplicate_field("min_values"));
                             }
 
-                            min_count = Some(map.next_value()?);
+                            min_values = Some(map.next_value()?);
                         }
                         Field::MaxCount => {
-                            if max_count.is_some() {
-                                return Err(de::Error::duplicate_field("max_count"));
+                            if max_values.is_some() {
+                                return Err(de::Error::duplicate_field("max_values"));
                             }
 
-                            max_count = Some(map.next_value()?);
+                            max_values = Some(map.next_value()?);
                         }
                         Field::Type => {
                             if valid_type.is_some() {
@@ -388,24 +406,36 @@ impl<'de> Deserialize<'de> for Argument {
                     }
                 }
 
-                let mut argument =
-                    Argument::with_name(name.ok_or_else(|| de::Error::missing_field("name"))?);
+                // let mut argument = match name {
+                //     Some(Some(name)) => Argument::with_name(name),
+                //     _ => Argument::new()
+                // };
+                let mut argument = Argument::with_name(
+                    name.ok_or_else(|| de::Error::missing_field("name"))?
+                );
 
                 if let Some(Some(description)) = description {
                     argument = argument.description(description);
                 }
 
-                match (min_count.flatten(), max_count.flatten()) {
-                    (Some(min), Some(max)) => {
-                        argument = argument.value_count(ValueCount::new(min, max));
-                    },
-                    (Some(min), None) => {
-                        argument = argument.value_count(ValueCount::more_than(min));
-                    },
-                    (None, Some(max)) => {
-                        argument = argument.value_count(ValueCount::less_than(max));
+                // match (min_values.flatten(), max_values.flatten()) {
+                //     (Some(min), Some(max)) => {
+                //         argument = argument.value_count(ValueCount::new(min, max));
+                //     },
+                //     (Some(min), None) => {
+                //         argument = argument.value_count(ValueCount::more_than(min));
+                //     },
+                //     (None, Some(max)) => {
+                //         argument = argument.value_count(ValueCount::less_than(max));
+                //     }
+                //     (None, None) => { /*By default an `Argument` takes 1 value */ }
+                // }
+
+                match (min_values.flatten(), max_values.flatten()) {
+                    (None, None) => { /*By default an `Argument` takes 1 value */ },
+                    (min, max) => {
+                        argument = argument.values_count(ArgCount::new(min, max))
                     }
-                    (None, None) => { /*By default an `Argument` takes 1 value */ }
                 }
 
                 if let Some(Some(valid_type)) = valid_type {
@@ -469,6 +499,12 @@ impl<'de> Deserialize<'de> for ArgumentList {
                 }
                 Ok(args)
             }
+
+            // fn visit_map<A>(self, map: A) -> Result<Self::Value, <A as MapAccess<'de>>::Error>
+            //     where A: MapAccess<'de>, {
+            //     let mut args = ArgumentList::new();
+            //     Ok(args)
+            // }
         }
 
         deserializer.deserialize_seq(ArgumentListVisitor)
@@ -1122,8 +1158,8 @@ mod internal {
 
     /// Declares the enum `ValidType` used for serialize the type of an argument.
     macro_rules! declare_impl_valid_type {
-        ('primitives $($ty:ty => $variant:ident),+
-            'other $($ty2:ty => $variant2:ident $name:literal),* $(,)?) => {
+        ('primitives: $($ty:ty => $variant:ident),+
+            'other: $($ty2:ty => $variant2:ident $name:literal),* $(,)?) => {
 
             #[serde(rename_all="lowercase")]
             #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1187,7 +1223,7 @@ mod internal {
     }
 
     declare_impl_valid_type!{
-        'primitives
+        'primitives:
         i8 => I8,
         i16 => I16,
         i32 => I32,
@@ -1205,7 +1241,7 @@ mod internal {
         bool => Bool,
         char => Char
 
-        'other
+        'other:
         String => String "string",
         IpAddr => IpAddress "ip_address",
         SocketAddr => SocketAddress "socket_address",
@@ -1217,12 +1253,12 @@ mod tests {
 
     #[cfg(test)]
     mod arg_count_tests {
-        use crate::ValueCount;
+        use crate::ArgCount;
         use serde_test::Token;
 
         #[test]
         fn arg_count_test1() {
-            let arg_count = ValueCount::new(2, 10);
+            let arg_count = ArgCount::new(Some(2), Some(10));
             serde_test::assert_tokens(
                 &arg_count,
                 &[
@@ -1230,10 +1266,10 @@ mod tests {
                         name: "ArgCount",
                         len: 2,
                     },
-                    Token::Str("min_count"),
+                    Token::Str("min_values"),
                     Token::Some,
                     Token::U64(2),
-                    Token::Str("max_count"),
+                    Token::Str("max_values"),
                     Token::Some,
                     Token::U64(10),
                     Token::StructEnd,
@@ -1243,7 +1279,7 @@ mod tests {
 
         #[test]
         fn arg_count_test2() {
-            let arg_count = ValueCount::less_than(10);
+            let arg_count = ArgCount::less_than(10);
             serde_test::assert_tokens(
                 &arg_count,
                 &[
@@ -1251,9 +1287,9 @@ mod tests {
                         name: "ArgCount",
                         len: 2,
                     },
-                    Token::Str("min_count"),
+                    Token::Str("min_values"),
                     Token::None,
-                    Token::Str("max_count"),
+                    Token::Str("max_values"),
                     Token::Some,
                     Token::U64(10),
                     Token::StructEnd,
@@ -1263,7 +1299,7 @@ mod tests {
 
         #[test]
         fn arg_count_test3() {
-            let arg_count = ValueCount::any();
+            let arg_count = ArgCount::any();
             serde_test::assert_tokens(
                 &arg_count,
                 &[
@@ -1271,9 +1307,9 @@ mod tests {
                         name: "ArgCount",
                         len: 2,
                     },
-                    Token::Str("min_count"),
+                    Token::Str("min_values"),
                     Token::None,
-                    Token::Str("max_count"),
+                    Token::Str("max_values"),
                     Token::None,
                     Token::StructEnd,
                 ],
@@ -1293,7 +1329,7 @@ mod tests {
         fn argument_test() {
             let arg = Argument::with_name("numbers")
                 .description("A set of numbers")
-                .value_count(1..=10)
+                .values_count(1..=10)
                 .validator(parse_validator::<i64>())
                 .valid_values(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
                 .defaults(&[1, 2, 3]);
@@ -1302,8 +1338,8 @@ mod tests {
                 &arg,
                 ArgTokens::new("numbers")
                     .description("A set of numbers")
-                    .min_count(1)
-                    .max_count(10)
+                    .min_values(1)
+                    .max_values(10)
                     .valid_type(ValidType::I64)
                     .valid_values(vec!["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"])
                     .default_values(vec!["1", "2", "3"])
@@ -1370,14 +1406,14 @@ mod tests {
         fn argument_list() {
             let mut args = ArgumentList::new();
             args.add(Argument::with_name("A").description("a")).unwrap();
-            args.add(Argument::with_name("B").value_count(2)).unwrap();
+            args.add(Argument::with_name("B").values_count(2)).unwrap();
             args.add(Argument::with_name("C").valid_values(&['a', 'b', 'c']))
                 .unwrap();
 
             let mut tokens = Vec::new();
             tokens.push(Token::Seq { len: Some(3) });
             tokens.extend(ArgTokens::new("A").value_count(1).description("a").to_tokens());
-            tokens.extend(ArgTokens::new("B").min_count(2).max_count(2).to_tokens());
+            tokens.extend(ArgTokens::new("B").min_values(2).max_values(2).to_tokens());
             tokens.extend(ArgTokens::new("C").value_count(1).valid_values(vec!["a", "b", "c"]).to_tokens());
             tokens.push(Token::SeqEnd);
 
@@ -1387,7 +1423,7 @@ mod tests {
 
     #[cfg(test)]
     mod options_tests {
-        use crate::{ValueCount, Argument, CommandOption, OptionList};
+        use crate::{ArgCount, Argument, CommandOption, OptionList};
         use serde_test::Token;
         use crate::serde::serde_test_utils::{OptionTokens, ArgTokens};
 
@@ -1461,7 +1497,7 @@ mod tests {
 
             let arg = option.get_arg().unwrap();
             assert_eq!(arg.get_name(), "color");
-            assert_eq!(arg.get_value_count(), &ValueCount::new(1, 1));
+            assert_eq!(arg.get_values_count(), ArgCount::one());
             assert_eq!(
                 arg.get_valid_values(),
                 &["red".to_owned(), "green".to_owned(), "blue".to_owned()]
@@ -1497,7 +1533,7 @@ mod tests {
 
     #[cfg(test)]
     mod command_tests {
-        use crate::{ValueCount, Argument, Command, CommandOption};
+        use crate::{ArgCount, Argument, Command, CommandOption};
         use crate::serde::serde_test_utils::{CommandTokens, OptionTokens, ArgTokens};
 
         #[test]
@@ -1514,9 +1550,8 @@ mod tests {
                     CommandOption::new("color")
                         .arg(Argument::with_name("color").valid_values(vec!["red", "green", "blue"])),
                 )
-                .arg(Argument::with_name("values").value_count(1..));
+                .arg(Argument::with_name("values").values_count(1..));
 
-            println!("{:#?}", command);
             serde_test::assert_tokens(
                 &command,
                 CommandTokens::new("echo")
@@ -1532,7 +1567,7 @@ mod tests {
                         .arg(ArgTokens::new("color")
                             .value_count(1)
                             .valid_values(vec!["red", "green", "blue"])))
-                    .arg(ArgTokens::new("values").min_count(1))
+                    .arg(ArgTokens::new("values").min_values(1))
                     .to_tokens()
                     .as_slice()
             );
@@ -1579,7 +1614,7 @@ mod tests {
                     "args" : [
                         {
                             "name" : "values",
-                            "min_count" : 1
+                            "min_values" : 1
                         }
                     ]
                 }
@@ -1610,7 +1645,7 @@ mod tests {
 
             let arg = command.get_arg().unwrap();
             assert_eq!(arg.get_name(), "values");
-            assert_eq!(arg.get_value_count(), &ValueCount::more_than(1));
+            assert_eq!(arg.get_values_count(), ArgCount::more_than(1));
         }
     }
 }
@@ -1741,8 +1776,8 @@ mod serde_test_utils {
     pub struct ArgTokens {
         name: &'static str,
         description: Option<&'static str>,
-        min_count: Option<u64>,
-        max_count: Option<u64>,
+        min_values: Option<u64>,
+        max_values: Option<u64>,
         valid_type: Option<ValidType>,
         valid_values: Vec<&'static str>,
         default_values: Vec<&'static str>,
@@ -1753,8 +1788,8 @@ mod serde_test_utils {
             ArgTokens {
                 name,
                 description: None,
-                min_count: None,
-                max_count: None,
+                min_values: None,
+                max_values: None,
                 valid_type: None,
                 valid_values: vec![],
                 default_values: vec![]
@@ -1766,19 +1801,19 @@ mod serde_test_utils {
             self
         }
 
-        pub fn min_count(mut self, min_count: u64) -> Self {
-            self.min_count = Some(min_count);
+        pub fn min_values(mut self, min_values: u64) -> Self {
+            self.min_values = Some(min_values);
             self
         }
 
-        pub fn max_count(mut self, max_count: u64) -> Self {
-            self.max_count = Some(max_count);
+        pub fn max_values(mut self, max_values: u64) -> Self {
+            self.max_values = Some(max_values);
             self
         }
 
         pub fn value_count(mut self, value_count: u64) -> Self {
-            self.min_count = Some(value_count);
-            self.max_count = Some(value_count);
+            self.min_values = Some(value_count);
+            self.max_values = Some(value_count);
             self
         }
 
@@ -1817,20 +1852,20 @@ mod serde_test_utils {
                 tokens.push(Token::None);
             }
 
-            // Argument min count
-            tokens.push(Token::Str("min_count"));
-            if let Some(min_count) = self.min_count {
+            // Argument min values
+            tokens.push(Token::Str("min_values"));
+            if let Some(min_values) = self.min_values {
                 tokens.push(Token::Some);
-                tokens.push(Token::U64(min_count))
+                tokens.push(Token::U64(min_values))
             } else {
                 tokens.push(Token::None);
             }
 
-            // Argument max count
-            tokens.push(Token::Str("max_count"));
-            if let Some(max_count) = self.max_count {
+            // Argument max values
+            tokens.push(Token::Str("max_values"));
+            if let Some(max_values) = self.max_values {
                 tokens.push(Token::Some);
-                tokens.push(Token::U64(max_count))
+                tokens.push(Token::U64(max_values))
             } else {
                 tokens.push(Token::None);
             }

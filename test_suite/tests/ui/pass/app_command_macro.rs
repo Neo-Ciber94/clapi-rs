@@ -3,8 +3,7 @@ fn main(){
     let _app : clapi::Command = clapi::app! { @@command MyApp =>
         (description => "Sums a set of numbers")
         (usage =>
-        "\
-        USAGE:
+        "
             command [--negate] [--times] <numbers...>
             command author [--count]
             command version
@@ -13,8 +12,7 @@ fn main(){
             (alias => "t", "T")
             (description => "Number of times to sum the numbers")
             (required => false)
-            (@arg times =>
-                (description => "Number of times")
+            (@arg =>
                 (count => 1)
                 (type => u64)
             )

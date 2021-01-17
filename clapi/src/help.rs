@@ -219,7 +219,7 @@ impl<'a> DefaultHelp<'a> {
 
                 for arg in command.get_args() {
                     let arg_name = arg.get_name().to_uppercase();
-                    if arg.get_value_count().max() > 1 {
+                    if arg.get_values_count().max_or_default() > 1 {
                         write!(buf, " [{}]...", arg_name).unwrap();
                     } else {
                         write!(buf, " [{}] ", arg_name).unwrap();
@@ -358,14 +358,14 @@ pub(crate) fn after_help_message(context: &Context) -> Option<String> {
 
 pub(crate) fn to_command<H: Help + ?Sized>(help: &H) -> Command {
     Command::new(help.name())
-        .arg(Argument::with_name("subcommand").value_count(0..=1))
+        .arg(Argument::with_name("subcommand").values_count(0..=1))
         .hidden(true)
         .description(help.description())
 }
 
 pub(crate) fn to_option<H: Help + ?Sized>(help: &H) -> CommandOption {
     CommandOption::new(help.name())
-        .arg(Argument::with_name("subcommand").value_count(0..=1))
+        .arg(Argument::with_name("subcommand").values_count(0..=1))
         .description(help.description())
         .hidden(true)
         .then_apply(|opt| {

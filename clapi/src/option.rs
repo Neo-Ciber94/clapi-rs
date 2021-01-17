@@ -470,13 +470,13 @@ mod tests {
 
         let opt1 = CommandOption::new("version")
             .alias("v")
-            .arg(Argument::with_name("version").value_count(1));
+            .arg(Argument::with_name("version").values_count(1));
 
         let opt2 = CommandOption::new("author")
             .alias("a")
-            .arg(Argument::with_name("x").value_count(0..));
+            .arg(Argument::with_name("x").values_count(0..));
 
-        let opt3 = CommandOption::new("verbose").arg(Argument::with_name("x").value_count(1..3));
+        let opt3 = CommandOption::new("verbose").arg(Argument::with_name("x").values_count(1..3));
 
         options.add(opt1).unwrap();
         options.add(opt2).unwrap();

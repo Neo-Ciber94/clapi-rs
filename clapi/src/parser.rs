@@ -202,7 +202,7 @@ impl<'a> Parser<'a> {
                         }
 
                         let mut values = Vec::new();
-                        let max_count = arg.get_value_count().max();
+                        let max_count = arg.get_values_count().max_or_default();
                         let mut count = 0;
 
                         while count < max_count {
@@ -279,7 +279,7 @@ impl<'a> Parser<'a> {
             }
 
             if args_iter.peek().is_some() {
-                let max_count = arg.get_value_count().max();
+                let max_count = arg.get_values_count().max_or_default();
                 let mut count = 0;
 
                 while count < max_count {
@@ -358,7 +358,7 @@ impl<'a> Parser<'a> {
 
             for arg in args {
                 // To avoid overflow
-                match required_values.checked_add(arg.get_value_count().max()) {
+                match required_values.checked_add(arg.get_values_count().max_or_default()) {
                     None => return false,
                     Some(n) => required_values = n
                 }

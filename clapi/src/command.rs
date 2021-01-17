@@ -546,7 +546,7 @@ mod tests {
 
     #[test]
     fn args_test() {
-        let cmd = Command::new("time").arg(Argument::with_name("arg").value_count(1));
+        let cmd = Command::new("time").arg(Argument::with_name("arg").values_count(1));
 
         assert_eq!(cmd.get_arg().unwrap(), &Argument::with_name("arg"));
     }

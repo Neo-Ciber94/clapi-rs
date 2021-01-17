@@ -73,7 +73,7 @@ macro_rules! crate_version {
 ///     )
 ///     (@option times =>
 ///         (description => "Number of times to sum the values")
-///         (@arg times =>
+///         (@arg =>
 ///             (type => u64)
 ///             (default => 1)
 ///         )
@@ -343,13 +343,24 @@ macro_rules! app {
         }
     };
 
-    // Option argument
+    // Option with named argument
     // clapi::app! { (@option => (@arg "value" => ( ... )) }
     (@option ($option_builder:expr) (@arg $arg_name:expr $(=> $($rest:tt)+)?) $($tt:tt)*) => {
         $crate::app!{
             @option
             ($option_builder.arg(
                 $crate::app!{ @arg ($crate::Argument::with_name($arg_name)) $($($rest)+)? }
+            )) $($tt)*
+        }
+    };
+
+    // Option argument
+    // clapi::app! { (@option => (@arg => ( ... )) }
+    (@option ($option_builder:expr) (@arg $(=> $($rest:tt)+)?) $($tt:tt)*) => {
+        $crate::app!{
+            @option
+            ($option_builder.arg(
+                $crate::app!{ @arg ($crate::Argument::new()) $($($rest)+)? }
             )) $($tt)*
         }
     };
@@ -408,7 +419,7 @@ macro_rules! app {
     // clapi::app! { (@arg => (count => 1..) }
     (@arg ($arg_builder:expr) (count => $count:expr) $($tt:tt)*) => {
         $crate::app!{
-            @arg ($arg_builder.value_count($count)) $($tt)*
+            @arg ($arg_builder.values_count($count)) $($tt)*
         }
     };
 

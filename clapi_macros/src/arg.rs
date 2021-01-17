@@ -173,7 +173,7 @@ impl ArgAttrData {
         let max = quote_option!(max);
 
         let value_count = quote! {
-            .value_count(clapi::ValueCount::new_checked(#min, #max).expect("min < max"))
+            .values_count(clapi::ArgCount::new(#min, #max))
         };
 
         // Argument default values
