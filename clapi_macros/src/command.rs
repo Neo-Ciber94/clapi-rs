@@ -31,6 +31,7 @@ use crate::utils::NamePath;
 #[derive(Debug, Clone)]
 pub struct CommandAttrData {
     fn_name: NamePath,
+    name: Option<String>,
     attribute: NameValueAttribute,
     is_child: bool,
     version: Option<String>,
@@ -47,11 +48,12 @@ pub struct CommandAttrData {
 }
 
 impl CommandAttrData {
-    fn new(name: NamePath, attribute: NameValueAttribute, is_child: bool) -> Self {
+    fn new(fn_name: NamePath, attribute: NameValueAttribute, is_child: bool) -> Self {
         CommandAttrData {
-            fn_name: name,
+            fn_name,
             is_child,
             attribute,
+            name: None,
             version: None,
             description: None,
             usage: None,
@@ -62,7 +64,7 @@ impl CommandAttrData {
             vars: vec![],
             args: vec![],
             help_impl: None,
-            is_hidden: None
+            is_hidden: None,
         }
     }
 
@@ -76,8 +78,14 @@ impl CommandAttrData {
         imp::command_from_path(args, func, path)
     }
 
+    pub fn set_name(&mut self, name: String) {
+        assert!(!name.trim().is_empty(), "command and subcommand `name` cannot be empty");
+        assert!(name.trim().chars().all(|c| !c.is_whitespace()), "command and subcommand `name` cannot contain whitespaces");
+        self.name = Some(name);
+    }
+
     pub fn set_version(&mut self, version: String) {
-        assert!(!version.is_empty(), "command version cannot be empty");
+        assert!(!version.trim().is_empty(), "`version` cannot be empty");
         self.version = Some(version);
     }
 
@@ -202,16 +210,13 @@ impl CommandAttrData {
         let description = self
             .description
             .as_ref()
-            .map(|s| quote! { #s })
-            .map(|tokens| quote! { .description(#tokens)});
+            .map(|s| quote! { .description(#s) });
 
-        // todo: merge
         // Command usage
         let usage = self
             .usage
             .as_ref()
-            .map(|s| quote! { #s })
-            .map(|tokens| quote! { .usage(#tokens)});
+            .map(|s| quote! { .usage(#s) });
 
         // Command hidden
         let hidden = self.is_hidden
@@ -222,20 +227,24 @@ impl CommandAttrData {
         let help = self
             .help
             .as_ref()
-            .map(|s| quote! { #s })
-            .map(|tokens| quote! { .help(#tokens)});
+            .map(|s| quote! { .help(#s) });
 
         // Get the function body
         let body = self.get_body(vars.as_slice());
 
-        //todo: allow custom names for command, subcommands, options and args.
-
         // Instantiate `Command` or `RootCommand`
-        let mut command = if self.is_child {
-            let command_name = quote_expr!(self.fn_name.name());
-            quote! { clapi::Command::new(#command_name) }
-        } else {
-            quote! { clapi::Command::root() }
+        let mut command = match &self.name {
+            Some(name) => {
+                quote! { clapi::Command::new(#name) }
+            },
+            None => {
+                if self.is_child {
+                    let fn_name = quote_expr!(self.fn_name.name());
+                    quote! { clapi::Command::new(#fn_name) }
+                } else {
+                    quote! { clapi::Command::root() }
+                }
+            }
         };
 
         // Show version
@@ -619,33 +628,40 @@ mod imp {
 
         for (key, value) in &name_value_attr {
             match key.as_str() {
+                crate::attr::NAME => {
+                    let name = value
+                        .to_string_literal()
+                        .expect("`name` must be a string literal");
+
+                    command.set_name(name);
+                },
                 crate::attr::PARENT if is_child => {},
                 crate::attr::DESCRIPTION => {
                     let description = value
-                        .clone()
                         .to_string_literal()
                         .expect("`description` must be a string literal");
+
                     command.set_description(description);
                 }
                 crate::attr::USAGE => {
                     let usage = value
-                        .clone()
                         .to_string_literal()
                         .expect("`usage` must be a string literal");
+
                     command.set_usage(usage);
                 },
                 crate::attr::HIDDEN => {
                     let hidden = value
-                        .clone()
                         .to_bool_literal()
                         .expect("`hidden` must be a bool literal");
+
                     command.set_hidden(hidden);
                 },
                 crate::attr::HELP => {
                     let help = value
-                        .clone()
                         .to_string_literal()
                         .expect("`help` must be a string literal");
+
                     command.set_help(help);
                 }
                 crate::attr::VERSION => {

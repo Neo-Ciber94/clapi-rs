@@ -26,8 +26,10 @@ mod var;
 /// This is the entry point of a command line app, typically the marked function is `main`.
 ///
 /// # Options:
+/// - `name`: Name of the command, by default is the `executable` name.
 /// - `description`: Description of the command.
-/// - `about`: Information about the command.
+/// - `usage`: Information of the usage of the command.
+/// - `help`: Help information about the command.
 /// - `version`: Version of the command-line app.
 ///
 /// # Example:
@@ -53,8 +55,10 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// This is the entry point of a command line app, typically the marked function is `main`.
 ///
 /// # Options:
+/// - `name`: Name of the command, by default is the `executable` name.
 /// - `description`: Description of the command.
-/// - `about`: Information about the command.
+/// - `usage`: Information of the usage of the command.
+/// - `help`: Help information about the command.
 /// - `version`: Version of the command-line app.
 ///
 /// # Example:
@@ -85,9 +89,11 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// When compiling for `nightly` rust any free function or inner can be marked as a `subcommand`.
 ///
 /// # Options:
+/// - `name`: Name of the subcommand, by default is the function name.
 /// - `description`: Description of the command.
+/// - `usage`: Information of the usage of the command.
 /// - `help`: Help information about the command.
-/// - `version`: Version of the subcommand.
+/// - `version`: Version of the command-line app.
 ///
 /// # Example:
 /// ```ignore
@@ -132,13 +138,16 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
 /// `description` or `min`, `max`, `default` and `values` arguments.
 ///
 /// # Options
-/// - `arg`: Name of the argument.
+/// - `name`: Name of the option, by default is the function argument name.
+/// - `arg`: Name of the option argument, by default is the function argument name.
 /// - `alias`: Alias of the function argument.
 /// - `description`: Description of the option.
 /// - `min`: Min number of values the option takes.
 /// - `max`: Max number of values the option takes.
 /// - `default`: Default value(s) of the option.
 /// - `values`: Valid values of the option.
+/// - `hidden`: If the option is hidden for the help.
+/// - `multiple`: If the option allow multiple declarations.
 ///
 /// Function arguments can be declared as the following types:
 /// - Any type that implement `FromStr`.
@@ -175,7 +184,7 @@ pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
 /// `#[arg(name)]`.
 ///
 /// # Options
-/// - `arg`: Name of the argument.
+/// - `name`: Name of the argument, by default if the function argument name.
 /// - `min`: Min number of values the argument takes.
 /// - `max`: Max number of values the argument takes.
 /// - `default`: Default value(s) of the argument.

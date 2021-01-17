@@ -1,0 +1,7 @@
+error: custom attribute panicked
+ --> $DIR/invalid_subcommand_name.rs:3:1
+  |
+3 | #[command]
+  | ^^^^^^^^^^
+  |
+  = help: message: `name` must be a string literal

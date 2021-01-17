@@ -34,6 +34,9 @@ pub struct OptionAttrData {
 
 impl OptionAttrData {
     pub fn new(name: String) -> Self {
+        assert!(!name.trim().is_empty(), "option `name` cannot be empty");
+        assert!(name.trim().chars().all(|c| !c.is_whitespace()), "option `name` cannot contains whitespaces");
+
         OptionAttrData {
             name,
             attribute: None,
@@ -52,6 +55,13 @@ impl OptionAttrData {
         if let Some(att) = &arg_data.name_value {
             for (key, value) in att {
                 match key.as_str() {
+                    attr::NAME => {
+                        let name = value
+                            .to_string_literal()
+                            .expect("option `name` must be a string literal");
+
+                        option.set_name(name);
+                    },
                     attr::ARG => {
                         let arg_name = value
                             .to_string_literal()
@@ -145,6 +155,13 @@ impl OptionAttrData {
         self.name.as_str()
     }
 
+    pub fn set_name(&mut self, name: String) {
+        assert!(!name.trim().is_empty(), "option `name` cannot be empty");
+        assert!(name.trim().chars().all(|c| !c.is_whitespace()), "option `name` cannot contains whitespaces");
+
+        self.name = name;
+    }
+
     pub fn set_alias(&mut self, alias: String) {
         self.alias = Some(alias);
     }
@@ -192,12 +209,12 @@ impl OptionAttrData {
         // Option is hidden
         let is_hidden = self.is_hidden
             .as_ref()
-            .map(|value| quote! { .hidden(#value)} );
+            .map(|value| quote! { .hidden(#value) } );
 
         // Option allow multiple
         let allow_multiple = self.allow_multiple
             .as_ref()
-            .map(|value| quote! { .multiple(#value)} );
+            .map(|value| quote! { .multiple(#value) } );
 
         let name = quote_expr!(self.name);
 

@@ -56,10 +56,10 @@ impl ArgAttrData {
             if let Some(attribute) = name_value {
                 for (key, value) in attribute {
                     match key.as_str() {
-                        attr::ARG => {
+                        attr::NAME => {
                             let name = value
                                 .to_string_literal()
-                                .expect("arg `arg` must be a string literal");
+                                .expect("arg `name` must be a string literal");
 
                             arg.set_name(name);
                         }
@@ -110,6 +110,9 @@ impl ArgAttrData {
     }
 
     pub fn set_name(&mut self, name: String) {
+        assert!(!name.trim().is_empty(), "arg `name` cannot be empty");
+        assert!(name.trim().chars().all(|c| !c.is_whitespace()), "arg `name` cannot contains whitespaces");
+
         self.name = name;
     }
 
