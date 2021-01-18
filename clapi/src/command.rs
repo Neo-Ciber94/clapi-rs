@@ -139,29 +139,20 @@ impl Command {
     }
 
     /// Sets a short description of this command.
-    ///
-    /// # Panics:
-    /// Panics if the `description` is blank or empty.
     pub fn description<S: Into<String>>(mut self, description: S) -> Self {
-        self.description = Some(assert_not_blank!(description.into(), "`description` cannot be blank or empty"));
+        self.description = Some(description.into());
         self
     }
 
     /// Sets information about the usage of this command.
-    ///
-    /// # Panics:
-    /// Panics if the `usage` is blank or empty.
     pub fn usage<S: Into<String>>(mut self, usage: S) -> Self {
-        self.usage = Some(assert_not_blank!(usage.into(), "`usage` cannot be blank or empty"));
+        self.usage = Some(usage.into());
         self
     }
 
     /// Sets help information about this command.
-    ///
-    /// # Panics:
-    /// Panics if the `help` is blank or empty.
     pub fn help<S: Into<String>>(mut self, help: S) -> Self {
-        self.help = Some(assert_not_blank!(help.into(), "`help` cannot be blank or empty"));
+        self.help = Some(help.into());
         self
     }
 
@@ -463,20 +454,6 @@ mod tests {
     #[should_panic]
     fn command_test2() {
         Command::new(" ");
-    }
-
-    #[test]
-    #[should_panic]
-    fn command_test3() {
-        Command::new("time").description("");
-    }
-
-    #[test]
-    #[should_panic]
-    fn command_test4() {
-        Command::new("time")
-            .description("Show the time")
-            .usage("\n");
     }
 
     #[test]

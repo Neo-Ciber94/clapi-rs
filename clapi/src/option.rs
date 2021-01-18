@@ -104,14 +104,8 @@ impl CommandOption {
     }
 
     /// Sets a short description of this option.
-    ///
-    /// # Panics:
-    /// Panics if the `description` is blank or empty.
     pub fn description<S: Into<String>>(mut self, description: S) -> Self {
-        self.description = Some(assert_not_blank!(
-            description.into(),
-            "`description` cannot be blank or empty"
-        ));
+        self.description = Some(description.into());
         self
     }
 
