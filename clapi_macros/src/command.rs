@@ -79,8 +79,8 @@ impl CommandAttrData {
     }
 
     pub fn set_name(&mut self, name: String) {
-        assert!(!name.trim().is_empty(), "command and subcommand `name` cannot be empty");
-        assert!(name.trim().chars().all(|c| !c.is_whitespace()), "command and subcommand `name` cannot contain whitespaces");
+        assert!(!name.trim().is_empty(), "command `name` cannot be empty");
+        assert!(name.trim().chars().all(|c| !c.is_whitespace()), "command `name` cannot contain whitespaces");
         self.name = Some(name);
     }
 

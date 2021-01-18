@@ -46,9 +46,10 @@ impl Command {
     /// Constructs a new `Command` with the specified `Options`.
     ///
     /// # Panics
-    /// Panics if the command `name` is blank or empty.
+    /// Panics if the command `name` is empty or contains whitespaces.
     pub fn with_options<S: Into<String>>(name: S, options: OptionList) -> Self {
-        let name = assert_not_blank!(name.into(), "`name` cannot be blank or empty");
+        let name = name.into();
+        assert_contains_no_whitespaces!(name);
 
         Command {
             name,

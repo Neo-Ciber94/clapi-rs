@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn parse_result_command_test() {
-        let command = Command::new("My App")
+        let command = Command::new("MyApp")
             .arg(Argument::one_or_more("values"))
             .option(
                 CommandOption::new("repeat").alias("r").arg(
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn parse_result_subcommand_test() {
-        let command = Command::new("My App")
+        let command = Command::new("MyApp")
             .subcommand(Command::new("version"))
             .subcommand(
                 Command::new("set")
@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn parse_result_required_option_test() {
-        let command = Command::new("My App")
+        let command = Command::new("MyApp")
             .option(CommandOption::new("enable"))
             .option(
                 CommandOption::new("times")
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn parse_result_options_test() {
-        let command = Command::new("My App")
+        let command = Command::new("MyApp")
             .option(CommandOption::new("hour").alias("h"))
             .option(CommandOption::new("minute").alias("m"))
             .option(CommandOption::new("second").alias("s"))
@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn parse_result_multiple_args_test() {
-        let command = Command::new("My App")
+        let command = Command::new("MyApp")
             .arg(Argument::with_name("min").validator(parse_validator::<i64>()))
             .arg(Argument::with_name("max").validator(parse_validator::<i64>()))
             .option(
@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn parse_result_eoa_test() {
-        let command = Command::new("My App")
+        let command = Command::new("MyApp")
             .arg(Argument::one_or_more("args"))
             .option(CommandOption::new("A").alias("a"))
             .option(CommandOption::new("B").alias("b"))
@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn parse_result_variable_arg_count_test1() {
-        let command = Command::new("My App")
+        let command = Command::new("MyApp")
             .arg(Argument::with_name("values").values_count(0..=3))
             .option(
                 CommandOption::new("letters").arg(
@@ -444,7 +444,7 @@ mod tests {
 
     #[test]
     fn parse_result_error_kind_test() {
-        let command = Command::new("My App")
+        let command = Command::new("MyApp")
             .arg(Argument::with_name("values").values_count(0..5))
             .subcommand(Command::new("version"))
             .option(
@@ -494,7 +494,7 @@ mod tests {
 
     #[test]
     fn parse_result_option_bool_flag_test() {
-        let command = Command::new("My App").option(
+        let command = Command::new("MyApp").option(
             CommandOption::new("enable").arg(
                 Argument::with_name("enable")
                     .values_count(0..=1)

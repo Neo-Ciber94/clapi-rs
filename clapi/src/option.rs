@@ -22,7 +22,8 @@ impl CommandOption {
     /// # Panics:
     /// Panics if the `name` is blank or empty.
     pub fn new<S: Into<String>>(name: S) -> Self {
-        let name = assert_not_blank!(name.into(), "`name` cannot be blank or empty");
+        let name = name.into();
+        assert_contains_no_whitespaces!(name);
 
         CommandOption {
             name,
@@ -94,12 +95,11 @@ impl CommandOption {
     /// Adds a new alias to this option.
     ///
     /// # Panics:
-    /// Panics if the `alias` if blank or empty.
+    /// Panics if the `alias` is empty or contains whitespaces.
     pub fn alias<S: Into<String>>(mut self, alias: S) -> Self {
-        self.aliases.insert(assert_not_blank!(
-            alias.into(),
-            "`alias` cannot be blank or empty"
-        ));
+        let alias = alias.into();
+        assert_contains_no_whitespaces!(alias);
+        self.aliases.insert(alias);
         self
     }
 

@@ -30,6 +30,16 @@ macro_rules! assert_not_blank {
     }};
 }
 
+/// Asserts the given `String` or `str` is no empty or contains whitespaces.
+#[macro_export]
+macro_rules! assert_contains_no_whitespaces {
+    ($value:expr) => {{
+        let value = &$value;
+        assert!(!value.trim().is_empty(), "`{}` is empty", stringify!($value));
+        assert!(value.trim().chars().all(|c| !c.is_whitespace()), "`{}` must not contains whitespaces", stringify!($value));
+    }};
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -79,5 +89,18 @@ mod tests {
     #[should_panic]
     fn assert_not_blank_test5() {
         assert_not_blank!("\n");
+    }
+
+    #[test]
+    #[should_panic(expected="`name` must not contains whitespaces")]
+    fn assert_contains_not_whitespaces_test1(){
+        let name = "Hello World";
+        let _ = assert_contains_no_whitespaces!(name);
+    }
+
+    #[test]
+    #[should_panic(expected="`\" \"` is empty")]
+    fn assert_contains_not_whitespaces_test2(){
+        let _ = assert_contains_no_whitespaces!(" ");
     }
 }

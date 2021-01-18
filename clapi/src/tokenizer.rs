@@ -262,7 +262,7 @@ mod tests {
 
     #[test]
     fn tokenize_test() {
-        let command = Command::new("My App")
+        let command = Command::new("MyApp")
             .arg(Argument::one_or_more("args"))
             .option(CommandOption::new("enable").alias("e"))
             .option(CommandOption::new("range").arg(Argument::with_name("range").values_count(1..=2)))
@@ -293,7 +293,7 @@ mod tests {
 
     #[test]
     fn tokenize_test2() {
-        let command = Command::new("My App")
+        let command = Command::new("MyApp")
             .arg(Argument::zero_or_one("values"))
             .option(
                 CommandOption::new("times")
@@ -319,7 +319,7 @@ mod tests {
 
     #[test]
     fn invalid_expression_test() {
-        let command = Command::new("My App")
+        let command = Command::new("MyApp")
             .arg(Argument::zero_or_one("values"))
             .option(
                 CommandOption::new("times")

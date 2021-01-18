@@ -40,9 +40,10 @@ impl Argument {
     /// Constructs a new `Argument` with the given name that takes 1 value.
     ///
     /// # Panics:
-    /// Panics if the argument `name` is blank or empty.
+    /// Panics if the argument `name` is empty or contains whitespaces.
     pub fn with_name<S: Into<String>>(name: S) -> Self {
-        let name = assert_not_blank!(name.into(), "`name` cannot be blank or empty");
+        let name = name.into();
+        assert_contains_no_whitespaces!(name);
 
         Argument {
             name: Some(name),
