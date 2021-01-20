@@ -75,6 +75,8 @@ impl Context {
 
     /// Sets the `Help` provider of this context.
     pub fn set_help<H: Help + 'static>(&mut self, help: H) {
+        //todo: handle all HelpKind here, Any, Subcommand and Option?
+
         // If the `help` is a subcommand we add the subcommand to the root
         match help.kind() {
             HelpKind::Any | HelpKind::Subcommand => {
@@ -158,7 +160,8 @@ impl Context {
         self.name_prefixes.iter()
             .chain(self.alias_prefixes.iter())
             .find(|prefix| option.starts_with(prefix.as_str()))
-            .map(|prefix| option.trim_start_matches(prefix))
+            .map(|prefix| option.strip_prefix(prefix))
+            .flatten()
             .unwrap_or(option)
     }
 }

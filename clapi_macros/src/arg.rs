@@ -3,7 +3,7 @@ use crate::command::{is_option_bool_flag, FnArgData};
 use crate::macro_attribute::{Value, MacroAttribute, display_lit};
 use crate::utils::pat_type_to_string;
 use crate::var::ArgumentType;
-use crate::{attr, LitExtensions, TypeExtensions};
+use crate::{consts, LitExtensions, TypeExtensions};
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::Lit;
@@ -56,39 +56,39 @@ impl ArgAttrData {
             if let Some(attribute) = name_value {
                 for (key, value) in attribute {
                     match key.as_str() {
-                        attr::NAME => {
+                        consts::NAME => {
                             let name = value
                                 .to_string_literal()
                                 .expect("arg `name` must be a string literal");
 
                             arg.set_name(name);
                         }
-                        attr::MIN => {
+                        consts::MIN => {
                             let min = value
                                 .to_integer_literal::<usize>()
                                 .expect("arg `min` must be an integer literal");
 
                             arg.set_min(min);
                         }
-                        attr::MAX => {
+                        consts::MAX => {
                             let max = value
                                 .to_integer_literal::<usize>()
                                 .expect("arg `max` must be an integer literal");
 
                             arg.set_max(max);
                         }
-                        attr::DESCRIPTION => {
+                        consts::DESCRIPTION => {
                             let description = value
                                 .to_string_literal()
                                 .expect("arg `description` is expected to be a string literal");
 
                             arg.set_description(description);
                         }
-                        attr::DEFAULT => match value {
+                        consts::DEFAULT => match value {
                             Value::Literal(lit) => arg.set_default_values(vec![lit]),
                             Value::Array(array) => arg.set_default_values(array),
                         },
-                        attr::VALUES => match value {
+                        consts::VALUES => match value {
                             Value::Literal(lit) => arg.set_valid_values(vec![lit]),
                             Value::Array(array) => arg.set_valid_values(array),
                         }

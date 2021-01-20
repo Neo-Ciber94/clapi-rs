@@ -1,7 +1,6 @@
 #![allow(clippy::len_zero)]
 use std::fmt::{Write, Display, Formatter};
 use crate::{Context, Command, CommandOption, Argument, OptionList};
-use crate::utils::Then;
 
 /// A trait for provide help information about a `Command`.
 pub trait Help {
@@ -364,15 +363,14 @@ pub(crate) fn to_command<H: Help + ?Sized>(help: &H) -> Command {
 }
 
 pub(crate) fn to_option<H: Help + ?Sized>(help: &H) -> CommandOption {
-    CommandOption::new(help.name())
+    let option = CommandOption::new(help.name())
         .arg(Argument::with_name("subcommand").values_count(0..=1))
         .description(help.description())
-        .hidden(true)
-        .then_apply(|opt| {
-            if let Some(alias) = help.alias() {
-                opt.alias(alias)
-            } else {
-                opt
-            }
-        })
+        .hidden(true);
+
+    if let Some(alias) = help.alias() {
+        option.alias(alias)
+    } else {
+        option
+    }
 }

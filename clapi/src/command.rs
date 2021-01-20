@@ -451,7 +451,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected="`name` is empty")]
     fn command_test2() {
         Command::new(" ");
     }
@@ -472,7 +472,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected="`data` already contains a subcommand named: `get`")]
     fn duplicated_command_test() {
         Command::new("data")
             .subcommand(Command::new("set"))
@@ -497,7 +497,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected="`time` already contains an option named: `version`")]
     fn duplicated_option_test1() {
         Command::new("time")
             .option(CommandOption::new("version").alias("v"))
@@ -506,7 +506,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected="`time` already contains an option named: `v`")]
     fn duplicated_option_test2() {
         Command::new("time")
             .option(CommandOption::new("version").alias("v"))
@@ -515,7 +515,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected="`time` already contains an option with alias: `v`")]
     fn duplicated_option_test3() {
         Command::new("time")
             .option(CommandOption::new("version").alias("v"))

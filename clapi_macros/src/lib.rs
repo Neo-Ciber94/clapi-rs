@@ -15,7 +15,7 @@ pub(crate) use ext::*;
 mod utils;
 mod query;
 mod arg;
-mod attr;
+mod consts;
 mod command;
 mod macro_attribute;
 mod option;

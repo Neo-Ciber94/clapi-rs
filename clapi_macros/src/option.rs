@@ -1,5 +1,5 @@
 use crate::arg::ArgAttrData;
-use crate::attr;
+use crate::consts;
 use crate::command::{is_option_bool_flag, FnArgData};
 use crate::macro_attribute::{Value, MacroAttribute};
 use proc_macro2::{Span, TokenStream};
@@ -55,67 +55,67 @@ impl OptionAttrData {
         if let Some(att) = &arg_data.name_value {
             for (key, value) in att {
                 match key.as_str() {
-                    attr::NAME => {
+                    consts::NAME => {
                         let name = value
                             .to_string_literal()
                             .expect("option `name` must be a string literal");
 
                         option.set_name(name);
                     },
-                    attr::ARG => {
+                    consts::ARG => {
                         let arg_name = value
                             .to_string_literal()
                             .expect("option `arg` must be a string literal");
 
                         args.set_name(arg_name);
                     }
-                    attr::ALIAS => {
+                    consts::ALIAS => {
                         let alias = value
                             .to_string_literal()
                             .expect("option `alias` must be a string literal");
 
                         option.set_alias(alias);
                     }
-                    attr::DESCRIPTION => {
+                    consts::DESCRIPTION => {
                         let description = value
                             .to_string_literal()
                             .expect("option `description` must be a string literal");
 
                         option.set_description(description);
                     }
-                    attr::MIN => {
+                    consts::MIN => {
                         let min = value
                             .to_integer_literal::<usize>()
                             .expect("option `min` must be an integer literal");
 
                         args.set_min(min);
                     }
-                    attr::MAX => {
+                    consts::MAX => {
                         let max = value
                             .to_integer_literal::<usize>()
                             .expect("option `max` must be an integer literal");
 
                         args.set_max(max);
                     }
-                    attr::HIDDEN => {
+                    consts::HIDDEN => {
                         let is_hidden = value
                             .to_bool_literal()
                             .expect("option `hidden` must be a bool literal");
 
                         option.set_hidden(is_hidden);
                     }
-                    attr::MULTIPLE => {
+                    consts::MULTIPLE => {
                         let allow_multiple = value
                             .to_bool_literal()
                             .expect("option `multiple` must be a bool literal");
 
                         option.set_multiple(allow_multiple);
                     },
-                    attr::DEFAULT => match value {
+                    consts::DEFAULT => match value {
                         Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
                         Value::Array(array) => args.set_default_values(array.clone()),
                     },
-                    attr::VALUES => match value {
+                    consts::VALUES => match value {
                         Value::Literal(lit) => args.set_valid_values(vec![lit.clone()]),
                         Value::Array(array) => args.set_valid_values(array.clone()),
                     },

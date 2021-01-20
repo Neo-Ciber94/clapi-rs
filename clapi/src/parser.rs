@@ -9,7 +9,6 @@ use crate::help::HelpKind;
 use crate::option::{CommandOption, OptionList};
 use crate::parse_result::ParseResult;
 use crate::tokenizer::{Token, Tokenizer};
-use crate::utils::Then;
 use crate::Argument;
 
 /// A command-line argument parser.
@@ -314,7 +313,7 @@ impl<'a> Parser<'a> {
         let options = self.options.as_ref().unwrap();
         let command = self.command.as_ref().unwrap();
         let required_options = command
-            .then(|c| c.get_options().iter())
+            .get_options().iter()
             .filter(|o| o.is_required());
 
         for opt in required_options {
@@ -331,7 +330,7 @@ impl<'a> Parser<'a> {
     fn set_default_options(&mut self) {
         let command = self.command.as_ref().unwrap();
         let default_options = command
-            .then(|c| c.get_options().iter())
+            .get_options().iter()
             .filter(|o| o.get_args().iter().any(|a| a.has_default_values()));
 
         // Sets the options that takes default arguments

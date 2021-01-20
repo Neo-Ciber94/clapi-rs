@@ -43,6 +43,11 @@ impl NamePath {
     pub fn full_path(&self) -> &[String]{
         self.path.as_slice()
     }
+
+    /// Returns a`Vec<String>` with full path of the `NamePath`.
+    pub fn into_vec(self) -> Vec<String> {
+        self.path
+    }
 }
 
 impl Display for NamePath {

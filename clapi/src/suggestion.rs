@@ -1,4 +1,3 @@
-use crate::utils::{Also, Then};
 use std::borrow::Borrow;
 
 /// Provides suggestions matches a value.
@@ -78,25 +77,28 @@ impl DefaultSuggestionProvider {
 
 impl SuggestionProvider for DefaultSuggestionProvider {
     fn suggestions_for(&self, value: &str, source: &[String]) -> Option<SuggestionResult> {
-        source
+        let mut values = source
             .iter()
             .map(|s| (s, compute_levenshtein_distance_ignore_case(&value, &s)))
             .take(self.max_count)
-            .collect::<Vec<_>>()
-            .also_mut(|s| s.sort_by_key(|s| s.1))
+            .collect::<Vec<_>>();
+
+        // Sorts the values by weight
+        values.sort_by_key(|s| s.1);
+
+        let mut result = values
             .iter()
             .map(|s| s.0)
             .cloned()
-            .collect::<Vec<String>>()
-            .then_apply(|mut result| {
-                if result.is_empty() {
-                    None
-                } else if result.len() == 1 {
-                    Some(SuggestionResult::Value(result.swap_remove(0)))
-                } else {
-                    Some(SuggestionResult::List(result))
-                }
-            })
+            .collect::<Vec<String>>();
+
+        if result.is_empty() {
+            None
+        } else if result.len() == 1 {
+            Some(SuggestionResult::Value(result.swap_remove(0)))
+        } else {
+            Some(SuggestionResult::List(result))
+        }
     }
 }
 

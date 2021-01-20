@@ -36,8 +36,8 @@ pub struct CommandAttrData {
     is_child: bool,
     version: Option<String>,
     description: Option<String>,
-    usage: Option<String>,
-    help: Option<String>,
+    usage: Option<StringSource>,
+    help: Option<StringSource>,
     item_fn: Option<ItemFn>,
     children: Vec<CommandAttrData>,
     is_hidden: Option<bool>,
@@ -79,25 +79,30 @@ impl CommandAttrData {
     }
 
     pub fn set_name(&mut self, name: String) {
+        assert!(self.name.is_none(), "command `name` is already defined");
         assert!(!name.trim().is_empty(), "command `name` cannot be empty");
         assert!(name.trim().chars().all(|c| !c.is_whitespace()), "command `name` cannot contain whitespaces");
         self.name = Some(name);
     }
 
     pub fn set_version(&mut self, version: String) {
+        assert!(self.version.is_none(), "command `version` is already defined");
         assert!(!version.trim().is_empty(), "`version` cannot be empty");
         self.version = Some(version);
     }
 
     pub fn set_description(&mut self, description: String) {
+        assert!(self.description.is_none(), "command `description` is already defined");
         self.description = Some(description);
     }
 
-    pub fn set_usage(&mut self, about: String) {
-        self.usage = Some(about);
+    pub fn set_usage(&mut self, usage: StringSource) {
+        assert!(self.usage.is_none(), "command `usage` is already defined");
+        self.usage = Some(usage);
     }
 
-    pub fn set_help(&mut self, help: String) {
+    pub fn set_help(&mut self, help: StringSource) {
+        assert!(self.help.is_none(), "command `help` is already defined");
         self.help = Some(help);
     }
 
@@ -111,6 +116,8 @@ impl CommandAttrData {
     }
 
     pub fn set_hidden(&mut self, is_hidden: bool) {
+        assert!(self.is_hidden.is_none(), "command `is_hidden` is already defined");
+
         if is_hidden {
             assert!(self.is_child, "only subcommands can be hidden");
         }
@@ -212,16 +219,16 @@ impl CommandAttrData {
             .as_ref()
             .map(|s| quote! { .description(#s) });
 
+        // Command hidden
+        let hidden = self.is_hidden
+            .as_ref()
+            .map(|s| quote! { .hidden(#s) });
+
         // Command usage
         let usage = self
             .usage
             .as_ref()
             .map(|s| quote! { .usage(#s) });
-
-        // Command hidden
-        let hidden = self.is_hidden
-            .as_ref()
-            .map(|s| quote! { .hidden(#s) });
 
         // Command help
         let help = self
@@ -437,7 +444,7 @@ impl CommandAttrData {
         fn contains_subcommand_attribute(item_fn: &ItemFn) -> bool {
             item_fn.attrs.iter().any(|attribute| {
                 let path = crate::utils::path_to_string(&attribute.path);
-                crate::attr::is_subcommand(&path)
+                crate::consts::is_subcommand(&path)
             })
         }
 
@@ -490,6 +497,43 @@ pub struct FnArgData {
     pub is_option: bool,
 }
 
+#[derive(Debug, Clone)]
+pub enum StringSource {
+    String(String),
+    Ident(syn::Ident),
+    Fn(syn::ExprCall),
+}
+
+impl StringSource {
+    pub fn parse(value: &str) -> Result<Self, syn::Error> {
+        assert!(!value.trim().is_empty());
+
+        if value.contains::<&[char]>(&['(', ')']) {
+            let fn_call : syn::ExprCall = syn::parse_str(value)?;
+            Ok(StringSource::Fn(fn_call))
+        } else {
+            let ident : syn::Ident = syn::parse_str(value)?;
+            Ok(StringSource::Ident(ident))
+        }
+    }
+}
+
+impl ToTokens for StringSource {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        match self {
+            StringSource::String(s) => {
+                tokens.extend(s.into_token_stream());
+            }
+            StringSource::Ident(ident) => {
+                tokens.extend(ident.into_token_stream())
+            }
+            StringSource::Fn(fn_call) => {
+                tokens.extend(fn_call.into_token_stream())
+            }
+        }
+    }
+}
+
 fn is_clapi_result_type(ty: &Type) -> bool {
     if ty.is_result() {
         return true;
@@ -533,7 +577,7 @@ pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {
         .iter()
         .filter(|att| {
             let path = att.path.to_token_stream().to_string();
-            !crate::attr::is_clapi_attribute(&path)
+            !crate::consts::is_clapi_attribute(&path)
         })
         .cloned()
         .collect::<Vec<Attribute>>();
@@ -562,15 +606,15 @@ pub fn is_option_bool_flag(fn_arg: &FnArgData) -> bool {
     }
 
     if let Some(attribute) = &fn_arg.name_value {
-        let min = attribute.get(crate::attr::MIN)
+        let min = attribute.get(crate::consts::MIN)
             .map(|v| v.to_integer_literal::<usize>().expect("`min` must be a integer literal"))
             .unwrap_or(0);
 
-        let max = attribute.get(crate::attr::MAX)
+        let max = attribute.get(crate::consts::MAX)
             .map(|v| v.to_integer_literal::<usize>().expect("`max` must be a integer literal"))
             .unwrap_or(1);
 
-        let default = attribute.get(crate::attr::DEFAULT)
+        let default = attribute.get(crate::consts::DEFAULT)
             .map(|v| v.to_bool_literal().expect("`default` must be a bool literal"))
             .unwrap_or(false);
 
@@ -588,12 +632,12 @@ mod imp {
     use syn::{AttrStyle, Attribute, AttributeArgs, FnArg, Item, ItemFn, PatType, Stmt, ItemStatic, File};
 
     use crate::arg::ArgAttrData;
-    use crate::command::{drop_command_attributes, is_option_bool_flag, CommandAttrData, FnArgData};
+    use crate::command::{drop_command_attributes, is_option_bool_flag, CommandAttrData, FnArgData, StringSource};
     use crate::macro_attribute::{MacroAttribute, NameValueAttribute};
     use crate::option::OptionAttrData;
     use crate::utils::{path_to_string, NamePath};
     use crate::var::{ArgLocalVar, VarSource};
-    use crate::attr;
+    use crate::consts;
     use crate::query::QueryItem;
     use syn::export::ToTokens;
 
@@ -628,49 +672,82 @@ mod imp {
 
         for (key, value) in &name_value_attr {
             match key.as_str() {
-                crate::attr::NAME => {
+                crate::consts::NAME => {
                     let name = value
                         .to_string_literal()
                         .expect("`name` must be a string literal");
 
                     command.set_name(name);
                 },
-                crate::attr::PARENT if is_child => {},
-                crate::attr::DESCRIPTION => {
+                crate::consts::PARENT if is_child => { /*Parent is handle bellow*/ },
+                crate::consts::DESCRIPTION => {
                     let description = value
                         .to_string_literal()
                         .expect("`description` must be a string literal");
 
                     command.set_description(description);
                 }
-                crate::attr::USAGE => {
-                    let usage = value
-                        .to_string_literal()
-                        .expect("`usage` must be a string literal");
-
-                    command.set_usage(usage);
-                },
-                crate::attr::HIDDEN => {
+                crate::consts::HIDDEN => {
                     let hidden = value
                         .to_bool_literal()
                         .expect("`hidden` must be a bool literal");
 
                     command.set_hidden(hidden);
                 },
-                crate::attr::HELP => {
-                    let help = value
-                        .to_string_literal()
-                        .expect("`help` must be a string literal");
-
-                    command.set_help(help);
-                }
-                crate::attr::VERSION => {
+                crate::consts::VERSION => {
                     assert!(
                         value.is_integer() || value.is_float() || value.is_string(),
                         "`version` must be an integer, float or string literal"
                     );
                     command.set_version(value.parse_literal::<String>().unwrap());
-                }
+                },
+                crate::consts::USAGE => {
+                    let usage = value
+                        .to_string_literal()
+                        .expect("`usage` must be a string literal");
+
+                    command.set_usage(StringSource::String(usage));
+                },
+                crate::consts::HELP => {
+                    let help = value
+                        .to_string_literal()
+                        .expect("`help` must be a string literal");
+
+                    command.set_help(StringSource::String(help));
+                },
+                crate::consts::WITH_USAGE => {
+                    let expr = value
+                        .to_string_literal()
+                        .expect("`with_usage` must be a string literal");
+
+                    let path = path_to_relative(&expr, &command.fn_name)
+                        .unwrap_or_else(|| panic!("invalid expression: {}", expr))
+                        .into_vec()
+                        .join(" ") as String;
+
+                    let s = StringSource::parse(path.as_str())
+                        .unwrap_or_else(|_|{
+                            panic!("invalid expression for `with_usage` expected `identifier or function call, but was {}", expr)
+                        });
+                    command.set_usage(s);
+                },
+                crate::consts::WITH_HELP => {
+                    let expr = value
+                        .to_string_literal()
+                        .expect("`with_usage` must be a string literal");
+
+                    let path = path_to_relative(&expr, &command.fn_name)
+                        .unwrap_or_else(|| panic!("invalid expression: {}", expr))
+                        .into_vec()
+                        .join(" ") as String;
+
+                    let s = StringSource::parse(path.as_str())
+                        .unwrap_or_else(|_|{
+                            panic!("invalid expression for `with_usage` expected `identifier or function call, but was {}", expr)
+                        });
+
+                    command.set_help(s);
+                },
                 _ => panic!("invalid `{}` key: `{}`", name_value_attr.path(), key),
             }
         }
@@ -717,8 +794,8 @@ mod imp {
             }
 
             while let Some((subcommand, attribute)) = subcommands.pop() {
-                if attribute.contains(crate::attr::PARENT) {
-                    let literal = attribute.get(crate::attr::PARENT)
+                if attribute.contains(crate::consts::PARENT) {
+                    let literal = attribute.get(crate::consts::PARENT)
                         .unwrap()
                         .to_string_literal()
                         .expect("`parent` must be a string literal");
@@ -726,7 +803,9 @@ mod imp {
                     // If attribute was: #[subcommand(parent="")]
                     assert!(literal.trim().len() > 0, "`parent` was empty in `fn {}`", subcommand.fn_name.name());
 
-                    let name_path = get_parent_path(literal, &subcommand.fn_name);
+                    // Converts the path in `literal` to a relative to `subcommand` module
+                    let name_path = path_to_relative(&literal, &subcommand.fn_name)
+                        .unwrap_or_else(|| panic!("cannot find parent command `{}` for `{}`", literal, subcommand.fn_name.name()));
 
                     if let Some(parent) = command.get_mut_recursive(&name_path) {
                         parent.set_child(subcommand);
@@ -760,7 +839,7 @@ mod imp {
                         if item_static.attrs.iter().any(|attribute| {
                             let macro_attr = MacroAttribute::new(attribute.clone());
                             assert!(macro_attr.is_empty(), "`#[help]` takes not params but was `{}`", macro_attr);
-                            attr::is_help(macro_attr.path())
+                            consts::is_help(macro_attr.path())
                         }) {
                             return Some(item_static.clone());
                         }
@@ -790,7 +869,7 @@ mod imp {
                 let subcommands = item_fn
                     .attrs
                     .iter()
-                    .filter(|att| crate::attr::is_subcommand(path_to_string(&att.path).as_str()))
+                    .filter(|att| crate::consts::is_subcommand(path_to_string(&att.path).as_str()))
                     .cloned()
                     .collect::<Vec<Attribute>>();
 
@@ -806,7 +885,7 @@ mod imp {
 
                     let name_value_attr =
                         if let Some(index) = inner_fn.attrs.iter().position(|att| {
-                            crate::attr::is_subcommand(path_to_string(&att.path).as_str())
+                            crate::consts::is_subcommand(path_to_string(&att.path).as_str())
                         }) {
                             MacroAttribute::new(inner_fn.attrs.swap_remove(index))
                                 .into_name_values()
@@ -842,7 +921,7 @@ mod imp {
             .iter()
             .cloned()
             .map(MacroAttribute::new)
-            .filter(|attribute| crate::attr::is_option(attribute.path()) || crate::attr::is_arg(attribute.path()))
+            .filter(|attribute| crate::consts::is_option(attribute.path()) || crate::consts::is_arg(attribute.path()))
             .map(split_attr_path_and_name_values)
             .collect::<Vec<(String, MacroAttribute, NameValueAttribute)>>();
 
@@ -888,7 +967,7 @@ mod imp {
 
             let is_option = attribute
                 .as_ref()
-                .map(|attribute| crate::attr::is_option(attribute.path()))
+                .map(|attribute| crate::consts::is_option(attribute.path()))
                 .unwrap_or(true);
 
             ret.push(FnArgData {
@@ -938,7 +1017,7 @@ mod imp {
         assert_is_top_free_function(&file, &item_fn);
 
         let attribute = NameValueAttribute::from_attribute_args(
-            crate::attr::COMMAND, args, AttrStyle::Outer
+            crate::consts::COMMAND, args, AttrStyle::Outer
         ).unwrap();
 
         let mut root = command_from_fn(attribute, item_fn, false, true, true);
@@ -954,8 +1033,8 @@ mod imp {
         let mut subcommands = get_subcommands_data(&root_path);
 
         while let Some((subcommand, _, attribute)) = subcommands.pop() {
-            if attribute.contains(crate::attr::PARENT){
-                let literal = attribute.get(crate::attr::PARENT)
+            if attribute.contains(crate::consts::PARENT){
+                let literal = attribute.get(crate::consts::PARENT)
                     .unwrap()
                     .to_string_literal()
                     .expect("`parent` must be a `string` literal");
@@ -963,7 +1042,9 @@ mod imp {
                 // If attribute was: #[subcommand(parent="")]
                 assert!(literal.trim().len() > 0, "`parent` was empty in `fn {}`", subcommand.fn_name.name());
 
-                let parent_name = get_parent_path(literal, &subcommand.fn_name);
+                // Converts the path in `literal` to a relative to `subcommand` module
+                let parent_name = path_to_relative(&literal, &subcommand.fn_name)
+                    .unwrap_or_else(|| panic!("cannot find parent command `{}` for `{}`", literal, subcommand.fn_name.name()));
 
                 if parent_name == subcommand.fn_name {
                     panic!("self reference command parent in `{}`", subcommand.attribute);
@@ -982,7 +1063,7 @@ mod imp {
                     }
 
                     if !found {
-                        let parent_name = attribute.get(crate::attr::PARENT)
+                        let parent_name = attribute.get(crate::consts::PARENT)
                             .unwrap()
                             .to_string_literal()
                             .unwrap();
@@ -1008,7 +1089,7 @@ mod imp {
                 let is_help = item_static.attrs.iter().any(|attribute| {
                     let macro_attr = MacroAttribute::new(attribute.clone());
                     assert!(macro_attr.is_empty(), "`#[help]` takes not params but was `{}`", macro_attr);
-                    attr::is_help(macro_attr.path())
+                    consts::is_help(macro_attr.path())
                 });
 
                 if is_help {
@@ -1039,33 +1120,43 @@ mod imp {
         None
     }
 
-    fn get_parent_path(parent: String, current: &NamePath) -> NamePath {
-        // `self` is not needed
-        let parent_path = parent
+    // Converts the `path` to a relative of `root`.
+    // If root is `module::utils::math` and `path` is `super::get_id`
+    // the return is `module::utils::get_id`
+    fn path_to_relative(path: &str, root: &NamePath) -> Option<NamePath> {
+        // `self` is ignore because: `module::self::self` == `module`
+        let mut parent_path = path
             .split("::")
             .filter(|s| s != &"self")
             .map(|s| s.to_owned())
             .collect::<Vec<String>>();
 
-        // The path of the item ignore its name
-        let mut path = Vec::from(current.item_path());
+        // If the path starts like: `crate::` we remove `crate`.
+        if let Some(first) = parent_path.first() {
+            if first == "crate" {
+                parent_path.remove(0);
+            }
+        }
+
+        // The base path of the item, we ignore its name
+        let mut ret = Vec::from(root.item_path());
 
         // Navigate from the `current` to the `parent`
         for s in parent_path {
             if s == "super" {
-                if path.pop().is_none() {
+                if ret.pop().is_none() {
                     break
                 }
             } else {
-                path.push(s);
+                ret.push(s);
             }
         }
 
-        if path.is_empty() {
-            panic!("cannot find parent command `{}` for `{}`", parent, current.name());
+        if ret.is_empty() {
+            return None;
         }
 
-        NamePath::from_path(path)
+        Some(NamePath::from_path(ret))
     }
 
     fn get_subcommands_data(root_path: &Path) -> Vec<(CommandAttrData, PathBuf, NameValueAttribute)>{
@@ -1099,7 +1190,7 @@ mod imp {
 
     fn get_subcommands_item_fn(root_path: &Path) -> Vec<QueryItem<(ItemFn, NameValueAttribute)>> {
         fn if_subcommand_to_name_value(attribute: &Attribute) -> Option<NameValueAttribute>{
-            if attr::is_subcommand(&path_to_string(&attribute.path)) {
+            if consts::is_subcommand(&path_to_string(&attribute.path)) {
                 Some(MacroAttribute::new(attribute.clone())
                     .into_name_values()
                     .unwrap())
