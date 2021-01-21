@@ -1,6 +1,3 @@
-mod iterator_ext;
-pub use iterator_ext::*;
-
 mod lit_ext;
 pub use lit_ext::*;
 

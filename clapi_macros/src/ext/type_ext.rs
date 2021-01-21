@@ -13,9 +13,24 @@ macro_rules! is_primitive_type {
 /// Provides methods for check the type.
 ///
 /// This methods are `string` base comparison, so may fail if the type is an type alias.
-pub trait TypeExtensions {
+pub trait TypeExt {
     fn as_type(&self) -> &Type;
-    fn path(&self) -> Option<String>;
+
+    fn path(&self) -> Option<String> {
+        if let Type::Path(type_path) = self.as_type() {
+            let path = type_path
+                .path
+                .segments
+                .iter()
+                .map(|s| s.ident.to_string())
+                .collect::<Vec<String>>()
+                .join("::");
+
+            Some(path)
+        } else {
+            None
+        }
+    }
 
     fn is_type(&self, ty: &str) -> bool {
         if let Some(path) = self.path() {
@@ -151,25 +166,9 @@ pub trait TypeExtensions {
     is_primitive_type!(is_f64, f64);
 }
 
-impl TypeExtensions for Type {
+impl TypeExt for Type {
     fn as_type(&self) -> &Type {
-        &self
-    }
-
-    fn path(&self) -> Option<String> {
-        if let Type::Path(type_path) = self {
-            Some(
-                type_path
-                    .path
-                    .segments
-                    .iter()
-                    .map(|s| s.ident.to_string())
-                    .collect::<Vec<String>>()
-                    .join("::"),
-            )
-        } else {
-            None
-        }
+        self
     }
 }
 

@@ -8,7 +8,7 @@ use crate::arg::ArgAttrData;
 use crate::macro_attribute::{NameValueAttribute, MacroAttribute};
 use crate::option::OptionAttrData;
 use crate::var::{ArgLocalVar, ArgumentType};
-use crate::TypeExtensions;
+use crate::TypeExt;
 use crate::utils::NamePath;
 
 /// Tokens for either `command` or `subcommand` attribute.
@@ -488,33 +488,37 @@ impl PartialEq for CommandAttrData {
     }
 }
 
+// Information about an function argument of a function decorated with a `clapi_macros` attribute
 #[derive(Debug, Clone)]
 pub struct FnArgData {
+    // Name of the function argument
     pub arg_name: String,
+    // The function argument `PatType` like: `x : i64`
     pub pat_type: PatType,
+    // The macro attribute if any, this is solely used for debugging,
+    // the actual information is from the `NameValueAttribute`
     pub attribute: Option<MacroAttribute>,
+    // The name-values of the macro attribute
     pub name_value: Option<NameValueAttribute>,
+    // If the function argument correspond to a command option.
     pub is_option: bool,
 }
 
+// Represents the source of the string data used.
 #[derive(Debug, Clone)]
 pub enum StringSource {
+    // A string literal.
     String(String),
-    Ident(syn::Ident),
-    Fn(syn::ExprCall),
+    // A function in the form: `fn() -> Into<String>`
+    Fn(syn::ExprPath)
 }
 
 impl StringSource {
-    pub fn parse(value: &str) -> Result<Self, syn::Error> {
-        assert!(!value.trim().is_empty());
-
-        if value.contains::<&[char]>(&['(', ')']) {
-            let fn_call : syn::ExprCall = syn::parse_str(value)?;
-            Ok(StringSource::Fn(fn_call))
-        } else {
-            let ident : syn::Ident = syn::parse_str(value)?;
-            Ok(StringSource::Ident(ident))
-        }
+    // Creates a `StringSource::Fn` from a function path identifier
+    pub fn from_fn_path(s: &str) -> Result<Self, syn::Error> {
+        assert!(!s.trim().is_empty());
+        let path: syn::ExprPath = syn::parse_str(s)?;
+        Ok(StringSource::Fn(path))
     }
 }
 
@@ -524,11 +528,8 @@ impl ToTokens for StringSource {
             StringSource::String(s) => {
                 tokens.extend(s.into_token_stream());
             }
-            StringSource::Ident(ident) => {
-                tokens.extend(ident.into_token_stream())
-            }
-            StringSource::Fn(fn_call) => {
-                tokens.extend(fn_call.into_token_stream())
+            StringSource::Fn(path) => {
+                tokens.extend(quote!{ #path() } )
             }
         }
     }
@@ -722,12 +723,11 @@ mod imp {
 
                     let path = path_to_relative(&expr, &command.fn_name)
                         .unwrap_or_else(|| panic!("invalid expression: {}", expr))
-                        .into_vec()
-                        .join(" ") as String;
+                        .to_string();
 
-                    let s = StringSource::parse(path.as_str())
+                    let s = StringSource::from_fn_path(path.as_str())
                         .unwrap_or_else(|_|{
-                            panic!("invalid expression for `with_usage` expected `identifier or function call, but was {}", expr)
+                            panic!("invalid expression for `with_usage` expected function path, but was {}", expr)
                         });
                     command.set_usage(s);
                 },
@@ -738,12 +738,11 @@ mod imp {
 
                     let path = path_to_relative(&expr, &command.fn_name)
                         .unwrap_or_else(|| panic!("invalid expression: {}", expr))
-                        .into_vec()
-                        .join(" ") as String;
+                        .to_string();
 
-                    let s = StringSource::parse(path.as_str())
+                    let s = StringSource::from_fn_path(path.as_str())
                         .unwrap_or_else(|_|{
-                            panic!("invalid expression for `with_usage` expected `identifier or function call, but was {}", expr)
+                            panic!("invalid expression for `with_help` expected function path, but was {}", expr)
                         });
 
                     command.set_help(s);

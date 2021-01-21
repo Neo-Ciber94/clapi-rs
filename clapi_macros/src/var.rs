@@ -1,4 +1,4 @@
-use crate::TypeExtensions;
+use crate::TypeExt;
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::fmt::Display;

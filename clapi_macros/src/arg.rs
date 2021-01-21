@@ -3,7 +3,7 @@ use crate::command::{is_option_bool_flag, FnArgData};
 use crate::macro_attribute::{Value, MacroAttribute, display_lit};
 use crate::utils::pat_type_to_string;
 use crate::var::ArgumentType;
-use crate::{consts, LitExtensions, TypeExtensions};
+use crate::{consts, LitExtensions, TypeExt};
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::Lit;

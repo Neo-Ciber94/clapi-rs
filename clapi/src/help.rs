@@ -195,6 +195,14 @@ impl<'a> DefaultHelp<'a> {
     }
 
     fn command_usage(&self, buf: &mut Buffer, context: &Context, command: &Command, after_help_message: bool) {
+        // Writes the usage from the `Command` if any
+        if let Some(usage) = command.get_usage() {
+            writeln!(buf).unwrap();
+            writeln!(buf, "USAGE:").unwrap();
+            buf.write_str(usage).unwrap();
+            return;
+        }
+
         // Number of no-hidden options and subcommands
         let option_count = count_options(command.get_options());
         let subcommand_count = count_subcommands(&command);
@@ -272,14 +280,7 @@ impl<'a> Help for DefaultHelp<'a> {
     }
 
     fn usage(&self, buf: &mut Buffer, context: &Context, command: &Command) {
-        match command.get_usage() {
-            Some(s) => {
-                writeln!(buf).unwrap();
-                writeln!(buf, "USAGE:").unwrap();
-                buf.write_str(s).unwrap()
-            },
-            None => self.command_usage(buf, context, command, true)
-        }
+        self.command_usage(buf, context, command, true)
     }
 
     fn kind(&self) -> HelpKind {
