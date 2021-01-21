@@ -49,7 +49,7 @@ impl Command {
     /// Panics if the command `name` is empty or contains whitespaces.
     pub fn with_options<S: Into<String>>(name: S, options: OptionList) -> Self {
         let name = name.into();
-        assert!(!name.is_empty(), "command `name` cannot be empty");
+        assert_contains_no_whitespaces!(name);
 
         Command {
             name,
@@ -451,14 +451,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected="command `name` cannot be empty")]
-    fn command_empty_name_test(){
-        let _ = Command::new("");
-    }
-
-    #[test]
-    fn command_blank_name_test(){
-        let _ = Command::new(" ");
+    #[should_panic(expected="`name` is empty")]
+    fn command_test2() {
+        Command::new(" ");
     }
 
     #[test]

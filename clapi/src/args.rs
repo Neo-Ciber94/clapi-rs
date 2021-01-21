@@ -44,10 +44,10 @@ impl Argument {
     /// Constructs a new `Argument` with the given name that takes 1 value.
     ///
     /// # Panics:
-    /// Panics if the argument `name` is empty.
+    /// Panics if the argument `name` is empty or contains whitespaces.
     pub fn with_name<S: Into<String>>(name: S) -> Self {
         let name = name.into();
-        assert!(!name.is_empty(), "argument `name` cannot be empty");
+        assert_contains_no_whitespaces!(name);
 
         Argument {
             name: Some(name),
@@ -728,7 +728,7 @@ impl ArgumentList {
             if let Some(arg) = self.inner.iter()
                 .filter(|arg| !arg.has_default_values())
                 .find(|arg| !arg.get_values_count().is_exact()) {
-                panic!("arguments with variable values are no allowed if there is default values: `{}` contains variable values", arg.get_name())
+                panic!("arguments with variable values is no allowed if there is default values: `{}` contains variable values", arg.get_name())
             }
         }
 
@@ -1032,17 +1032,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected="argument `name` cannot be empty")]
-    fn arg_empty_name_test(){
-        let _ = Argument::with_name("");
-    }
-
-    #[test]
-    fn arg_blank_name_test(){
-        let _ = Argument::with_name(" ");
-    }
-
-    #[test]
     fn arg_min_max_values_test() {
         let arg = Argument::with_name("number")
             .min_values(5)
@@ -1121,7 +1110,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected="arguments with variable values are no allowed if there is default values: `words` contains variable values")]
+    #[should_panic(expected="arguments with variable values is no allowed if there is default values: `words` contains variable values")]
     fn argument_list_with_default_values_and_variable_args_test(){
         let mut args = ArgumentList::new();
         assert!(args.add(Argument::with_name("greeting").default("Hello")).is_ok());
