@@ -71,7 +71,7 @@ impl Tokenizer {
               I: IntoIterator<Item = S> {
         let mut iterator = args
             .into_iter()
-            .filter(|s| !s.borrow().is_empty()) //todo: allow whitespaces?
+            .filter(|s| !s.borrow().is_empty())
             .peekable();
 
         // Quick path

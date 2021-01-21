@@ -11,6 +11,10 @@ use std::str::FromStr;
 use validator::Type;
 use validator::Validator;
 
+#[doc(hidden)]
+/// Name used for unnamed `Argument`s.
+pub const ARGUMENT_DEFAULT_NAME : &str = "arg";
+
 /// Represents the arguments of an `option` or `command`.
 #[derive(Clone)]
 pub struct Argument {
@@ -85,7 +89,7 @@ impl Argument {
 
     /// Returns the name of this argument.
     pub fn get_name(&self) -> &str {
-        self.name.as_deref().unwrap_or("arg")
+        self.name.as_deref().unwrap_or(ARGUMENT_DEFAULT_NAME)
     }
 
     /// Returns the description of this argument.
@@ -563,9 +567,12 @@ impl ArgumentList {
             Err(arg)
         } else {
             self.inner.insert(arg);
-            // When multiple arguments with default values are defined
-            // is not possible know to what argument a value is being passed to
-            self.check_default_args();
+
+            // The list is invalid if:
+            // - If there is more than 1 argument with default values
+            // - If there is an argument with variable values if other contains default values
+            // - If there is more than 1 argument that takes variable values
+            self.assert_args();
             Ok(())
         }
     }
@@ -691,15 +698,14 @@ impl ArgumentList {
         }
     }
 
-    fn check_default_args(&self) {
+    fn assert_args(&self) {
         if self.len() == 1{
             return;
         }
 
         // Check if there more than 1 argument with default values.
         //
-        // This is not allowed because is no possible to know
-        // to what argument a value is being passed to.
+        // This is not allowed because is no possible to know to what argument a value is being passed to.
         // For example: we have 2 argument with default values: `min` (default 0) `max` (default 10)
         // If we pass: `25` is no possible to know if assign the `25` to `min` or `max`.
         if self.inner.iter().filter(|a| a.has_default_values()).count() > 1 {
@@ -722,13 +728,13 @@ impl ArgumentList {
             if let Some(arg) = self.inner.iter()
                 .filter(|arg| !arg.has_default_values())
                 .find(|arg| !arg.get_values_count().is_exact()) {
-                panic!("arguments is variable values is no allowed if there is default values: `{}` contains variable values", arg.get_name())
+                panic!("arguments with variable values is no allowed if there is default values: `{}` contains variable values", arg.get_name())
             }
         }
 
         // Check if there is more than 1 argument that take variable values.
         //
-        // This is not allowed because is no possible because the values may overlap.
+        // This is not allowed because the values may overlap.
         // For example: we have 2 arguments: `numbers` (takes 1 to 3) and `ages` (takes 1 to 10)
         // if we pass: -1 0 2 25 10, is no possible to know to what argument the values are being
         // passed
@@ -738,7 +744,8 @@ impl ArgumentList {
                 .filter(|a| !a.get_values_count().is_exact())
                 .nth(1)
                 .unwrap();
-            panic!("multiple arguments that takes variable arguments is not allowed: `{}` contains variable values", arg.get_name());
+
+            panic!("multiple arguments with variable arguments is not allowed: `{}` contains variable values", arg.get_name());
         }
     }
 }
@@ -1103,7 +1110,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected="arguments is variable values is no allowed if there is default values: `words` contains variable values")]
+    #[should_panic(expected="arguments with variable values is no allowed if there is default values: `words` contains variable values")]
     fn argument_list_with_default_values_and_variable_args_test(){
         let mut args = ArgumentList::new();
         assert!(args.add(Argument::with_name("greeting").default("Hello")).is_ok());
@@ -1118,7 +1125,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected="multiple arguments with variable arguments is not allowed: `characters` contains variable values")]
     fn argument_list_with_variable_args_test(){
         let mut args = ArgumentList::new();
         assert!(args.add(Argument::with_name("numbers").values_count(1..10)).is_ok());

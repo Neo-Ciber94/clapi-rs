@@ -1,4 +1,4 @@
-use crate::serde::internal::{AnyToString, StringOrList, ValidType};
+use crate::serde::internal::{StringOrList, ValidType};
 use crate::{ArgCount, Argument, ArgumentList, Command, CommandOption, OptionList};
 use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::export::{Formatter, Result};
@@ -163,302 +163,8 @@ impl Serialize for Argument {
 impl<'de> Deserialize<'de> for Argument {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>,
-    {
-        const FIELDS: &'static [&'static str] = &[
-            "name",
-            "description",
-            "min_values",
-            "max_values",
-            "type",
-            "valid_values",
-            "default_values",
-        ];
-
-        enum Field {
-            Name,
-            Description,
-            MinCount,
-            MaxCount,
-            Type,
-            ValidValues,
-            DefaultValues,
-        }
-
-        impl<'de> Deserialize<'de> for Field {
-            fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
-            where
-                D: Deserializer<'de>,
-            {
-                struct FieldVisitor;
-                impl<'de> Visitor<'de> for FieldVisitor {
-                    type Value = Field;
-
-                    fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-                        formatter.write_str("`name`, `description`, `min_values`, `max_values`, `type`, `valid_values` or `default_values`")
-                    }
-
-                    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-                    where
-                        E: de::Error,
-                    {
-                        match v {
-                            "name" => Ok(Field::Name),
-                            "description" => Ok(Field::Description),
-                            "min_values" => Ok(Field::MinCount),
-                            "max_values" => Ok(Field::MaxCount),
-                            "type" => Ok(Field::Type),
-                            "valid_values" => Ok(Field::ValidValues),
-                            "default_values" => Ok(Field::DefaultValues),
-                            _ => Err(de::Error::unknown_field(v, FIELDS)),
-                        }
-                    }
-
-                    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
-                    where
-                        E: de::Error,
-                    {
-                        match v {
-                            b"name" => Ok(Field::Name),
-                            b"description" => Ok(Field::Description),
-                            b"min_values" => Ok(Field::MinCount),
-                            b"max_values" => Ok(Field::MaxCount),
-                            b"type" => Ok(Field::Type),
-                            b"valid_values" => Ok(Field::ValidValues),
-                            b"default_values" => Ok(Field::DefaultValues),
-                            _ => {
-                                let value = String::from_utf8_lossy(v);
-                                Err(de::Error::unknown_field(&value, FIELDS))
-                            }
-                        }
-                    }
-                }
-
-                deserializer.deserialize_identifier(FieldVisitor)
-            }
-        }
-
-        struct ArgumentVisitor;
-        impl<'de> Visitor<'de> for ArgumentVisitor {
-            type Value = Argument;
-
-            fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-                formatter.write_str("struct Argument")
-            }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, <A as SeqAccess<'de>>::Error>
-            where
-                A: SeqAccess<'de>,
-            {
-                // let name: Option<String> = seq
-                //     .next_element()?
-                //     .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-
-                let name: String = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-
-                let description: Option<String> = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(1, &self))?;
-
-                let min_values: Option<usize> = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(2, &self))?;
-
-                let max_values: Option<usize> = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(3, &self))?;
-
-                let valid_type: Option<ValidType> = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(4, &self))?;
-
-                let valid_values: Vec<String> = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(5, &self))?;
-
-                let default_values: Vec<String> = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(6, &self))?;
-
-                // let mut argument = match name {
-                //     Some(name) => Argument::with_name(name),
-                //     None => Argument::new()
-                // };
-
-                let mut argument = Argument::with_name(name);
-
-                // todo: remove
-                // match (min_values, max_values) {
-                //     (Some(min), Some(max)) => {
-                //         argument = argument.value_count(ValueCount::new(min, max));
-                //     },
-                //     (Some(min), None) => {
-                //         argument = argument.value_count(ValueCount::more_than(min));
-                //     },
-                //     (None, Some(max)) => {
-                //         argument = argument.value_count(ValueCount::less_than(max));
-                //     }
-                //     (None, None) => { /*By default an `Argument` takes 1 value */ }
-                // }
-
-                match (min_values, max_values) {
-                    (None, None) => { /*By default an `Argument` takes 1 value */ },
-                    (min, max) => {
-                        argument = argument.values_count(ArgCount::new(min, max))
-                    }
-                }
-
-                if let Some(description) = description {
-                    argument = argument.description(description);
-                }
-
-                if let Some(valid_type) = valid_type {
-                    argument = valid_type.set_validator(argument);
-                }
-
-                if valid_values.len() > 0 {
-                    argument = argument.valid_values(valid_values);
-                }
-
-                if default_values.len() > 0 {
-                    argument = argument.defaults(default_values);
-                }
-
-                Ok(argument)
-            }
-
-            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, <A as MapAccess<'de>>::Error>
-            where
-                A: MapAccess<'de>,
-            {
-                //let mut name: Option<Option<String>> = None;
-                let mut name: Option<String> = None;
-                let mut description: Option<Option<String>> = None;
-                let mut min_values: Option<Option<usize>> = None;
-                let mut max_values: Option<Option<usize>> = None;
-                let mut valid_type : Option<Option<ValidType>> = None;
-                let mut valid_values: Option<Vec<String>> = None;
-                let mut default_values: Option<Vec<String>> = None;
-
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        Field::Name => {
-                            if name.is_some() {
-                                return Err(de::Error::duplicate_field("name"));
-                            }
-
-                            name = Some(map.next_value()?);
-                        }
-                        Field::Description => {
-                            if description.is_some() {
-                                return Err(de::Error::duplicate_field("description"));
-                            }
-
-                            description = Some(map.next_value()?);
-                        }
-                        Field::MinCount => {
-                            if min_values.is_some() {
-                                return Err(de::Error::duplicate_field("min_values"));
-                            }
-
-                            min_values = Some(map.next_value()?);
-                        }
-                        Field::MaxCount => {
-                            if max_values.is_some() {
-                                return Err(de::Error::duplicate_field("max_values"));
-                            }
-
-                            max_values = Some(map.next_value()?);
-                        }
-                        Field::Type => {
-                            if valid_type.is_some() {
-                                return Err(de::Error::duplicate_field("type"));
-                            }
-
-                            valid_type = Some(map.next_value()?);
-                        }
-                        Field::ValidValues => {
-                            if valid_values.is_some() {
-                                return Err(de::Error::duplicate_field("valid_values"));
-                            }
-
-                            valid_values = Some(
-                                map.next_value::<Vec<AnyToString>>()?
-                                    .into_iter()
-                                    .map(|s| s.0)
-                                    .collect::<Vec<String>>(),
-                            );
-                        }
-                        Field::DefaultValues => {
-                            if default_values.is_some() {
-                                return Err(de::Error::duplicate_field("default_values"));
-                            }
-
-                            default_values = Some(
-                                map.next_value::<Vec<AnyToString>>()?
-                                    .into_iter()
-                                    .map(|s| s.0)
-                                    .collect::<Vec<String>>(),
-                            );
-                        }
-                    }
-                }
-
-                // let mut argument = match name {
-                //     Some(Some(name)) => Argument::with_name(name),
-                //     _ => Argument::new()
-                // };
-                let mut argument = Argument::with_name(
-                    name.ok_or_else(|| de::Error::missing_field("name"))?
-                );
-
-                if let Some(Some(description)) = description {
-                    argument = argument.description(description);
-                }
-
-                // match (min_values.flatten(), max_values.flatten()) {
-                //     (Some(min), Some(max)) => {
-                //         argument = argument.value_count(ValueCount::new(min, max));
-                //     },
-                //     (Some(min), None) => {
-                //         argument = argument.value_count(ValueCount::more_than(min));
-                //     },
-                //     (None, Some(max)) => {
-                //         argument = argument.value_count(ValueCount::less_than(max));
-                //     }
-                //     (None, None) => { /*By default an `Argument` takes 1 value */ }
-                // }
-
-                match (min_values.flatten(), max_values.flatten()) {
-                    (None, None) => { /*By default an `Argument` takes 1 value */ },
-                    (min, max) => {
-                        argument = argument.values_count(ArgCount::new(min, max))
-                    }
-                }
-
-                if let Some(Some(valid_type)) = valid_type {
-                    argument = valid_type.set_validator(argument);
-                }
-
-                if let Some(valid_values) = valid_values {
-                    if valid_values.len() > 0 {
-                        argument = argument.valid_values(valid_values);
-                    }
-                }
-
-                if let Some(default_values) = default_values {
-                    if default_values.len() > 0 {
-                        argument = argument.defaults(default_values);
-                    }
-                }
-
-                Ok(argument)
-            }
-        }
-
-        deserializer.deserialize_struct("Argument", FIELDS, ArgumentVisitor)
+        D: Deserializer<'de>, {
+        deserializer.deserialize_struct("Argument", argument::FIELDS, argument::ArgumentVisitor)
     }
 }
 
@@ -495,19 +201,22 @@ impl<'de> Deserialize<'de> for ArgumentList {
             {
                 let mut args = ArgumentList::new();
                 while let Some(next_arg) = seq.next_element()? {
-                    args.add(next_arg).unwrap();
+                    args.add(next_arg).expect("duplicated argument");
                 }
                 Ok(args)
             }
 
-            // fn visit_map<A>(self, map: A) -> Result<Self::Value, <A as MapAccess<'de>>::Error>
-            //     where A: MapAccess<'de>, {
-            //     let mut args = ArgumentList::new();
-            //     Ok(args)
-            // }
+            fn visit_map<A>(self, map: A) -> Result<Self::Value, <A as MapAccess<'de>>::Error>
+                where A: MapAccess<'de>, {
+                let mut args = ArgumentList::new();
+                args.add(argument::ArgumentVisitor.visit_map(map)?)
+                    .expect("duplicated argument");
+
+                Ok(args)
+            }
         }
 
-        deserializer.deserialize_seq(ArgumentListVisitor)
+        deserializer.deserialize_any(ArgumentListVisitor)
     }
 }
 
@@ -1248,6 +957,275 @@ mod internal {
     }
 }
 
+mod argument {
+    use serde::{Deserialize, Deserializer, de};
+    use serde::de::{Visitor, SeqAccess, MapAccess};
+    use crate::{Argument, ArgCount};
+    use crate::serde::internal::{ValidType, AnyToString};
+    use std::fmt;
+    use std::fmt::Formatter;
+
+    pub const FIELDS: &'static [&'static str] = &[
+        "name",
+        "description",
+        "min_values",
+        "max_values",
+        "type",
+        "valid_values",
+        "default_values",
+    ];
+
+    pub enum Field {
+        Name,
+        Description,
+        MinCount,
+        MaxCount,
+        Type,
+        ValidValues,
+        DefaultValues,
+    }
+
+    impl<'de> Deserialize<'de> for Field {
+        fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
+            where
+                D: Deserializer<'de>,
+        {
+            struct FieldVisitor;
+            impl<'de> Visitor<'de> for FieldVisitor {
+                type Value = Field;
+
+                fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+                    formatter.write_str("`name`, `description`, `min_values`, `max_values`, `type`, `valid_values` or `default_values`")
+                }
+
+                fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                    where
+                        E: de::Error,
+                {
+                    match v {
+                        "name" => Ok(Field::Name),
+                        "description" => Ok(Field::Description),
+                        "min_values" => Ok(Field::MinCount),
+                        "max_values" => Ok(Field::MaxCount),
+                        "type" => Ok(Field::Type),
+                        "valid_values" => Ok(Field::ValidValues),
+                        "default_values" => Ok(Field::DefaultValues),
+                        _ => Err(de::Error::unknown_field(v, FIELDS)),
+                    }
+                }
+
+                fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+                    where
+                        E: de::Error,
+                {
+                    match v {
+                        b"name" => Ok(Field::Name),
+                        b"description" => Ok(Field::Description),
+                        b"min_values" => Ok(Field::MinCount),
+                        b"max_values" => Ok(Field::MaxCount),
+                        b"type" => Ok(Field::Type),
+                        b"valid_values" => Ok(Field::ValidValues),
+                        b"default_values" => Ok(Field::DefaultValues),
+                        _ => {
+                            let value = String::from_utf8_lossy(v);
+                            Err(de::Error::unknown_field(&value, FIELDS))
+                        }
+                    }
+                }
+            }
+
+            deserializer.deserialize_identifier(FieldVisitor)
+        }
+    }
+
+    pub struct ArgumentVisitor;
+    impl<'de> Visitor<'de> for ArgumentVisitor {
+        type Value = Argument;
+
+        fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+            formatter.write_str("struct Argument")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, <A as SeqAccess<'de>>::Error>
+            where
+                A: SeqAccess<'de>,
+        {
+            let name: Option<String> = seq
+                .next_element()?
+                .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+
+            let description: Option<String> = seq
+                .next_element()?
+                .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+
+            let min_values: Option<usize> = seq
+                .next_element()?
+                .ok_or_else(|| de::Error::invalid_length(2, &self))?;
+
+            let max_values: Option<usize> = seq
+                .next_element()?
+                .ok_or_else(|| de::Error::invalid_length(3, &self))?;
+
+            let valid_type: Option<ValidType> = seq
+                .next_element()?
+                .ok_or_else(|| de::Error::invalid_length(4, &self))?;
+
+            let valid_values: Vec<String> = seq
+                .next_element()?
+                .ok_or_else(|| de::Error::invalid_length(5, &self))?;
+
+            let default_values: Vec<String> = seq
+                .next_element()?
+                .ok_or_else(|| de::Error::invalid_length(6, &self))?;
+
+            let mut argument = match name {
+                Some(name) => Argument::with_name(name),
+                None => Argument::new()
+            };
+
+            match (min_values, max_values) {
+                (None, None) => { /*By default an `Argument` takes 1 value */ },
+                (min, max) => {
+                    argument = argument.values_count(ArgCount::new(min, max))
+                }
+            }
+
+            if let Some(description) = description {
+                argument = argument.description(description);
+            }
+
+            if let Some(valid_type) = valid_type {
+                argument = valid_type.set_validator(argument);
+            }
+
+            if valid_values.len() > 0 {
+                argument = argument.valid_values(valid_values);
+            }
+
+            if default_values.len() > 0 {
+                argument = argument.defaults(default_values);
+            }
+
+            Ok(argument)
+        }
+
+        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, <A as MapAccess<'de>>::Error>
+            where
+                A: MapAccess<'de>,
+        {
+            let mut name: Option<String> = None;
+            let mut description: Option<Option<String>> = None;
+            let mut min_values: Option<Option<usize>> = None;
+            let mut max_values: Option<Option<usize>> = None;
+            let mut valid_type : Option<Option<ValidType>> = None;
+            let mut valid_values: Option<Vec<String>> = None;
+            let mut default_values: Option<Vec<String>> = None;
+
+            while let Some(key) = map.next_key()? {
+                match key {
+                    Field::Name => {
+                        if name.is_some() {
+                            return Err(de::Error::duplicate_field("name"));
+                        }
+
+                        name = Some(map.next_value()?);
+                    }
+                    Field::Description => {
+                        if description.is_some() {
+                            return Err(de::Error::duplicate_field("description"));
+                        }
+
+                        description = Some(map.next_value()?);
+                    }
+                    Field::MinCount => {
+                        if min_values.is_some() {
+                            return Err(de::Error::duplicate_field("min_values"));
+                        }
+
+                        min_values = Some(map.next_value()?);
+                    }
+                    Field::MaxCount => {
+                        if max_values.is_some() {
+                            return Err(de::Error::duplicate_field("max_values"));
+                        }
+
+                        max_values = Some(map.next_value()?);
+                    }
+                    Field::Type => {
+                        if valid_type.is_some() {
+                            return Err(de::Error::duplicate_field("type"));
+                        }
+
+                        valid_type = Some(map.next_value()?);
+                    }
+                    Field::ValidValues => {
+                        if valid_values.is_some() {
+                            return Err(de::Error::duplicate_field("valid_values"));
+                        }
+
+                        valid_values = Some(
+                            map.next_value::<Vec<AnyToString>>()?
+                                .into_iter()
+                                .map(|s| s.0)
+                                .collect::<Vec<String>>(),
+                        );
+                    }
+                    Field::DefaultValues => {
+                        if default_values.is_some() {
+                            return Err(de::Error::duplicate_field("default_values"));
+                        }
+
+                        default_values = Some(
+                            map.next_value::<Vec<AnyToString>>()?
+                                .into_iter()
+                                .map(|s| s.0)
+                                .collect::<Vec<String>>(),
+                        );
+                    }
+                }
+            }
+
+            // let mut argument = Argument::with_name(
+            //     name.ok_or_else(|| de::Error::missing_field("name"))?
+            // );
+
+            let mut argument = match name {
+                Some(name) => Argument::with_name(name),
+                None => Argument::new()
+            };
+
+            if let Some(Some(description)) = description {
+                argument = argument.description(description);
+            }
+
+            match (min_values.flatten(), max_values.flatten()) {
+                (None, None) => { /*By default an `Argument` takes 1 value */ },
+                (min, max) => {
+                    argument = argument.values_count(ArgCount::new(min, max))
+                }
+            }
+
+            if let Some(Some(valid_type)) = valid_type {
+                argument = valid_type.set_validator(argument);
+            }
+
+            if let Some(valid_values) = valid_values {
+                if valid_values.len() > 0 {
+                    argument = argument.valid_values(valid_values);
+                }
+            }
+
+            if let Some(default_values) = default_values {
+                if default_values.len() > 0 {
+                    argument = argument.defaults(default_values);
+                }
+            }
+
+            Ok(argument)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -1322,7 +1300,7 @@ mod tests {
         use crate::{Argument, ArgumentList};
         use serde_test::Token;
         use crate::args::validator::{parse_validator, Type};
-        use crate::serde::serde_test_utils::ArgTokens;
+        use crate::serde::test_utils::ArgTokens;
         use crate::serde::internal::ValidType;
 
         #[test]
@@ -1403,7 +1381,7 @@ mod tests {
         }
 
         #[test]
-        fn argument_list() {
+        fn argument_list_test() {
             let mut args = ArgumentList::new();
             args.add(Argument::with_name("A").description("a")).unwrap();
             args.add(Argument::with_name("B").values_count(2)).unwrap();
@@ -1419,13 +1397,31 @@ mod tests {
 
             serde_test::assert_tokens(&args, tokens.as_slice());
         }
+
+        #[test]
+        fn argument_list_from_json_test(){
+            let json = r#"{
+                "description" : "From 2 up to 10 numbers",
+                "min_values" : 2,
+                "max_values": 10
+            }"#;
+
+            let args = serde_json::from_str::<ArgumentList>(json).unwrap();
+            assert_eq!(args.len(), 1);
+
+            let arg = &args[0];
+            assert_eq!(arg.get_name(), crate::args::ARGUMENT_DEFAULT_NAME);
+            assert_eq!(arg.get_description(), Some("From 2 up to 10 numbers"));
+            assert_eq!(arg.get_values_count().min(), Some(2));
+            assert_eq!(arg.get_values_count().max(), Some(10));
+        }
     }
 
     #[cfg(test)]
     mod options_tests {
         use crate::{ArgCount, Argument, CommandOption, OptionList};
         use serde_test::Token;
-        use crate::serde::serde_test_utils::{OptionTokens, ArgTokens};
+        use crate::serde::test_utils::{OptionTokens, ArgTokens};
 
         #[test]
         fn option_test() {
@@ -1468,7 +1464,7 @@ mod tests {
         }
 
         #[test]
-        fn option_from_json() {
+        fn option_from_json_test() {
             let option = serde_json::from_str::<CommandOption>(
                 r#"
                     {
@@ -1505,7 +1501,7 @@ mod tests {
         }
 
         #[test]
-        fn option_list() {
+        fn option_list_test() {
             let mut option_list = OptionList::new();
             option_list
                 .add(CommandOption::new("A").description("generic description"))
@@ -1534,7 +1530,7 @@ mod tests {
     #[cfg(test)]
     mod command_tests {
         use crate::{ArgCount, Argument, Command, CommandOption};
-        use crate::serde::serde_test_utils::{CommandTokens, OptionTokens, ArgTokens};
+        use crate::serde::test_utils::{CommandTokens, OptionTokens, ArgTokens};
 
         #[test]
         fn command_test() {
@@ -1587,7 +1583,7 @@ mod tests {
         }
 
         #[test]
-        fn command_from_json() {
+        fn command_from_json_test() {
             let command = serde_json::from_str::<Command>(
                 r#"
                 {
@@ -1651,7 +1647,7 @@ mod tests {
 }
 
 #[cfg(test)]
-mod serde_test_utils {
+mod test_utils {
     use serde_test::Token;
     use crate::serde::internal::ValidType;
 

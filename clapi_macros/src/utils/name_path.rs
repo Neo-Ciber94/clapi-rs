@@ -52,6 +52,13 @@ impl NamePath {
 
 impl Display for NamePath {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.path.join("::"))
+        for (i, item) in self.path.iter().enumerate() {
+            if i > 0 {
+                write!(f, "::")?;
+            }
+            write!(f, "{}", item)?;
+        }
+
+        Ok(())
     }
 }

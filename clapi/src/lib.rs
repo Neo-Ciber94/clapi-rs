@@ -193,7 +193,6 @@ pub use self::parser::*;
 pub use self::symbol::*;
 pub use self::tokenizer::*;
 
-
 /// Clapi macros
 #[macro_use]
 mod app_macros;
