@@ -259,9 +259,11 @@ impl CommandAttrData {
             .version
             .as_ref()
             .map(|s| {
+                // todo: implement actual version handling in `Command` and `CommandLine`
+                let name = self.fn_name.name();
                 quote! {
                     if opts.contains("version"){
-                        println!("{} {}", clapi::current_filename(), #s);
+                        println!("{} {}", #name, #s);
                         return Ok(());
                     }
                 }

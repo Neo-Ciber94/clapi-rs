@@ -40,7 +40,15 @@ impl Command {
     /// Constructs a new `Command` named after the running executable.
     #[inline]
     pub fn root() -> Self {
-        Command::new(current_filename())
+        let exe_name = std::env::current_exe()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        Command::new(exe_name.trim_end_matches(std::env::consts::EXE_SUFFIX))
     }
 
     /// Constructs a new `Command` with the specified `Options`.
@@ -414,24 +422,6 @@ impl<'a> IntoIterator for &'a Command {
     fn into_iter(self) -> Self::IntoIter {
         self.get_children()
     }
-}
-
-#[doc(hidden)]
-pub fn current_filename() -> String {
-    current_exe_filename()
-        .trim_end_matches(std::env::consts::EXE_SUFFIX)
-        .to_string()
-}
-
-#[doc(hidden)]
-pub fn current_exe_filename() -> String {
-    std::env::current_exe()
-        .unwrap()
-        .file_name()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string()
 }
 
 #[cfg(test)]
