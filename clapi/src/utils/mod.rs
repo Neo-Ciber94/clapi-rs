@@ -1,14 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_must_use)]
 
-/// Extension methods.
-mod ext;
-pub use ext::*;
-
-#[macro_use]
-mod macros;
-pub use macros::*;
-
 pub use debug_utils::*;
 mod debug_utils {
     use std::fmt::{Debug, Formatter};

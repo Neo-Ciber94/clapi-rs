@@ -5,7 +5,6 @@ use crate::error::{Error, ErrorKind, Result};
 use crate::help::{DefaultHelp, HelpKind, Help};
 use crate::parser::Parser;
 use crate::suggestion::{SingleSuggestionProvider, SuggestionProvider};
-use crate::utils::OptionExt;
 use crate::{Argument, ParseResult, OptionList};
 use std::borrow::Borrow;
 use std::fmt::Debug;
@@ -466,7 +465,7 @@ pub fn split_into_args_with_quote_escape(value: &str, quote_escape: char) -> Vec
             DOUBLE_QUOTE => {
                 in_quote = true;
             },
-            _ if next_char == quote_escape && chars.peek().contains_some(&DOUBLE_QUOTE) => {
+            _ if next_char == quote_escape && chars.peek() == Some(&DOUBLE_QUOTE) => {
                 buffer.push(chars.next().unwrap());
             },
             _ => {

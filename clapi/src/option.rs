@@ -23,7 +23,7 @@ impl CommandOption {
     /// Panics if the `name` is blank or empty.
     pub fn new<S: Into<String>>(name: S) -> Self {
         let name = name.into();
-        assert_contains_no_whitespaces!(name);
+        assert!(!name.is_empty(), "option `name` cannot be empty");
 
         CommandOption {
             name,
@@ -98,7 +98,7 @@ impl CommandOption {
     /// Panics if the `alias` is empty or contains whitespaces.
     pub fn alias<S: Into<String>>(mut self, alias: S) -> Self {
         let alias = alias.into();
-        assert_contains_no_whitespaces!(alias);
+        assert!(!alias.is_empty(), "option `alias` cannot be empty");
         self.aliases.insert(alias);
         self
     }
@@ -347,6 +347,28 @@ impl IntoIterator for OptionList {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[should_panic(expected="option `name` cannot be empty")]
+    fn option_empty_name_test(){
+        let _ = CommandOption::new("");
+    }
+
+    #[test]
+    #[should_panic(expected="option `alias` cannot be empty")]
+    fn option_empty_alias_test(){
+        let _ = CommandOption::new("test").alias("");
+    }
+
+    #[test]
+    fn option_blank_name_test(){
+        let _ = CommandOption::new(" ");
+    }
+
+    #[test]
+    fn option_blank_alias_test(){
+        let _ = CommandOption::new("test").alias(" ");
+    }
 
     #[test]
     fn alias_test() {
