@@ -94,7 +94,7 @@ impl Tokenizer {
                 // the next should be an unknown subcommand
                 if !current_command.take_args()
                     && current_command.get_children().len() > 0
-                    && !context.is_option_prefixed(arg.borrow())
+                    && !is_option(context,arg.borrow())
                 {
                     tokens.push(Token::Cmd(arg.borrow().to_string()));
                     iterator.next();
@@ -116,7 +116,7 @@ impl Tokenizer {
                 break;
             }
 
-            if context.is_option_prefixed(value) {
+            if is_option(context, value) {
                 let OptionAndArgs {
                     prefixed_option,
                     args,
@@ -139,7 +139,7 @@ impl Tokenizer {
                             if let Some(value) = iterator.peek() {
                                 let s: &str = value.borrow();
                                 // If the token is prefixed as an option: exit
-                                if context.is_option_prefixed(s) || s == END_OF_OPTIONS {
+                                if is_option(context,s) || s == END_OF_OPTIONS {
                                     break;
                                 } else {
                                     // Adds the next argument
@@ -248,6 +248,13 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
             args: None,
         })
     }
+}
+
+// Returns `true` if the specified value starts with an option prefix.
+fn is_option(context: &Context, value: &str) -> bool {
+    context.name_prefixes()
+        .chain(context.alias_prefixes())
+        .any(|prefix| value.starts_with(prefix))
 }
 
 #[cfg(test)]

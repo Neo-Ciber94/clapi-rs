@@ -173,6 +173,7 @@ mod parse_result;
 mod parser;
 mod symbol;
 mod tokenizer;
+mod version;
 
 /// Utilities for provide suggestions.
 pub mod suggestion;
@@ -192,6 +193,7 @@ pub use self::parse_result::*;
 pub use self::parser::*;
 pub use self::symbol::*;
 pub use self::tokenizer::*;
+pub use self::version::*;
 
 /// Clapi macros
 #[macro_use]

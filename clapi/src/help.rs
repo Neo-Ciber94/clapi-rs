@@ -45,7 +45,7 @@ pub enum HelpKind {
     /// The help is a command, for example:
     ///
     /// `command help [args]`.
-    Subcommand,
+    Command,
     /// The help is an option, for example:
     ///
     /// `command --help`.
@@ -153,7 +153,7 @@ impl<'a> DefaultHelp<'a> {
         }
     }
 
-    fn command_help(&self, buf: &mut Buffer, context: &Context, command: &Command) {
+    fn write_help(&self, buf: &mut Buffer, context: &Context, command: &Command) {
         // Command name
         writeln!(buf, "{}", command.get_name()).unwrap();
 
@@ -169,7 +169,7 @@ impl<'a> DefaultHelp<'a> {
 
         // Command usage
         // Write into the buffer the command usage
-        self.command_usage(buf, context, command, false);
+        self.write_usage(buf, context, command, false);
 
         // Command Options
         if option_count > 0 {
@@ -194,7 +194,7 @@ impl<'a> DefaultHelp<'a> {
         }
     }
 
-    fn command_usage(&self, buf: &mut Buffer, context: &Context, command: &Command, after_help_message: bool) {
+    fn write_usage(&self, buf: &mut Buffer, context: &Context, command: &Command, after_help_message: bool) {
         // Writes the usage from the `Command` if any
         if let Some(usage) = command.get_usage() {
             writeln!(buf).unwrap();
@@ -269,7 +269,7 @@ impl<'a> Help for DefaultHelp<'a> {
     fn help(&self, buf: &mut Buffer, context: &Context, command: &Command) {
         match command.get_help() {
             Some(s) => buf.write_str(s).unwrap(),
-            None => self.command_help(buf, context, command),
+            None => self.write_help(buf, context, command),
         }
 
         // After help message
@@ -280,7 +280,7 @@ impl<'a> Help for DefaultHelp<'a> {
     }
 
     fn usage(&self, buf: &mut Buffer, context: &Context, command: &Command) {
-        self.command_usage(buf, context, command, true)
+        self.write_usage(buf, context, command, true)
     }
 
     fn kind(&self) -> HelpKind {
@@ -340,7 +340,7 @@ fn command_to_string(command: &Command) -> String {
 pub(crate) fn after_help_message(context: &Context) -> Option<String> {
     if let Some(help) = context.help() {
         match help.kind() {
-            HelpKind::Any | HelpKind::Subcommand => {
+            HelpKind::Any | HelpKind::Command => {
                 let command = context.root().get_name();
                 Some(format!("Use '{} {} <subcommand>' for more information about a command.", command, help.name()))
             }
@@ -358,14 +358,14 @@ pub(crate) fn after_help_message(context: &Context) -> Option<String> {
 
 pub(crate) fn to_command<H: Help + ?Sized>(help: &H) -> Command {
     Command::new(help.name())
-        .arg(Argument::with_name("subcommand").values_count(0..=1))
+        .arg(Argument::zero_or_more("subcommand"))
         .hidden(true)
         .description(help.description())
 }
 
 pub(crate) fn to_option<H: Help + ?Sized>(help: &H) -> CommandOption {
     let option = CommandOption::new(help.name())
-        .arg(Argument::with_name("subcommand").values_count(0..=1))
+        .arg(Argument::zero_or_more("subcommand"))
         .description(help.description())
         .hidden(true);
 

@@ -20,6 +20,7 @@ pub struct Command {
     description: Option<String>,
     usage: Option<String>,
     help: Option<String>,
+    version: Option<String>,
     children: LinkedHashSet<Command>,
     options: OptionList,
     args: ArgumentList,
@@ -57,7 +58,7 @@ impl Command {
     /// Panics if the command `name` is empty or contains whitespaces.
     pub fn with_options<S: Into<String>>(name: S, options: OptionList) -> Self {
         let name = name.into();
-        assert_contains_no_whitespaces!(name);
+        assert!(!name.is_empty(), "command `name` cannot be empty");
 
         Command {
             name,
@@ -65,6 +66,7 @@ impl Command {
             description: None,
             usage: None,
             help: None,
+            version: None,
             children: LinkedHashSet::new(),
             handler: None,
             args: ArgumentList::new(),
@@ -91,6 +93,11 @@ impl Command {
     /// Returns the `help` information of the command.
     pub fn get_help(&self) -> Option<&str> {
         self.help.as_deref()
+    }
+
+    /// Returns the `version` of this command.
+    pub fn get_version(&self) -> Option<&str> {
+        self.version.as_deref()
     }
 
     /// Returns an `ExactSizeIterator` over the children of this command.
@@ -161,6 +168,12 @@ impl Command {
     /// Sets help information about this command.
     pub fn help<S: Into<String>>(mut self, help: S) -> Self {
         self.help = Some(help.into());
+        self
+    }
+
+    /// Sets the version of this command.
+    pub fn version<S: Into<String>>(mut self, version: S) -> Self {
+        self.version = Some(version.into());
         self
     }
 
@@ -441,9 +454,14 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected="`name` is empty")]
-    fn command_test2() {
-        Command::new(" ");
+    #[should_panic(expected="command `name` cannot be empty")]
+    fn command_empty_name_test() {
+        Command::new("");
+    }
+
+    #[test]
+    fn command_name_with_whitespaces_test() {
+        Command::new("My App");
     }
 
     #[test]

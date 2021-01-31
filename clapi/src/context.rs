@@ -6,6 +6,7 @@ use crate::suggestion::SuggestionProvider;
 use std::rc::Rc;
 use std::fmt::{Debug, Formatter};
 use crate::utils::debug_option;
+use crate::{VersionProvider, DefaultVersionProvider};
 
 /// Provides common values used for a command-line parsing.
 #[derive(Clone)]
@@ -13,6 +14,7 @@ pub struct Context {
     root: Command,
     help: Option<Rc<dyn Help + 'static>>,
     suggestions: Option<Rc<dyn SuggestionProvider + 'static>>,
+    version: Rc<dyn VersionProvider + 'static>,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
     assign_operators: LinkedHashSet<char>,
@@ -37,6 +39,11 @@ impl Context {
     #[inline]
     pub fn builder(root: Command) -> ContextBuilder {
         ContextBuilder::new(root)
+    }
+
+    /// Returns the `RootCommand` used by this context.
+    pub fn root(&self) -> &Command {
+        &self.root
     }
 
     /// Returns an `Iterator` over the option name prefixes of this context.
@@ -73,13 +80,18 @@ impl Context {
         self.suggestions.as_ref()
     }
 
+    /// Returns the `VersionProvider` used by this context.
+    pub fn version(&self) -> &Rc<dyn VersionProvider> {
+        &self.version
+    }
+
     /// Sets the `Help` provider of this context.
     pub fn set_help<H: Help + 'static>(&mut self, help: H) {
         //todo: handle all HelpKind here, Any, Subcommand and Option?
 
         // If the `help` is a subcommand we add the subcommand to the root
         match help.kind() {
-            HelpKind::Any | HelpKind::Subcommand => {
+            HelpKind::Any | HelpKind::Command => {
                 self.root.add_command(
                     crate::help::to_command(&help)
                 );
@@ -125,15 +137,7 @@ impl Context {
         self.alias_prefixes.contains(value)
     }
 
-    /// Returns `true` if the specified value starts with an option prefix.
-    pub fn is_option_prefixed(&self, value: &str) -> bool {
-        self.name_prefixes
-            .iter()
-            .chain(self.alias_prefixes.iter())
-            .any(|prefix| value.starts_with(prefix))
-    }
-
-    /// Returns `true` if the `name` match with the `help` provider.
+    /// Returns `true` if the name match with the `help` provider.
     pub fn is_help<S: AsRef<str>>(&self, name: S) -> bool {
         if let Some(help) = &self.help {
             if help.name() == name.as_ref() {
@@ -150,13 +154,17 @@ impl Context {
         false
     }
 
-    /// Returns the `RootCommand` used by this context.
-    pub fn root(&self) -> &Command {
-        &self.root
+    /// Returns `true` if the name match with a `version` provider.
+    pub fn is_version<S: AsRef<str>>(&self, name: S) -> bool {
+        if let Some(alias) = self.version.alias() {
+            self.version.name() == name.as_ref() || alias == name.as_ref()
+        } else {
+            self.version.name() == name.as_ref()
+        }
     }
 
     /// Removes the prefix from the given option
-    pub(crate) fn trim_prefix<'a>(&self, option: &'a str) -> &'a str {
+    pub fn trim_prefix<'a>(&self, option: &'a str) -> &'a str {
         self.name_prefixes.iter()
             .chain(self.alias_prefixes.iter())
             .find(|prefix| option.starts_with(prefix.as_str()))
@@ -204,6 +212,7 @@ pub struct ContextBuilder {
     root: Command,
     help: Option<Rc<dyn Help>>,
     suggestions: Option<Rc<dyn SuggestionProvider>>,
+    version: Option<Rc<dyn VersionProvider + 'static>>,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
     assign_operators: LinkedHashSet<char>,
@@ -216,6 +225,7 @@ impl ContextBuilder {
             root,
             help: None,
             suggestions: None,
+            version: None,
             name_prefixes: Default::default(),
             alias_prefixes: Default::default(),
             assign_operators: Default::default(),
@@ -261,11 +271,16 @@ impl ContextBuilder {
         self
     }
 
+    pub fn version<V: VersionProvider + 'static>(mut self, version: V) -> Self {
+        self.version = Some(Rc::new(version));
+        self
+    }
+
     pub fn build(mut self) -> Context {
         // If the `help` is a subcommand we add the subcommand to the root
         if let Some(help) = &self.help {
             match help.kind() {
-                HelpKind::Any | HelpKind::Subcommand => {
+                HelpKind::Any | HelpKind::Command => {
                     self.root.add_command(
                         crate::help::to_command(help.as_ref())
                     );
@@ -283,6 +298,9 @@ impl ContextBuilder {
 
             // Suggestion Provider
             suggestions: self.suggestions,
+
+            // Version provider
+            version: self.version.unwrap_or_else(|| Rc::new(DefaultVersionProvider)),
 
             // Delimiter
             delimiter: self.delimiter.unwrap_or(','),

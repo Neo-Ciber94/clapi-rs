@@ -5,7 +5,6 @@ use crate::error::{Error, ErrorKind, Result};
 use crate::help::{DefaultHelp, HelpKind, Help};
 use crate::parser::Parser;
 use crate::suggestion::{SingleSuggestionProvider, SuggestionProvider};
-use crate::utils::OptionExt;
 use crate::{Argument, ParseResult, OptionList};
 use std::borrow::Borrow;
 use std::fmt::Debug;
@@ -94,9 +93,15 @@ impl CommandLine {
             Err(error) => return self.handle_error(&parser, error),
         };
 
-        // Check if the command requires to display help
+        // Checks if the command requires to display help
         if self.requires_help(Ok(&parse_result)) {
-            return self.handle_help_from_parse_result(&parse_result);
+            return self.handle_help(&parse_result);
+        }
+
+        // Checks if the command requires to display the version
+        if self.requires_version(&parse_result) {
+            self.show_version(&parse_result);
+            return Ok(());
         }
 
         // We borrow the value from the Option to avoid create a temporary
@@ -124,13 +129,22 @@ impl CommandLine {
         }
     }
 
-    fn handle_error(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
-        debug_assert!(parser.is_failed());
+    fn requires_version(&self, result: &ParseResult) -> bool {
+        result.contains_option(self.context.version().name())
+            && result.executing_command().get_version().is_some()
+    }
 
-        if self.requires_help(Err(parser)) {
-            return self.handle_help_from_parser(parser);
+    fn show_version(&self, result: &ParseResult) {
+        match result.executing_command().get_version() {
+            Some(version) => {
+                let name = result.executing_command().get_name();
+                println!("{} {}", name, version);
+            },
+            None => unreachable!()
         }
+    }
 
+    fn handle_error(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
         match error.kind() {
             ErrorKind::InvalidArgumentCount | ErrorKind::InvalidArgument(_) if self.context.help().is_some() => {
                 let usage_message = self.get_help_message(None, MessageKind::Usage)?;
@@ -160,7 +174,7 @@ impl CommandLine {
         match result {
             Ok(parse_result) => {
                 match help.kind() {
-                    HelpKind::Subcommand => {
+                    HelpKind::Command => {
                         is_help_subcommand(help, parse_result.executing_command())
                     },
                     HelpKind::Option => {
@@ -174,7 +188,7 @@ impl CommandLine {
             },
             Err(parser) => {
                 match help.kind() {
-                    HelpKind::Subcommand => {
+                    HelpKind::Command => {
                         is_help_subcommand(help, parser.command().unwrap())
                     }
                     HelpKind::Option => {
@@ -189,46 +203,18 @@ impl CommandLine {
         }
     }
 
-    fn handle_help_from_parser(&self, parser: &Parser<'_>) -> Result<()> {
-        let command = parser.command().unwrap();
-        let help = self.help().unwrap().as_ref();
-
-        if is_help_option(help, parser.options().unwrap()) {
-            // handler for: subcommand --help [ignore args]
-            if command.get_parent().is_some() {
-                print!("{}", self.get_help_message_for_command(command, MessageKind::Help));
-                Ok(())
-            } else {
-                // handler for: --help [subcommand]
-                let args = parser.options().unwrap().get(help.name())
-                    .unwrap()
-                    .get_arg();
-
-                self.display_help(args)
-            }
-        } else {
-            // handler for: help [subcommand]
-            self.display_help(Some(&parser.args().unwrap()[0]))
-        }
-    }
-
-    fn handle_help_from_parse_result(&self, parse_result: &ParseResult) -> Result<()> {
-        let command = parse_result.executing_command();
+    fn handle_help(&self, parse_result: &ParseResult) -> Result<()> {
         let help = self.help().unwrap().as_ref();
 
         if is_help_option(help, parse_result.options()) {
-            // handler for: subcommand --help [ignore args]
-            if command.get_parent().is_some() {
-                print!("{}", self.get_help_message_for_command(command, MessageKind::Help));
-                Ok(())
-            } else {
-                // handler for: --help [subcommand]
-                let args = parse_result.get_option(help.name())
-                    .unwrap()
-                    .get_arg();
+            // handler for either:
+            // * --help [subcommand]
+            // * [subcommand] --help
+            let arg = parse_result.get_option(help.name())
+                .unwrap()
+                .get_arg();
 
-                self.display_help(args)
-            }
+            self.display_help(arg)
         } else {
             // handler for: help [subcommand]
             self.display_help(parse_result.arg())
@@ -466,7 +452,7 @@ pub fn split_into_args_with_quote_escape(value: &str, quote_escape: char) -> Vec
             DOUBLE_QUOTE => {
                 in_quote = true;
             },
-            _ if next_char == quote_escape && chars.peek().contains_some(&DOUBLE_QUOTE) => {
+            _ if next_char == quote_escape && chars.peek() == Some(&DOUBLE_QUOTE) => {
                 buffer.push(chars.next().unwrap());
             },
             _ => {

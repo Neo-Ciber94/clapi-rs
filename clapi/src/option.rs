@@ -14,16 +14,17 @@ pub struct CommandOption {
     is_required: bool,
     is_hidden: bool,
     allow_multiple: bool,
+    // use_equals: bool,
 }
 
 impl CommandOption {
     /// Constructs a new `CommandOption`.
     ///
     /// # Panics:
-    /// Panics if the `name` is blank or empty.
+    /// Panics if the `name` is empty.
     pub fn new<S: Into<String>>(name: S) -> Self {
         let name = name.into();
-        assert_contains_no_whitespaces!(name);
+        assert!(!name.is_empty(), "option `name` cannot be empty");
 
         CommandOption {
             name,
@@ -95,10 +96,10 @@ impl CommandOption {
     /// Adds a new alias to this option.
     ///
     /// # Panics:
-    /// Panics if the `alias` is empty or contains whitespaces.
+    /// Panics if the `alias` is empty.
     pub fn alias<S: Into<String>>(mut self, alias: S) -> Self {
         let alias = alias.into();
-        assert_contains_no_whitespaces!(alias);
+        assert!(!alias.is_empty(), "option `alias` cannot be empty");
         self.aliases.insert(alias);
         self
     }
@@ -347,6 +348,28 @@ impl IntoIterator for OptionList {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[should_panic(expected="option `name` cannot be empty")]
+    fn option_empty_name_test() {
+        CommandOption::new("");
+    }
+
+    #[test]
+    #[should_panic(expected="option `alias` cannot be empty")]
+    fn option_empty_alias_test() {
+        CommandOption::new("test").alias("");
+    }
+
+    #[test]
+    fn option_name_with_whitespaces_test() {
+        CommandOption::new("my option");
+    }
+
+    #[test]
+    fn option_alias_with_whitespaces_test() {
+        CommandOption::new("test").alias("m o");
+    }
 
     #[test]
     fn alias_test() {

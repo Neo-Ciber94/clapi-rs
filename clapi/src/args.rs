@@ -47,7 +47,7 @@ impl Argument {
     /// Panics if the argument `name` is empty or contains whitespaces.
     pub fn with_name<S: Into<String>>(name: S) -> Self {
         let name = name.into();
-        assert_contains_no_whitespaces!(name);
+        assert!(!name.is_empty(), "argument `name` cannot be empty");
 
         Argument {
             name: Some(name),
@@ -326,7 +326,7 @@ impl Argument {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
                 format!(
-                    "`{}` expect {} but was {}",
+                    "argument `{}` expect {} but was {}",
                     self.get_name(),
                     self.get_values_count(),
                     values.len()
@@ -1029,6 +1029,17 @@ mod tests {
         assert!(arg.get_validator().is_some());
         assert_eq!(arg.get_default_values()[0].clone(), "1".to_owned());
         assert!(!arg.is_set());
+    }
+
+    #[test]
+    #[should_panic(expected="argument `name` cannot be empty")]
+    fn arg_empty_name_test() {
+        Argument::with_name("");
+    }
+
+    #[test]
+    fn arg_name_with_whitespaces_test() {
+        Argument::with_name("my arg");
     }
 
     #[test]

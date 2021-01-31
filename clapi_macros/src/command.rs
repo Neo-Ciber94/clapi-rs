@@ -205,14 +205,6 @@ impl CommandAttrData {
             .map(|x| quote! { #x })
             .collect::<Vec<TokenStream>>();
 
-        // Command version
-        let version = self
-            .version
-            .as_ref()
-            .map(|_| {
-                quote! { .option(clapi::CommandOption::new("version").alias("v")) }
-            });
-
         // Command description
         let description = self
             .description
@@ -236,8 +228,11 @@ impl CommandAttrData {
             .as_ref()
             .map(|s| quote! { .help(#s) });
 
-        // Get the function body
-        let body = self.get_body(vars.as_slice());
+        // Command version
+        let version = self
+            .version
+            .as_ref()
+            .map(|s| quote! { .version(#s) });
 
         // Instantiate `Command` or `RootCommand`
         let mut command = match &self.name {
@@ -254,50 +249,29 @@ impl CommandAttrData {
             }
         };
 
-        // Show version
-        let show_version = self
-            .version
-            .as_ref()
-            .map(|s| {
-                // todo: implement actual version handling in `Command` and `CommandLine`
-                let name = self.fn_name.name();
-                quote! {
-                    if opts.contains("version"){
-                        println!("{} {}", #name, #s);
-                        return Ok(());
-                    }
-                }
-            });
-
-        //println!("contains expressions {}: {}", self.fn_name, self.contains_expressions());
         // Command handler
         let handler = if contains_expressions(self.item_fn.as_ref().unwrap()) {
+            // Get the function body
+            let body = self.get_body(vars.as_slice());
+
             quote!{
                 .handler(|opts, args|{
-                    #show_version
                     #body
                 })
             }
         } else {
-            // We omit the handler if don't contains any expressions or locals, for example:
-            //
-            // EMPTY:
-            //      fn test() {}
-            //      fn test(){ const VALUE : I64 = 0; }
-            //
-            // NOT EMPTY:
-            //      fn test() { println!("HELLO WORLD"); }
-            //      fn test() { let value = 0; }
-            if let Some(show_version) = show_version {
-                quote!{
-                    .handler(|opts, args|{
-                        #show_version
-                        Err(clapi::Error::from(clapi::ErrorKind::FallthroughHelp))
-                    })
-                }
-            } else {
-                quote! {}
-            }
+            /*
+                We omit the handler if don't contains any expressions or locals, for example:
+
+                EMPTY:
+                    fn test() {}
+                    fn test(){ const VALUE : I64 = 0; }
+
+                NOT EMPTY:
+                    fn test() { println!("HELLO WORLD"); }
+                    fn test() { let value = 0; }
+            */
+            quote! {}
         };
 
         // Build the command

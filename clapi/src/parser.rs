@@ -1,58 +1,35 @@
 #![allow(clippy::collapsible_if, clippy::len_zero)]
 use std::borrow::Borrow;
-use std::iter::Peekable;
 use crate::args::ArgumentList;
 use crate::command::Command;
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, Result};
-use crate::help::HelpKind;
+use crate::help::{HelpKind, Help};
 use crate::option::{CommandOption, OptionList};
 use crate::parse_result::ParseResult;
 use crate::tokenizer::{Token, Tokenizer};
 use crate::Argument;
+use std::cell::Cell;
 
 /// A command-line argument parser.
 #[derive(Debug, Clone)]
 pub struct Parser<'a> {
     context: &'a Context,
-    state: ParseState,
+    cursor: Option<Cursor>,
     command: Option<Command>,
     options: Option<OptionList>,
     args: Option<ArgumentList>,
-}
-
-/// State of the parser.
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
-pub enum ParseState {
-    /// The parser is not executed yet.
-    Uninitialized,
-    /// The parse operation finished successfully.
-    Completed,
-    /// The parse operation failed.
-    Failed
 }
 
 impl<'a> Parser<'a> {
     pub fn new(context: &'a Context) -> Self {
         Parser {
             context,
+            cursor: None,
             command: None,
             options: Some(OptionList::new()),
             args: Some(ArgumentList::new()),
-            state: ParseState::Uninitialized,
         }
-    }
-
-    pub fn state(&self) -> ParseState {
-        self.state
-    }
-
-    pub fn is_completed(&self) -> bool {
-        self.state == ParseState::Completed
-    }
-
-    pub fn is_failed(&self) -> bool {
-        self.state == ParseState::Failed
     }
 
     pub fn command(&self) -> Option<&Command> {
@@ -70,45 +47,41 @@ impl<'a> Parser<'a> {
     pub fn parse<S, I>(&mut self, args: I) -> Result<ParseResult>
         where S: Borrow<str>,
               I: IntoIterator<Item = S> {
-        // We prevent to run the parser twice due it maintain
-        // the state of the last parse in case an error have occurred.
-        if self.state != ParseState::Uninitialized {
-            panic!("Parser have been used");
+        // If cursor is already set, reset the `Parser` state
+        if self.cursor.is_some() {
+            self.command = None;
+            self.options = Some(OptionList::new());
+            self.args = Some(ArgumentList::new());
         }
 
-        let tokens = Tokenizer
-            .tokenize(&self.context, args)
-            .map_err(|error| {
-                self.state = ParseState::Failed;
-                error
-        })?;
+        // Parse the tokens using the current `Context`
+        let tokens = Tokenizer.tokenize(self.context, args)?;
 
-        match self.parse_tokens(tokens) {
-            Ok(result) => {
-                self.state = ParseState::Completed;
-                Ok(result)
-            },
-            Err(error) => {
-                self.state = ParseState::Failed;
-                Err(error)
-            }
-        }
+        // Constructs a `Cursor` using the tokens
+        self.cursor = Some(Cursor::new(tokens));
+
+        // Parse all the tokens
+        self.parse_tokens()
     }
 
-    fn parse_tokens(&mut self, tokens: Vec<Token>) -> Result<ParseResult> {
-        // We takes an iterator over the tokens to parse, and parse the command, options and args,
-        // the order of these operations matters due the commands are expected as:
-        // <subcommands> <options> <option_arguments> <end of options> <command_arguments>
-        let mut iterator = tokens.iter().peekable();
-
+    fn parse_tokens(&mut self) -> Result<ParseResult> {
         // Parse executing command
-        self.parse_executing_command(&mut iterator)?;
+        self.parse_executing_command()?;
 
         // Parse the commands options and its arguments
-        self.parse_options(&mut iterator)?;
+        self.parse_options()?;
+
+        // Quick path: If the current parsing result contains a `help` command or option exit
+        // due it consumes all the tokens in the `Cursor`
+        if self.contains_help() {
+            let command = self.command.take().unwrap();
+            let options = self.options.take().unwrap();
+            let args = self.args.take().unwrap();
+            return Ok(ParseResult::new(command, options, args));
+        }
 
         // Skip next `end of arguments` token (if any)
-        if let Some(index) = iterator.clone().position(|t| t.is_eoo()) {
+        if let Some(index) = self.cursor.as_ref().unwrap().remaining().iter().position(|t| t.is_eoo()) {
             // If there is arguments before `--` (end of arguments)
             // values are being passed to the last option which not exist.
             //
@@ -119,27 +92,33 @@ impl<'a> Parser<'a> {
                 // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html
 
                 // We get the last argument to provide a hint of the error
-                let value = iterator.next().cloned().unwrap().into_string();
+                let value = self.cursor.as_ref()
+                    .unwrap()
+                    .next()
+                    .cloned()
+                    .unwrap()
+                    .into_string();
+
                 return Err(Error::new(
                     ErrorKind::InvalidArgument(value),
                     "there is no options that expect arguments",
                 ));
             } else {
-                iterator.next();
+                self.cursor.as_ref().unwrap().next();
             }
         }
 
         // Check and set required options (if any)
-        self.set_required_options()?;
+        self.check_required_options()?;
 
         // Check and set options with default values (if any)
         self.set_default_options();
 
         // Parse the command arguments
-        self.parse_args(&mut iterator)?;
+        self.parse_args()?;
 
         // If there is arguments left and the current command takes no arguments is an error
-        if iterator.peek().is_some() {
+        if self.cursor.as_ref().unwrap().peek().is_some() {
             let command = self.command.as_ref().unwrap();
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
@@ -154,9 +133,18 @@ impl<'a> Parser<'a> {
         Ok(ParseResult::new(command, options, args))
     }
 
-    fn parse_executing_command<'b, I>(&mut self, iterator: &mut Peekable<I>) -> Result<()> where I: Iterator<Item=&'b Token> {
+    fn parse_executing_command(&mut self) -> Result<()> {
+        let cursor = self.cursor.as_ref().unwrap();
         let mut command = self.context.root();
-        while let Some(Token::Cmd(name)) = iterator.peek() {
+
+        // If the next is `help [subcommand`
+        if let Some(Token::Cmd(name)) = cursor.peek() {
+            if is_help_command(&self.context, name) {
+                return self.parse_help_command();
+            }
+        }
+
+        while let Some(Token::Cmd(name)) = cursor.peek() {
             command = match command.find_subcommand(name.as_str()) {
                 Some(x) => x,
                 None => {
@@ -165,25 +153,30 @@ impl<'a> Parser<'a> {
                 }
             };
 
-            iterator.next();
+            cursor.next();
         }
 
         self.command = Some(command.clone());
         Ok(())
     }
 
-    fn parse_options<'b, I>(&mut self, iterator: &mut Peekable<I>) -> Result<()> where I: Iterator<Item=&'b Token> + Clone {
+    fn parse_options(&mut self) -> Result<()> {
+        let cursor = self.cursor.as_ref().unwrap();
         let command = self.command.as_ref().unwrap();
 
-        while let Some(Token::Opt(s)) = iterator.peek() {
+        while let Some(Token::Opt(s)) = cursor.peek() {
+            if is_help_option(&self.context, s) {
+                return self.parse_help_option();
+            }
+
             if let Some(option) = find_prefixed_option(&self.context, command, s) {
                 // Consumes option token
-                iterator.next();
+                cursor.next();
 
                 if option.take_args() {
                     let mut option_args = ArgumentList::new();
                     let mut option_args_iter = option.get_args().iter().cloned().peekable();
-                    let require_default_values = self.require_default_values(option.get_args(), iterator);
+                    let require_default_values = self.require_default_values(option.get_args());
                     let mut default_value_is_set = false;
 
                     while let Some(mut arg) = option_args_iter.next() {
@@ -205,8 +198,8 @@ impl<'a> Parser<'a> {
                         let mut count = 0;
 
                         while count < max_count {
-                            if let Some(Token::Arg(value)) = iterator.peek() {
-                                iterator.next();
+                            if let Some(Token::Arg(value)) = cursor.peek() {
+                                cursor.next();
                                 values.push(value.clone());
                                 count += 1;
                             } else {
@@ -216,7 +209,7 @@ impl<'a> Parser<'a> {
 
                         // If there is no more option args, check if there is an `end of arguments`
                         if option_args_iter.peek().is_none() {
-                            if iterator.peek().map_or(false, |t| !t.is_option()) {
+                            if cursor.peek().map_or(false, |t| !t.is_option()) {
                                 // Check Guide 10
                                 // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html
                                 // If there is an `--` (end of arguments) we pass all the values
@@ -224,9 +217,9 @@ impl<'a> Parser<'a> {
                                 //
                                 // Example: --numbers 1 2 3 -- hello world
                                 // 1 2 3 are passed to the option `--numbers`
-                                if let Some(mut index) = iterator.clone().position(|t| t.is_eoo()) {
+                                if let Some(mut index) = cursor.remaining().iter().position(|t| t.is_eoo()) {
                                     while index > 0 {
-                                        let s = iterator.next().unwrap().clone().into_string();
+                                        let s = cursor.next().unwrap().clone().into_string();
                                         values.push(s);
                                         index -= 1;
                                     }
@@ -255,10 +248,11 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn parse_args<'b, I>(&mut self, iterator: &mut Peekable<I>) -> Result<()> where I: Iterator<Item=&'b Token> + Clone {
+    fn parse_args(&mut self) -> Result<()> {
+        let cursor = self.cursor.as_ref().unwrap();
         let command = self.command.as_ref().unwrap();
         let mut args_iter = command.get_args().iter().cloned().peekable();
-        let require_default_values = self.require_default_values(command.get_args(), iterator);
+        let require_default_values = self.require_default_values(command.get_args());
         let mut default_value_is_set = false;
 
         while let Some(mut arg) = args_iter.next() {
@@ -282,8 +276,8 @@ impl<'a> Parser<'a> {
                 let mut count = 0;
 
                 while count < max_count {
-                    if let Some(Token::Arg(value)) = iterator.peek() {
-                        iterator.next();
+                    if let Some(Token::Arg(value)) = cursor.peek() {
+                        cursor.next();
                         values.push(value.clone());
                         count += 1;
                     } else {
@@ -292,7 +286,7 @@ impl<'a> Parser<'a> {
                 }
             } else {
                 // If there is no `Argument`s left, pass the rest of the tokens as values
-                while let Some(t) = iterator.next().cloned() {
+                while let Some(t) = cursor.next().cloned() {
                     values.push(t.into_string());
                 }
             }
@@ -309,7 +303,81 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn set_required_options(&self) -> Result<()> {
+    fn parse_help_command(&mut self) -> Result<()>{
+        let cursor = self.cursor.as_ref().unwrap();
+
+        if let Some(Token::Cmd(name)) = cursor.next() {
+            debug_assert!(is_help_command(&self.context, name));
+
+            let command = self.context.root().find_subcommand(name).unwrap();
+            let mut args = ArgumentList::new();
+            let mut arg = command.get_arg().unwrap().clone();
+            let values = cursor.remaining()
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>();
+
+            arg.set_values(values)?;
+            args.add(arg).unwrap();
+
+            // We already take all the remaining tokens
+            cursor.move_to_end();
+
+            // Sets the executing `help` command and the arguments
+            self.command = Some(command.clone());
+            self.args = Some(args);
+            Ok(())
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn parse_help_option(&mut self) -> Result<()> {
+        let cursor = self.cursor.as_ref().unwrap();
+
+        if let Some(Token::Opt(s)) = cursor.next() {
+            debug_assert!(is_help_option(&self.context, s));
+
+            let command = self.command.as_ref().unwrap();
+            let option = find_prefixed_option(&self.context, command, s).unwrap();
+            let mut args = ArgumentList::new();
+            let mut arg = option.get_arg().unwrap().clone();
+
+            if cursor.position() == 1 {
+                // We take all the available values as arguments for the help
+                let values = cursor.remaining()
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>();
+
+                arg.set_values(values)?;
+            } else {
+                // If the help is like: `[subcommand] --help` all the values before the `--help`
+                // will be used as arguments
+                let index = cursor.position();
+                let values = cursor.tokens()[..index - 1]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>();
+
+                arg.set_values(values)?;
+            }
+
+            // Adds the single argument
+            args.add(arg).unwrap();
+
+            // Ignore the rest of tokens
+            cursor.move_to_end();
+
+            // Set all the values to the help `CommandOption`
+            self.options.as_mut().unwrap().add(option.args(args)).unwrap();
+            Ok(())
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn check_required_options(&self) -> Result<()> {
         let options = self.options.as_ref().unwrap();
         let command = self.command.as_ref().unwrap();
         let required_options = command
@@ -348,11 +416,11 @@ impl<'a> Parser<'a> {
     /// For example: the arguments `min` (default 0) and `max` are declared
     /// and `20` is pass as a value, because there is only 1 value and 2 arguments,
     /// `min` must have its default value and `max` must receive the `20`.
-    fn require_default_values<'b, I>(&self, args: &ArgumentList, iterator: &I) -> bool
-        where I: Iterator<Item=&'b Token> + Clone {
+    fn require_default_values(&self, args: &ArgumentList) -> bool {
+        let cursor = self.cursor.as_ref().unwrap();
         let contains_default_args = args.iter().any(|a| a.has_default_values());
         if contains_default_args {
-            let available_values = iterator.clone().into_iter().take_while(|t| t.is_arg()).count();
+            let available_values = cursor.remaining().iter().take_while(|t| t.is_arg()).count();
             let mut required_values: usize = 0;
 
             for arg in args {
@@ -368,17 +436,105 @@ impl<'a> Parser<'a> {
 
         false
     }
+
+    fn contains_help(&self) -> bool {
+        #[inline]
+        fn contains_help_command(parser: &Parser, help: &dyn Help) -> bool {
+            parser.command.as_ref().unwrap().get_name() == help.name()
+        }
+
+        #[inline]
+        fn contains_help_option(parser: &Parser, help: &dyn Help) -> bool {
+            let options = parser.options.as_ref().unwrap();
+            options.contains(help.name())
+                || help.alias().map_or(false, |s| options.contains(s))
+        }
+
+        if let Some(help) = self.context.help() {
+            match help.kind(){
+                HelpKind::Command => contains_help_command(self, help.as_ref()),
+                HelpKind::Option => contains_help_option(self, help.as_ref()),
+                HelpKind::Any => contains_help_command(self, help.as_ref())
+                    || contains_help_option(self, help.as_ref())
+            }
+
+        } else {
+            false
+        }
+    }
 }
 
-pub(crate) fn find_prefixed_option<'a>(
+// A cursor over the tokens to parse
+#[derive(Debug, Clone)]
+struct Cursor {
+    tokens: Vec<Token>,
+    index: Cell<usize>,
+}
+
+impl Cursor {
+    pub fn new(tokens: Vec<Token>) -> Self {
+        Cursor {
+            tokens,
+            index: Cell::new(0),
+        }
+    }
+
+    #[inline]
+    pub fn tokens(&self) -> &[Token] {
+        self.tokens.as_slice()
+    }
+
+    #[inline]
+    pub fn position(&self) -> usize {
+        self.index.get()
+    }
+
+    #[inline]
+    pub fn remaining(&self) -> &[Token] {
+        &self.tokens[self.index.get()..]
+    }
+
+    #[inline]
+    pub fn move_to_end(&self) {
+        self.index.set(self.tokens.len())
+    }
+
+    #[inline]
+    pub fn next(&self) -> Option<&Token> {
+        let token = self.current();
+        if token.is_some() {
+            self.index.set(self.index.get() + 1);
+        }
+        token
+    }
+
+    #[inline]
+    pub fn peek(&self) -> Option<&Token> {
+        self.current()
+    }
+
+    fn current(&self) -> Option<&Token> {
+        let tokens = self.tokens.as_slice();
+        let index = self.index.get();
+
+        if index >= tokens.len() {
+            None
+        } else {
+            Some(&tokens[index])
+        }
+    }
+}
+
+fn find_prefixed_option<'a>(
     context: &'a Context,
     command: &'a Command,
     prefixed_option: &'a str,
 ) -> Option<CommandOption> {
     let unprefixed_option = context.trim_prefix(prefixed_option);
 
-    // Check if the option is a help, like: `--help`
+    // Check if the option is a `help`, like: `--help`
     if context.is_help(unprefixed_option) {
+        // Check if the command already contains a `--help` defined
         if let Some(opt) = command.get_options().get(unprefixed_option){
             panic!("duplicated option: `{}`", opt.get_name());
         }
@@ -391,8 +547,31 @@ pub(crate) fn find_prefixed_option<'a>(
         }
     }
 
+    // Check if the option is a `version`, like: `--version`
+    if context.is_version(unprefixed_option) {
+        return Some(crate::version::to_option(context.version().as_ref()));
+    }
+
     // Finds and return the option from the context
     context.get_option(unprefixed_option).cloned()
+}
+
+fn is_help_command(context: &Context, command: &str) -> bool {
+    if let Some(help) = context.help() {
+        matches!(help.kind(), HelpKind::Any | HelpKind::Command) && help.name() == command
+    } else {
+        false
+    }
+}
+
+fn is_help_option(context: &Context, option: &str) -> bool {
+    if let Some(help) = context.help() {
+        let name = context.trim_prefix(option);
+        matches!(help.kind(), HelpKind::Any | HelpKind::Option)
+            && (help.name() == name || help.alias().map_or(false, |s| s == name))
+    } else {
+        false
+    }
 }
 
 fn add_option(options: &mut OptionList, new_option: CommandOption) -> Result<()> {
