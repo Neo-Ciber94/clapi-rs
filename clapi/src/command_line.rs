@@ -150,10 +150,10 @@ impl CommandLine {
                 let usage_message = self.get_help_message(None, MessageKind::Usage)?;
                 Err(error.join(&format!("\n{}", &usage_message)))
             },
-            ErrorKind::UnrecognizedOption(_) if self.suggestions().is_some() => {
+            ErrorKind::UnexpectedOption(_) if self.suggestions().is_some() => {
                 self.display_option_suggestions(parser, error)
             },
-            ErrorKind::UnrecognizedCommand(_) if self.suggestions().is_some() => {
+            ErrorKind::UnexpectedCommand(_) if self.suggestions().is_some() => {
                 self.display_command_suggestions(parser, error)
             },
             _ => {
@@ -235,7 +235,7 @@ impl CommandLine {
                 if let Some(cmd) = current.find_subcommand(child_name) {
                     current = cmd;
                 } else {
-                    return Err(Error::from(ErrorKind::UnrecognizedCommand(
+                    return Err(Error::from(ErrorKind::UnexpectedCommand(
                         child_name.to_string(),
                     )));
                 }
@@ -267,7 +267,7 @@ impl CommandLine {
 
     fn display_option_suggestions(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
         let prefixed_option = match error.kind() {
-            ErrorKind::UnrecognizedOption(s) => s,
+            ErrorKind::UnexpectedOption(s) => s,
             _ => unreachable!()
         };
         let unprefixed_option = self.context.trim_prefix(prefixed_option);
@@ -303,7 +303,7 @@ impl CommandLine {
 
     fn display_command_suggestions(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
         let prefixed_option = match error.kind() {
-            ErrorKind::UnrecognizedCommand(s) => s,
+            ErrorKind::UnexpectedCommand(s) => s,
             _ => unreachable!()
         };
         let unprefixed_option = self.context.trim_prefix(prefixed_option);

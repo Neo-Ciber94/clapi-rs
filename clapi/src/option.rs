@@ -14,7 +14,7 @@ pub struct CommandOption {
     is_required: bool,
     is_hidden: bool,
     allow_multiple: bool,
-    // use_equals: bool,
+    require_assign: bool,
 }
 
 impl CommandOption {
@@ -34,6 +34,7 @@ impl CommandOption {
             is_required: false,
             is_hidden: false,
             allow_multiple: false,
+            require_assign: false
         }
     }
 
@@ -67,6 +68,11 @@ impl CommandOption {
     /// Returns `true` if this option is allowed to appear multiple times.
     pub fn allow_multiple(&self) -> bool {
         self.allow_multiple
+    }
+
+    /// Returns `true` if the option requires an assign operator.
+    pub fn is_assign_required(&self) -> bool {
+        self.require_assign
     }
 
     /// Returns the `Argument` this option takes or `None` if have more than 1 argument.
@@ -125,6 +131,12 @@ impl CommandOption {
     /// Specify if this option can appear multiple times.
     pub fn multiple(mut self, allow_multiple: bool) -> Self {
         self.allow_multiple = allow_multiple;
+        self
+    }
+
+    /// Specify if this option requires an assign operator.
+    pub fn require_assign(mut self, require_assign: bool) -> Self {
+        self.require_assign = require_assign;
         self
     }
 

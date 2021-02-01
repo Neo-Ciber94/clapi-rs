@@ -149,7 +149,7 @@ impl<'a> Parser<'a> {
                 Some(x) => x,
                 None => {
                     self.command = Some(command.clone());
-                    return Err(Error::from(ErrorKind::UnrecognizedCommand(name.clone())))
+                    return Err(Error::from(ErrorKind::UnexpectedCommand(name.clone())))
                 }
             };
 
@@ -172,6 +172,25 @@ impl<'a> Parser<'a> {
             if let Some(option) = find_prefixed_option(&self.context, command, s) {
                 // Consumes option token
                 cursor.next();
+
+                if option.is_assign_required() && option.take_args() {
+                    if let Some(Token::Arg(arg)) = cursor.peek() {
+                        let assign_op : char = *self.context.assign_operators().next().unwrap();
+                        return Err(
+                            Error::new(
+                                ErrorKind::InvalidArgument(arg.clone()),
+                                format!(
+                                    "`{}` requires an assignment operator like `{}` for the arguments", s, assign_op
+                                )
+                            )
+                        );
+                    }
+                }
+
+                // Skips the assign operator if any
+                if let Some(Token::AssignOp(_)) = cursor.peek() {
+                    cursor.next();
+                }
 
                 if option.take_args() {
                     let mut option_args = ArgumentList::new();
@@ -241,7 +260,7 @@ impl<'a> Parser<'a> {
                     add_option(self.options.as_mut().unwrap(), option).unwrap();
                 }
             } else {
-                return Err(Error::from(ErrorKind::UnrecognizedOption(s.clone())));
+                return Err(Error::from(ErrorKind::UnexpectedOption(s.clone())));
             }
         }
 

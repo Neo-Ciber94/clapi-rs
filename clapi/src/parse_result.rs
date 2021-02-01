@@ -482,12 +482,12 @@ mod tests {
         assert!(matches!(err_kind("--range 1 2 3 -- "),ErrorKind::InvalidArgumentCount));
         assert!(matches!(err_kind("-r=0=1"), ErrorKind::InvalidExpression));
         assert!(matches!(err_kind("--range 10 b"), ErrorKind::InvalidArgument(x) if x == "b"));
-        assert!(matches!(err_kind("--C"), ErrorKind::UnrecognizedOption(o) if o == "--C"));
-        assert!(matches!(err_kind("data write"), ErrorKind::UnrecognizedCommand(x) if x == "write"));
+        assert!(matches!(err_kind("--C"), ErrorKind::UnexpectedOption(o) if o == "--C"));
+        assert!(matches!(err_kind("data write"), ErrorKind::UnexpectedCommand(x) if x == "write"));
         assert!(matches!(err_kind("read"), ErrorKind::MissingOption(x) if x == "mode"));
         assert!(matches!(err_kind("read --mode lo"), ErrorKind::InvalidArgument(x) if x == "lo"));
         assert!(matches!(err_kind("read --mode low mid"),ErrorKind::InvalidArgumentCount));
-        assert!(matches!(err_kind("data clear"), ErrorKind::UnrecognizedCommand(x) if x == "clear"));
+        assert!(matches!(err_kind("data clear"), ErrorKind::UnexpectedCommand(x) if x == "clear"));
         assert!(matches!(err_kind("data get 0"), ErrorKind::InvalidArgumentCount));
         assert!(matches!(err_kind("data set \"Hello World\" Bye"),ErrorKind::InvalidArgumentCount));
     }

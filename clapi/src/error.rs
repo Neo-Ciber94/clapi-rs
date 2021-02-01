@@ -104,10 +104,10 @@ pub enum ErrorKind {
     InvalidArgumentCount,
     /// The expression is invalid.
     InvalidExpression,
-    /// The option is not found in the command.
-    UnrecognizedOption(String),
-    /// The command is not found in the parent.
-    UnrecognizedCommand(String),
+    /// The option wasn't expected in the current context
+    UnexpectedOption(String),
+    /// The command wasn't expected in the current context
+    UnexpectedCommand(String),
     /// The option is required.
     MissingOption(String),
     /// An error no listed.
@@ -123,8 +123,8 @@ impl Display for ErrorKind {
             ErrorKind::InvalidArgument(s) => write!(f, "invalid argument: '{}'", s),
             ErrorKind::InvalidArgumentCount => write!(f, "invalid argument count"),
             ErrorKind::InvalidExpression => write!(f, "invalid expression"),
-            ErrorKind::UnrecognizedOption(s) => write!(f, "unrecognized option: '{}'", s),
-            ErrorKind::UnrecognizedCommand(s) => write!(f, "unrecognized command: '{}'", s),
+            ErrorKind::UnexpectedOption(s) => write!(f, "unexpected option: '{}'", s),
+            ErrorKind::UnexpectedCommand(s) => write!(f, "unexpected command: '{}'", s),
             ErrorKind::MissingOption(s) => write!(f, "'{}' is required", s),
             ErrorKind::Other => write!(f, "unknown error"),
             ErrorKind::FallthroughHelp => panic!("`ErrorKind::FallthroughHelp` should not be used as an error")

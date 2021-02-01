@@ -14,6 +14,8 @@ pub enum Token {
     Arg(String),
     // End of options
     EOO,
+    // Option assign operator
+    AssignOp(char)
 }
 
 const END_OF_OPTIONS: &str = "--";
@@ -39,6 +41,10 @@ impl Token {
         matches!(self, Token::EOO)
     }
 
+    pub fn is_assign_op(&self) -> bool {
+        matches!(self, Token::AssignOp(_))
+    }
+
     /// Returns a `String` representation of this `Token`.
     pub fn into_string(self) -> String {
         match self {
@@ -46,6 +52,7 @@ impl Token {
             Token::Opt(s) => s,
             Token::Arg(s) => s,
             Token::EOO => String::from(END_OF_OPTIONS),
+            Token::AssignOp(c) => c.to_string(),
         }
     }
 }
@@ -56,7 +63,8 @@ impl Display for Token {
             Token::Cmd(name) => write!(f, "{}", name),
             Token::Opt(name) => write!(f, "{}", name),
             Token::Arg(name) => write!(f, "{}", name),
-            Token::EOO => write!(f, "{}", END_OF_OPTIONS)
+            Token::EOO => write!(f, "{}", END_OF_OPTIONS),
+            Token::AssignOp(c) => write!(f, "{}", c),
         }
     }
 }
@@ -94,7 +102,7 @@ impl Tokenizer {
                 // the next should be an unknown subcommand
                 if !current_command.take_args()
                     && current_command.get_children().len() > 0
-                    && !is_option(context,arg.borrow())
+                    && !is_prefixed_option(context, arg.borrow())
                 {
                     tokens.push(Token::Cmd(arg.borrow().to_string()));
                     iterator.next();
@@ -116,22 +124,30 @@ impl Tokenizer {
                 break;
             }
 
-            if is_option(context, value) {
+            if is_prefixed_option(context, value) {
                 let OptionAndArgs {
                     prefixed_option,
                     args,
+                    assign_op,
                 } = try_split_option_and_args(context, value)?;
 
                 // Moves to the next value
                 iterator.next();
 
+                // Adds the option
+                tokens.push(Token::Opt(prefixed_option.clone()));
+
+                // Adds the assign operator if any
+                if let Some(c) = assign_op {
+                    tokens.push(Token::AssignOp(c));
+                }
+
                 if let Some(args) = args {
-                    tokens.push(Token::Opt(prefixed_option.clone()));
                     tokens.extend(args.into_iter().map(Token::Arg));
                 } else if let Some(opt) = current_command
                     .get_options()
                     .get(context.trim_prefix(&prefixed_option)) {
-                    tokens.push(Token::Opt(prefixed_option.clone()));
+
                     for arg in opt.get_args() {
                         let max_arg_count = arg.get_values_count().max_or_default();
                         let mut count = 0;
@@ -139,7 +155,7 @@ impl Tokenizer {
                             if let Some(value) = iterator.peek() {
                                 let s: &str = value.borrow();
                                 // If the token is prefixed as an option: exit
-                                if is_option(context,s) || s == END_OF_OPTIONS {
+                                if is_prefixed_option(context, s) || s == END_OF_OPTIONS {
                                     break;
                                 } else {
                                     // Adds the next argument
@@ -152,8 +168,6 @@ impl Tokenizer {
                             }
                         }
                     }
-                } else {
-                    tokens.push(Token::Opt(prefixed_option.clone()));
                 }
             } else {
                 break;
@@ -181,7 +195,8 @@ impl Tokenizer {
 
 struct OptionAndArgs {
     prefixed_option: String,
-    args: Option<Vec<String>>
+    args: Option<Vec<String>>,
+    assign_op: Option<char>,
 }
 
 fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAndArgs> {
@@ -233,6 +248,7 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
             Ok(OptionAndArgs {
                 prefixed_option: option_and_args[0].clone(),
                 args: Some(args),
+                assign_op: Some(assign_op)
             })
         };
     } else {
@@ -246,12 +262,13 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
         Ok(OptionAndArgs {
             prefixed_option: value.to_owned(),
             args: None,
+            assign_op: None,
         })
     }
 }
 
 // Returns `true` if the specified value starts with an option prefix.
-fn is_option(context: &Context, value: &str) -> bool {
+fn is_prefixed_option(context: &Context, value: &str) -> bool {
     context.name_prefixes()
         .chain(context.alias_prefixes())
         .any(|prefix| value.starts_with(prefix))
@@ -314,14 +331,16 @@ mod tests {
             );
 
         let tokens1 = tokenize(command.clone(), "-t=1 --numbers=2,4,6 --").unwrap();
-        assert_eq!(tokens1.len(), 7);
+        assert_eq!(tokens1.len(), 9);
         assert_eq!(tokens1[0], Token::Opt("-t".to_owned()));
-        assert_eq!(tokens1[1], Token::Arg("1".to_owned()));
-        assert_eq!(tokens1[2], Token::Opt("--numbers".to_owned()));
-        assert_eq!(tokens1[3], Token::Arg("2".to_owned()));
-        assert_eq!(tokens1[4], Token::Arg("4".to_owned()));
-        assert_eq!(tokens1[5], Token::Arg("6".to_owned()));
-        assert_eq!(tokens1[6], Token::EOO);
+        assert_eq!(tokens1[1], Token::AssignOp('='));
+        assert_eq!(tokens1[2], Token::Arg("1".to_owned()));
+        assert_eq!(tokens1[3], Token::Opt("--numbers".to_owned()));
+        assert_eq!(tokens1[4], Token::AssignOp('='));
+        assert_eq!(tokens1[5], Token::Arg("2".to_owned()));
+        assert_eq!(tokens1[6], Token::Arg("4".to_owned()));
+        assert_eq!(tokens1[7], Token::Arg("6".to_owned()));
+        assert_eq!(tokens1[8], Token::EOO);
     }
 
     #[test]
