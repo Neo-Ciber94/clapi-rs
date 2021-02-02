@@ -92,23 +92,28 @@ impl Tokenizer {
         let mut has_end_of_options = false;
 
         // Finds the executing command
-        while let Some(arg) = iterator.peek() {
-            if let Some(child) = current_command.find_subcommand(arg.borrow()) {
-                current_command = child;
-                tokens.push(Token::Cmd(child.get_name().to_string()));
-                iterator.next();
-            } else {
-                // If the current don't take args, have subcommands and is not an option
-                // the next should be an unknown subcommand
-                if !current_command.take_args()
-                    && current_command.get_children().len() > 0
-                    && !is_prefixed_option(context, arg.borrow())
-                {
-                    tokens.push(Token::Cmd(arg.borrow().to_string()));
+        if iterator.peek().map_or(false, |s| crate::is_help_command(context, s.borrow())) {
+            let s = iterator.next().unwrap().borrow().to_string();
+            tokens.push(Token::Cmd(s))
+        } else {
+            while let Some(arg) = iterator.peek() {
+                if let Some(child) = current_command.find_subcommand(arg.borrow()) {
+                    current_command = child;
+                    tokens.push(Token::Cmd(child.get_name().to_string()));
                     iterator.next();
-                }
+                } else {
+                    // If the current don't take args, have subcommands and is not an option
+                    // the next should be an unknown subcommand
+                    if !current_command.take_args()
+                        && current_command.get_children().len() > 0
+                        && !is_prefixed_option(context, arg.borrow())
+                    {
+                        tokens.push(Token::Cmd(arg.borrow().to_string()));
+                        iterator.next();
+                    }
 
-                break;
+                    break;
+                }
             }
         }
 

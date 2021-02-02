@@ -226,7 +226,7 @@ impl Serialize for CommandOption {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("CommandOption", 7)?;
+        let mut state = serializer.serialize_struct("CommandOption", 8)?;
         state.serialize_field("name", self.get_name())?;
 
         if self.get_aliases().count() == 1 {
@@ -243,6 +243,7 @@ impl Serialize for CommandOption {
         state.serialize_field("required", &self.is_required())?;
         state.serialize_field("hidden", &self.is_hidden())?;
         state.serialize_field("multiple", &self.allow_multiple())?;
+        state.serialize_field("requires_assign", &self.is_assign_required())?;
         state.end()
     }
 }
@@ -260,7 +261,8 @@ impl<'de> Deserialize<'de> for CommandOption {
             "args",
             "required",
             "hidden",
-            "multiple"
+            "multiple",
+            "requires_assign",
         ];
 
         enum Field {
@@ -271,6 +273,7 @@ impl<'de> Deserialize<'de> for CommandOption {
             Required,
             Hidden,
             Multiple,
+            RequiresAssign,
         }
 
         impl<'de> Deserialize<'de> for Field {
@@ -300,6 +303,7 @@ impl<'de> Deserialize<'de> for CommandOption {
                             "required" => Ok(Field::Required),
                             "hidden" => Ok(Field::Hidden),
                             "multiple" => Ok(Field::Multiple),
+                            "requires_assign" => Ok(Field::RequiresAssign),
                             _ => return Err(de::Error::unknown_field(v, FIELDS)),
                         }
                     }
@@ -312,8 +316,11 @@ impl<'de> Deserialize<'de> for CommandOption {
                             b"name" => Ok(Field::Name),
                             b"aliases" | b"alias" => Ok(Field::Aliases),
                             b"description" => Ok(Field::Description),
-                            b"required" => Ok(Field::Required),
                             b"args" => Ok(Field::Args),
+                            b"required" => Ok(Field::Required),
+                            b"hidden" => Ok(Field::Hidden),
+                            b"multiple" => Ok(Field::Multiple),
+                            b"requires_assign" => Ok(Field::RequiresAssign),
                             _ => {
                                 let value = String::from_utf8_lossy(v);
                                 return Err(de::Error::unknown_field(&value, FIELDS));
@@ -334,49 +341,6 @@ impl<'de> Deserialize<'de> for CommandOption {
                 formatter.write_str("struct CommandOption")
             }
 
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, <A as SeqAccess<'de>>::Error>
-            where
-                A: SeqAccess<'de>,
-            {
-                let name: String = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-
-                let aliases: Vec<String> = seq
-                    .next_element::<StringOrList>()?
-                    .map(|s| match s {
-                        StringOrList::String(s) => vec![s],
-                        StringOrList::List(list) => list,
-                    })
-                    .ok_or_else(|| de::Error::invalid_length(1, &self))?;
-
-                let description: Option<String> = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(2, &self))?;
-
-                let is_required: bool = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(3, &self))?;
-
-                let args: ArgumentList = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(4, &self))?;
-
-                let mut option = CommandOption::new(name).required(is_required).args(args);
-
-                if aliases.len() > 0 {
-                    for alias in aliases {
-                        option = option.alias(alias);
-                    }
-                }
-
-                if let Some(description) = description {
-                    option = option.description(description);
-                }
-
-                Ok(option)
-            }
-
             fn visit_map<A>(self, mut map: A) -> Result<Self::Value, <A as MapAccess<'de>>::Error>
             where
                 A: MapAccess<'de>,
@@ -388,6 +352,7 @@ impl<'de> Deserialize<'de> for CommandOption {
                 let mut required: Option<bool> = None;
                 let mut hidden : Option<bool> = None;
                 let mut multiple : Option<bool> = None;
+                let mut requires_assign: Option<bool> = None;
 
                 while let Some(key) = map.next_key()? {
                     match key {
@@ -444,6 +409,13 @@ impl<'de> Deserialize<'de> for CommandOption {
 
                             multiple = Some(map.next_value()?);
                         }
+                        Field::RequiresAssign => {
+                            if requires_assign.is_some() {
+                                return Err(de::Error::duplicate_field("requires_assign"));
+                            }
+
+                            requires_assign = Some(map.next_value()?);
+                        }
                     }
                 }
 
@@ -479,6 +451,10 @@ impl<'de> Deserialize<'de> for CommandOption {
 
                 if let Some(multiple) = multiple {
                     option = option.multiple(multiple);
+                }
+
+                if let Some(requires_assign) = requires_assign {
+                    option = option.requires_assign(requires_assign);
                 }
 
                 Ok(option)
@@ -538,7 +514,7 @@ impl Serialize for Command {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("Command", 7)?;
+        let mut state = serializer.serialize_struct("Command", 8)?;
         state.serialize_field("name", self.get_name())?;
         state.serialize_field("description", &self.get_description())?;
         state.serialize_field("usage", &self.get_usage())?;
@@ -546,6 +522,7 @@ impl Serialize for Command {
         state.serialize_field("subcommands", &self.get_children().cloned().collect::<Vec<Command>>())?;
         state.serialize_field("options", &self.get_options())?;
         state.serialize_field("args", &self.get_args())?;
+        state.serialize_field("hidden", &self.is_hidden())?;
         state.end()
     }
 }
@@ -563,6 +540,7 @@ impl<'de> Deserialize<'de> for Command {
             "subcommands",
             "options",
             "args",
+            "hidden",
         ];
 
         enum Field {
@@ -573,6 +551,7 @@ impl<'de> Deserialize<'de> for Command {
             Subcommands,
             Options,
             Args,
+            Hidden,
         }
 
         impl<'de> Deserialize<'de> for Field {
@@ -602,6 +581,7 @@ impl<'de> Deserialize<'de> for Command {
                             "subcommands" => Ok(Field::Subcommands),
                             "options" => Ok(Field::Options),
                             "args" => Ok(Field::Args),
+                            "hidden" => Ok(Field::Hidden),
                             _ => return Err(de::Error::unknown_field(v, FIELDS)),
                         }
                     }
@@ -618,6 +598,7 @@ impl<'de> Deserialize<'de> for Command {
                             b"subcommands" => Ok(Field::Subcommands),
                             b"options" => Ok(Field::Options),
                             b"args" => Ok(Field::Args),
+                            b"hidden" => Ok(Field::Hidden),
                             _ => {
                                 let value = String::from_utf8_lossy(v);
                                 return Err(de::Error::unknown_field(&value, FIELDS));
@@ -638,59 +619,6 @@ impl<'de> Deserialize<'de> for Command {
                 formatter.write_str("struct Command")
             }
 
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: SeqAccess<'de>,
-            {
-                let name: String = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-
-                let description: Option<String> = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(1, &self))?;
-
-                let usage: Option<String> = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(2, &self))?;
-
-                let help: Option<String> = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(3, &self))?;
-
-                let subcommands: Vec<Command> = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(4, &self))?;
-
-                let options: OptionList = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(5, &self))?;
-
-                let args: ArgumentList = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(6, &self))?;
-
-                let mut command = Command::new(name).options(options).args(args);
-
-                for subcommand in subcommands {
-                    command = command.subcommand(subcommand);
-                }
-
-                if let Some(description) = description {
-                    command = command.description(description);
-                }
-
-                if let Some(usage) = usage {
-                    command = command.usage(usage);
-                }
-
-                if let Some(help) = help {
-                    command = command.help(help);
-                }
-
-                Ok(command)
-            }
-
             fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
             where
                 A: MapAccess<'de>,
@@ -702,6 +630,7 @@ impl<'de> Deserialize<'de> for Command {
                 let mut subcommands: Option<Vec<Command>> = None;
                 let mut options: Option<OptionList> = None;
                 let mut args: Option<ArgumentList> = None;
+                let mut hidden : Option<bool> = None;
 
                 while let Some(key) = map.next_key()? {
                     match key {
@@ -753,6 +682,13 @@ impl<'de> Deserialize<'de> for Command {
                             }
 
                             args = Some(map.next_value()?);
+                        },
+                        Field::Hidden => {
+                            if hidden.is_some() {
+                                return Err(de::Error::duplicate_field("hidden"));
+                            }
+
+                            hidden = Some(map.next_value()?);
                         }
                     }
                 }
@@ -784,6 +720,10 @@ impl<'de> Deserialize<'de> for Command {
 
                 if let Some(args) = args {
                     command = command.args(args)
+                }
+
+                if let Some(hidden) = hidden {
+                    command = command.hidden(hidden)
                 }
 
                 Ok(command)
@@ -959,7 +899,7 @@ mod internal {
 
 mod argument {
     use serde::{Deserialize, Deserializer, de};
-    use serde::de::{Visitor, SeqAccess, MapAccess};
+    use serde::de::{Visitor, MapAccess};
     use crate::{Argument, ArgCount};
     use crate::serde::internal::{ValidType, AnyToString};
     use std::fmt;
@@ -1044,69 +984,6 @@ mod argument {
 
         fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
             formatter.write_str("struct Argument")
-        }
-
-        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, <A as SeqAccess<'de>>::Error>
-            where
-                A: SeqAccess<'de>,
-        {
-            let name: Option<String> = seq
-                .next_element()?
-                .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-
-            let description: Option<String> = seq
-                .next_element()?
-                .ok_or_else(|| de::Error::invalid_length(1, &self))?;
-
-            let min_values: Option<usize> = seq
-                .next_element()?
-                .ok_or_else(|| de::Error::invalid_length(2, &self))?;
-
-            let max_values: Option<usize> = seq
-                .next_element()?
-                .ok_or_else(|| de::Error::invalid_length(3, &self))?;
-
-            let valid_type: Option<ValidType> = seq
-                .next_element()?
-                .ok_or_else(|| de::Error::invalid_length(4, &self))?;
-
-            let valid_values: Vec<String> = seq
-                .next_element()?
-                .ok_or_else(|| de::Error::invalid_length(5, &self))?;
-
-            let default_values: Vec<String> = seq
-                .next_element()?
-                .ok_or_else(|| de::Error::invalid_length(6, &self))?;
-
-            let mut argument = match name {
-                Some(name) => Argument::with_name(name),
-                None => Argument::new()
-            };
-
-            match (min_values, max_values) {
-                (None, None) => { /*By default an `Argument` takes 1 value */ },
-                (min, max) => {
-                    argument = argument.values_count(ArgCount::new(min, max))
-                }
-            }
-
-            if let Some(description) = description {
-                argument = argument.description(description);
-            }
-
-            if let Some(valid_type) = valid_type {
-                argument = valid_type.set_validator(argument);
-            }
-
-            if valid_values.len() > 0 {
-                argument = argument.valid_values(valid_values);
-            }
-
-            if default_values.len() > 0 {
-                argument = argument.defaults(default_values);
-            }
-
-            Ok(argument)
         }
 
         fn visit_map<A>(self, mut map: A) -> Result<Self::Value, <A as MapAccess<'de>>::Error>
@@ -1432,7 +1309,8 @@ mod tests {
                 .required(false)
                 .multiple(true)
                 .hidden(false)
-                .arg(Argument::with_name("N"));
+                .arg(Argument::with_name("N"))
+                .requires_assign(false);
 
             serde_test::assert_tokens(&opt,
             OptionTokens::new("time")
@@ -1443,6 +1321,7 @@ mod tests {
                 .multiple(true)
                 .hidden(false)
                 .arg(ArgTokens::new("N").value_count(1))
+                .requires_assign(false)
                 .to_tokens()
                 .as_slice());
         }
@@ -1546,7 +1425,8 @@ mod tests {
                     CommandOption::new("color")
                         .arg(Argument::with_name("color").valid_values(vec!["red", "green", "blue"])),
                 )
-                .arg(Argument::with_name("values").values_count(1..));
+                .arg(Argument::with_name("values").values_count(1..))
+                .hidden(false);
 
             serde_test::assert_tokens(
                 &command,
@@ -1564,6 +1444,7 @@ mod tests {
                             .value_count(1)
                             .valid_values(vec!["red", "green", "blue"])))
                     .arg(ArgTokens::new("values").min_values(1))
+                    .hidden(false)
                     .to_tokens()
                     .as_slice()
             );
@@ -1660,6 +1541,7 @@ mod test_utils {
         required: bool,
         hidden: bool,
         multiple: bool,
+        requires_assign: bool,
     }
 
     impl OptionTokens {
@@ -1671,7 +1553,8 @@ mod test_utils {
                 args: vec![],
                 required: false,
                 hidden: false,
-                multiple: false
+                multiple: false,
+                requires_assign: false,
             }
         }
 
@@ -1705,11 +1588,16 @@ mod test_utils {
             self
         }
 
+        pub fn requires_assign(mut self, requires_assign: bool) -> Self {
+            self.requires_assign = requires_assign;
+            self
+        }
+
         pub fn to_tokens(&self) -> Vec<Token> {
             let mut tokens = Vec::new();
             tokens.push(Token::Struct {
                 name: "CommandOption",
-                len: 7,
+                len: 8,
             });
 
             // Option name
@@ -1761,6 +1649,10 @@ mod test_utils {
             // Option multiple
             tokens.push(Token::Str("multiple"));
             tokens.push(Token::Bool(self.multiple));
+
+            // Option assign required
+            tokens.push(Token::Str("requires_assign"));
+            tokens.push(Token::Bool(self.requires_assign));
 
             // End
             tokens.push(Token::StructEnd);
@@ -1910,6 +1802,7 @@ mod test_utils {
         subcommands: Vec<CommandTokens>,
         options: Vec<OptionTokens>,
         args: Vec<ArgTokens>,
+        hidden: bool,
     }
 
     impl CommandTokens {
@@ -1921,7 +1814,8 @@ mod test_utils {
                 help: None,
                 subcommands: vec![],
                 options: vec![],
-                args: vec![]
+                args: vec![],
+                hidden: false,
             }
         }
 
@@ -1955,11 +1849,16 @@ mod test_utils {
             self
         }
 
+        pub fn hidden(mut self, hidden: bool) -> Self {
+            self.hidden = hidden;
+            self
+        }
+
         pub fn to_tokens(&self) -> Vec<Token> {
             let mut tokens = Vec::new();
             tokens.push(Token::Struct {
                 name: "Command",
-                len: 7,
+                len: 8,
             });
 
             // Command name
@@ -2021,6 +1920,10 @@ mod test_utils {
                 tokens.extend(arg.to_tokens());
             }
             tokens.push(Token::SeqEnd);
+
+            // Command hidden
+            tokens.push(Token::Str("hidden"));
+            tokens.push(Token::Bool(self.hidden));
 
             // End
             tokens.push(Token::StructEnd);

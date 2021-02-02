@@ -30,6 +30,7 @@ pub struct OptionAttrData {
     arg: Option<ArgAttrData>,
     is_hidden: Option<bool>,
     allow_multiple: Option<bool>,
+    requires_assign: Option<bool>,
 }
 
 impl OptionAttrData {
@@ -45,6 +46,7 @@ impl OptionAttrData {
             arg: None,
             is_hidden: None,
             allow_multiple: None,
+            requires_assign: None
         }
     }
 
@@ -110,6 +112,13 @@ impl OptionAttrData {
                             .expect("option `multiple` must be a bool literal");
 
                         option.set_multiple(allow_multiple);
+                    },
+                    consts::REQUIRES_ASSIGN => {
+                        let requires_assign = value
+                            .to_bool_literal()
+                            .expect("option `requires_assign` must be a bool literal");
+
+                        option.set_requires_assign(requires_assign);
                     },
                     consts::DEFAULT => match value {
                         Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
@@ -182,6 +191,10 @@ impl OptionAttrData {
         self.allow_multiple = Some(allow_multiple);
     }
 
+    pub fn set_requires_assign(&mut self, requires_assign: bool){
+        self.requires_assign = Some(requires_assign);
+    }
+
     pub fn expand(&self) -> TokenStream {
         // Option alias
         let alias = self.alias
@@ -216,6 +229,11 @@ impl OptionAttrData {
             .as_ref()
             .map(|value| quote! { .multiple(#value) } );
 
+        // Option requires assign
+        let requires_assign = self.requires_assign
+            .as_ref()
+            .map(|value| quote! { .requires_assign(#value) } );
+
         let name = quote_expr!(self.name);
 
         quote! {
@@ -225,6 +243,7 @@ impl OptionAttrData {
             #required
             #is_hidden
             #allow_multiple
+            #requires_assign
             #arg
         }
     }

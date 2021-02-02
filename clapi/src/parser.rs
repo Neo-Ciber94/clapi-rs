@@ -117,6 +117,7 @@ impl<'a> Parser<'a> {
         // Parse the command arguments
         self.parse_args()?;
 
+        println!("{:?}", self.cursor.as_ref().unwrap().remaining());
         // If there is arguments left and the current command takes no arguments is an error
         if self.cursor.as_ref().unwrap().peek().is_some() {
             let command = self.command.as_ref().unwrap();
@@ -139,7 +140,7 @@ impl<'a> Parser<'a> {
 
         // If the next is `help [subcommand`
         if let Some(Token::Cmd(name)) = cursor.peek() {
-            if is_help_command(&self.context, name) {
+            if crate::context::is_help_command(&self.context, name) {
                 return self.parse_help_command();
             }
         }
@@ -165,7 +166,7 @@ impl<'a> Parser<'a> {
         let command = self.command.as_ref().unwrap();
 
         while let Some(Token::Opt(s)) = cursor.peek() {
-            if is_help_option(&self.context, s) {
+            if crate::context::is_help_option(&self.context, s) {
                 return self.parse_help_option();
             }
 
@@ -326,9 +327,11 @@ impl<'a> Parser<'a> {
         let cursor = self.cursor.as_ref().unwrap();
 
         if let Some(Token::Cmd(name)) = cursor.next() {
-            debug_assert!(is_help_command(&self.context, name));
+            debug_assert!(crate::context::is_help_command(&self.context, name));
 
-            let command = self.context.root().find_subcommand(name).unwrap();
+            // SAFETY: If the `name` is a help command must exists in the context
+            let help = self.context.help().unwrap().as_ref();
+            let command = crate::help::to_command(help);
             let mut args = ArgumentList::new();
             let mut arg = command.get_arg().unwrap().clone();
             let values = cursor.remaining()
@@ -343,7 +346,7 @@ impl<'a> Parser<'a> {
             cursor.move_to_end();
 
             // Sets the executing `help` command and the arguments
-            self.command = Some(command.clone());
+            self.command = Some(command);
             self.args = Some(args);
             Ok(())
         } else {
@@ -355,7 +358,7 @@ impl<'a> Parser<'a> {
         let cursor = self.cursor.as_ref().unwrap();
 
         if let Some(Token::Opt(s)) = cursor.next() {
-            debug_assert!(is_help_option(&self.context, s));
+            debug_assert!(crate::context::is_help_option(&self.context, s));
 
             let command = self.command.as_ref().unwrap();
             let option = find_prefixed_option(&self.context, command, s).unwrap();
@@ -431,22 +434,33 @@ impl<'a> Parser<'a> {
 
     /// Returns `true` if one of the arguments need to have a default value.
     ///
-    /// This is true when there is no enough values for the arguments.
-    /// For example: the arguments `min` (default 0) and `max` are declared
-    /// and `20` is pass as a value, because there is only 1 value and 2 arguments,
-    /// `min` must have its default value and `max` must receive the `20`.
+    /// This is true when there is no enough values for the arguments,
+    /// for example we have 2 arguments:
+    /// - min (default value = 0)
+    /// - max
+    ///
+    /// If `20` is passed, because `available values < require values` where available values is 1
+    /// and required values is 2, is required to assign a default value to `min` and pass the `20`
+    /// to the `max` argument.
     fn require_default_values(&self, args: &ArgumentList) -> bool {
         let cursor = self.cursor.as_ref().unwrap();
         let contains_default_args = args.iter().any(|a| a.has_default_values());
+
         if contains_default_args {
             let available_values = cursor.remaining().iter().take_while(|t| t.is_arg()).count();
+
+            // If is a single argument default values are only needed if there is no values left
+            if args.len() == 1 {
+                return available_values == 0;
+            }
+
             let mut required_values: usize = 0;
 
             for arg in args {
                 // To avoid overflow
                 match required_values.checked_add(arg.get_values_count().max_or_default()) {
                     None => return false,
-                    Some(n) => required_values = n
+                    Some(n) => required_values = n,
                 }
             }
 
@@ -471,7 +485,7 @@ impl<'a> Parser<'a> {
 
         if let Some(help) = self.context.help() {
             match help.kind(){
-                HelpKind::Command => contains_help_command(self, help.as_ref()),
+                HelpKind::Subcommand => contains_help_command(self, help.as_ref()),
                 HelpKind::Option => contains_help_option(self, help.as_ref()),
                 HelpKind::Any => contains_help_command(self, help.as_ref())
                     || contains_help_option(self, help.as_ref())
@@ -573,24 +587,6 @@ fn find_prefixed_option<'a>(
 
     // Finds and return the option from the context
     context.get_option(unprefixed_option).cloned()
-}
-
-fn is_help_command(context: &Context, command: &str) -> bool {
-    if let Some(help) = context.help() {
-        matches!(help.kind(), HelpKind::Any | HelpKind::Command) && help.name() == command
-    } else {
-        false
-    }
-}
-
-fn is_help_option(context: &Context, option: &str) -> bool {
-    if let Some(help) = context.help() {
-        let name = context.trim_prefix(option);
-        matches!(help.kind(), HelpKind::Any | HelpKind::Option)
-            && (help.name() == name || help.alias().map_or(false, |s| s == name))
-    } else {
-        false
-    }
 }
 
 fn add_option(options: &mut OptionList, new_option: CommandOption) -> Result<()> {

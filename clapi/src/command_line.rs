@@ -174,7 +174,7 @@ impl CommandLine {
         match result {
             Ok(parse_result) => {
                 match help.kind() {
-                    HelpKind::Command => {
+                    HelpKind::Subcommand => {
                         is_help_subcommand(help, parse_result.executing_command())
                     },
                     HelpKind::Option => {
@@ -188,7 +188,7 @@ impl CommandLine {
             },
             Err(parser) => {
                 match help.kind() {
-                    HelpKind::Command => {
+                    HelpKind::Subcommand => {
                         is_help_subcommand(help, parser.command().unwrap())
                     }
                     HelpKind::Option => {

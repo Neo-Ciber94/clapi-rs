@@ -45,7 +45,7 @@ pub enum HelpKind {
     /// The help is a command, for example:
     ///
     /// `command help [args]`.
-    Command,
+    Subcommand,
     /// The help is an option, for example:
     ///
     /// `command --help`.
@@ -340,7 +340,7 @@ fn command_to_string(command: &Command) -> String {
 pub(crate) fn after_help_message(context: &Context) -> Option<String> {
     if let Some(help) = context.help() {
         match help.kind() {
-            HelpKind::Any | HelpKind::Command => {
+            HelpKind::Any | HelpKind::Subcommand => {
                 let command = context.root().get_name();
                 Some(format!("Use '{} {} <subcommand>' for more information about a command.", command, help.name()))
             }

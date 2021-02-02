@@ -33,6 +33,14 @@ impl Command {
     ///
     /// # Panics
     /// Panics if the command `name` is blank or empty.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::Command;
+    ///
+    /// let command = Command::new("My App");
+    /// assert_eq!(command.get_name(), "My App");
+    /// ```
     #[inline]
     pub fn new<S: Into<String>>(name: S) -> Self {
         Command::with_options(name, OptionList::new())
@@ -56,6 +64,17 @@ impl Command {
     ///
     /// # Panics
     /// Panics if the command `name` is empty or contains whitespaces.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{OptionList, CommandOption, Command};
+    ///
+    /// let mut options = OptionList::new();
+    /// options.add(CommandOption::new("enable")).unwrap();
+    ///
+    /// let command = Command::with_options("My App", options);
+    /// assert!(command.get_options().contains("enable"));
+    /// ```
     pub fn with_options<S: Into<String>>(name: S, options: OptionList) -> Self {
         let name = name.into();
         assert!(!name.is_empty(), "command `name` cannot be empty");
@@ -154,24 +173,68 @@ impl Command {
     }
 
     /// Sets a short description of this command.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::Command;
+    ///
+    /// let command = Command::root().description("My application");
+    /// assert_eq!(command.get_description(), Some("My application"));
+    /// ```
     pub fn description<S: Into<String>>(mut self, description: S) -> Self {
         self.description = Some(description.into());
         self
     }
 
     /// Sets information about the usage of this command.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::Command;
+    /// let command = Command::new("app")
+    ///     .usage("app [VALUES]\napp [OPTIONS] [VALUES]");
+    ///
+    /// assert_eq!(command.get_usage(), Some("app [VALUES]\napp [OPTIONS] [VALUES]"));
+    /// ```
     pub fn usage<S: Into<String>>(mut self, usage: S) -> Self {
         self.usage = Some(usage.into());
         self
     }
 
     /// Sets help information about this command.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::Command;
+    /// let command = Command::new("MyApp")
+    ///     .version("1.0")
+    ///     .help(
+    /// "MyApp - An app for sum numbers
+    ///
+    /// USAGE:
+    ///     MyApp [left] [right]
+    ///
+    /// OPTIONS:
+    ///     - times [TIMES]     Number of times to multiply the numbers
+    ///     - version           Shows the version of the app
+    /// ");
+    ///
+    /// assert!(command.get_help().is_some());
+    /// ```
     pub fn help<S: Into<String>>(mut self, help: S) -> Self {
         self.help = Some(help.into());
         self
     }
 
     /// Sets the version of this command.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::Command;
+    ///
+    /// let command = Command::new("MyApp").version("1.0.2");
+    /// assert_eq!(command.get_version(), Some("1.0.2"));
+    /// ```
     pub fn version<S: Into<String>>(mut self, version: S) -> Self {
         self.version = Some(version.into());
         self
@@ -181,12 +244,43 @@ impl Command {
     ///
     /// # Panics:
     /// Panics it the command contains an `CommandOption` with the same name or alias.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, CommandOption, Argument};
+    /// use clapi::validator::parse_validator;
+    ///
+    /// let command = Command::new("MyApp")
+    ///     .option(CommandOption::new("enable"))
+    ///     .option(CommandOption::new("times")
+    ///         .arg(Argument::new()
+    ///             .validator(parse_validator::<i64>())));
+    ///
+    /// assert!(command.get_options().contains("enable"));
+    /// assert!(command.get_options().contains("times"));
+    /// ```
     pub fn option(mut self, option: CommandOption) -> Self {
         self.add_option(option);
         self
     }
 
     /// Replaces the options of this command with the specified.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{OptionList, CommandOption, Argument, Command};
+    /// use clapi::validator::parse_validator;
+    ///
+    /// let mut options = OptionList::new();
+    /// options.add(CommandOption::new("enable")).unwrap();
+    /// options.add(CommandOption::new("times")
+    ///     .arg(Argument::new()
+    ///         .validator(parse_validator::<i64>()))).unwrap();
+    ///
+    /// let command = Command::new("MyApp").options(options);
+    /// assert!(command.get_options().contains("enable"));
+    /// assert!(command.get_options().contains("times"));
+    /// ```
     pub fn options(mut self, options: OptionList) -> Self {
         self.options = options;
         self
@@ -196,6 +290,14 @@ impl Command {
     ///
     /// # Panics:
     /// Panic if the command contains an `Argument` with the same name.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, Argument};
+    ///
+    /// let command = Command::new("MyApp").arg(Argument::with_name("values"));
+    /// assert_eq!(command.get_arg().unwrap().get_name(), "values");
+    /// ```
     pub fn arg(mut self, arg: Argument) -> Self {
         if let Err(duplicated) = self.args.add(arg) {
             panic!(
@@ -208,6 +310,17 @@ impl Command {
     }
 
     /// Sets the `Arguments` of this command.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{ArgumentList, Argument, Command};
+    ///
+    /// let mut args = ArgumentList::new();
+    /// args.add(Argument::with_name("values")).unwrap();
+    ///
+    /// let command = Command::new("MyApp").args(args);
+    /// assert_eq!(command.get_arg().unwrap().get_name(), "values");
+    /// ```
     pub fn args(mut self, args: ArgumentList) -> Self {
         self.args = args;
         self
@@ -217,6 +330,14 @@ impl Command {
     /// if is the `root` command.
     ///
     /// What will be hidden or not about the command is up to the implementor of the `Help` trait.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::Command;
+    ///
+    /// let command = Command::new("MyApp").hidden(true);
+    /// assert!(command.is_hidden());
+    /// ```
     pub fn hidden(mut self, is_hidden: bool) -> Self {
         self.is_hidden = is_hidden;
         self
@@ -228,11 +349,13 @@ impl Command {
     /// ```rust
     /// use clapi::Command;
     ///
-    /// let cmd = Command::new("test")
+    /// Command::new("test")
     ///     .handler(|_options, _args| {
     ///         println!("This is a test");
     ///         Ok(())
-    /// });
+    /// })
+    /// .into_command_line()
+    /// .run();
     /// ```
     pub fn handler<F>(mut self, f: F) -> Self
     where
@@ -243,6 +366,16 @@ impl Command {
     }
 
     /// Adds a new child `Command`.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::Command;
+    ///
+    /// let command = Command::new("MyApp")
+    ///     .subcommand(Command::new("test"));
+    ///
+    /// assert!(command.find_subcommand("test").is_some());
+    /// ```
     pub fn subcommand(mut self, command: Command) -> Self {
         self.add_command(command);
         self
@@ -296,26 +429,26 @@ impl Command {
     /// use clapi::validator::parse_validator;
     ///
     /// let cli = Command::root()
-    ///             .arg(Argument::one_or_more("values").validator(parse_validator::<i64>()))
-    ///             .option(CommandOption::new("negate")
-    ///                 .arg(Argument::new().validator(parse_validator::<bool>())))
-    ///             .handler(|opts, args|{
-    ///                 let negate = opts.get_arg("negate").unwrap().convert::<bool>()?;
-    ///                 let total = args.convert_all::<i64>("values")?.iter().sum::<i64>();
-    ///                 if negate {
+    ///     .arg(Argument::one_or_more("values").validator(parse_validator::<i64>()))
+    ///     .option(CommandOption::new("negate")
+    ///         .arg(Argument::new().validator(parse_validator::<bool>())))
+    ///         .handler(|opts, args|{
+    ///             let negate = opts.get_arg("negate").unwrap().convert::<bool>()?;
+    ///             let total = args.convert_all::<i64>("values")?.iter().sum::<i64>();
+    ///             if negate {
     ///                     println!("{}", -total);
     ///                 } else {
     ///                     println!("{}", total);
     ///                 }
-    ///                 Ok(())
-    ///             })
-    ///             .into_cli()
-    ///             .use_default_suggestions()
-    ///             .use_default_suggestions()
-    ///             .run();
+    ///             Ok(())
+    ///         })
+    ///     .into_command_line()
+    ///     .use_default_suggestions()
+    ///     .use_default_suggestions()
+    ///     .run();
     /// ```
     #[inline]
-    pub fn into_cli(self) -> CommandLine {
+    pub fn into_command_line(self) -> CommandLine {
         CommandLine::new(self)
     }
 
@@ -327,11 +460,11 @@ impl Command {
     /// use clapi::validator::parse_validator;
     ///
     /// let result = Command::root()
-    ///                 .option(CommandOption::new("negate")
-    ///                     .arg(Argument::new().validator(parse_validator::<bool>())))
-    ///                 .arg(Argument::one_or_more("values").validator(parse_validator::<i64>()))
-    ///                 .parse_args()
-    ///                 .unwrap();
+    ///     .option(CommandOption::new("negate")
+    ///         .arg(Argument::new().validator(parse_validator::<bool>())))
+    ///     .arg(Argument::one_or_more("values").validator(parse_validator::<i64>()))
+    ///     .parse_args()
+    ///     .unwrap();
     /// ```
     #[inline]
     pub fn parse_args(self) -> Result<ParseResult> {
@@ -346,11 +479,11 @@ impl Command {
     /// use clapi::validator::parse_validator;
     ///
     /// let result = Command::root()
-    ///                 .option(CommandOption::new("negate")
-    ///                     .arg(Argument::new().validator(parse_validator::<bool>())))
-    ///                 .arg(Argument::one_or_more("values").validator(parse_validator::<i64>()))
-    ///                 .parse_from(vec!["--negate=true", "1", "2", "3"])
-    ///                 .unwrap();
+    ///     .option(CommandOption::new("negate")
+    ///         .arg(Argument::new().validator(parse_validator::<bool>())))
+    ///     .arg(Argument::one_or_more("values").validator(parse_validator::<i64>()))
+    ///     .parse_from(vec!["--negate=true", "1", "2", "3"])
+    ///     .unwrap();
     ///
     /// assert!(result.contains_option("negate"));
     /// assert_eq!(result.arg().unwrap().convert_all::<i64>().ok(), Some(vec![1, 2, 3]));

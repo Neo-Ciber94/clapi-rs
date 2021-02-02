@@ -87,18 +87,6 @@ impl Context {
 
     /// Sets the `Help` provider of this context.
     pub fn set_help<H: Help + 'static>(&mut self, help: H) {
-        //todo: handle all HelpKind here, Any, Subcommand and Option?
-
-        // If the `help` is a subcommand we add the subcommand to the root
-        match help.kind() {
-            HelpKind::Any | HelpKind::Command => {
-                self.root.add_command(
-                    crate::help::to_command(&help)
-                );
-            }
-            _ => {}
-        }
-
         self.help = Some(Rc::new(help));
     }
 
@@ -277,18 +265,6 @@ impl ContextBuilder {
     }
 
     pub fn build(mut self) -> Context {
-        // If the `help` is a subcommand we add the subcommand to the root
-        if let Some(help) = &self.help {
-            match help.kind() {
-                HelpKind::Any | HelpKind::Command => {
-                    self.root.add_command(
-                        crate::help::to_command(help.as_ref())
-                    );
-                }
-                _ => {}
-            }
-        }
-
         Context {
             // Root Command
             root: self.root,
@@ -329,6 +305,23 @@ impl ContextBuilder {
                 self.assign_operators
             },
         }
+    }
+}
+
+pub(crate) fn is_help_command(context: &Context, name: &str) -> bool {
+    if let Some(help) = context.help() {
+        matches!(help.kind(), HelpKind::Any | HelpKind::Subcommand) && help.name() == name
+    } else {
+        false
+    }
+}
+
+pub(crate) fn is_help_option(context: &Context, name: &str) -> bool {
+    if let Some(help) = context.help() {
+        matches!(help.kind(), HelpKind::Any | HelpKind::Option)
+            && (help.name() == name || help.alias().map_or(false, |s| s == name))
+    } else {
+        false
     }
 }
 

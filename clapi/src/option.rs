@@ -14,7 +14,7 @@ pub struct CommandOption {
     is_required: bool,
     is_hidden: bool,
     allow_multiple: bool,
-    require_assign: bool,
+    requires_assign: bool,
 }
 
 impl CommandOption {
@@ -22,6 +22,18 @@ impl CommandOption {
     ///
     /// # Panics:
     /// Panics if the `name` is empty.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, CommandOption};
+    ///
+    /// let result = Command::new("MyApp")
+    ///     .option(CommandOption::new("enable"))
+    ///     .parse_from(vec!["--enable"])
+    ///     .unwrap();
+    ///
+    /// assert!(result.contains_option("enable"));
+    /// ```
     pub fn new<S: Into<String>>(name: S) -> Self {
         let name = name.into();
         assert!(!name.is_empty(), "option `name` cannot be empty");
@@ -34,7 +46,7 @@ impl CommandOption {
             is_required: false,
             is_hidden: false,
             allow_multiple: false,
-            require_assign: false
+            requires_assign: false
         }
     }
 
@@ -72,7 +84,7 @@ impl CommandOption {
 
     /// Returns `true` if the option requires an assign operator.
     pub fn is_assign_required(&self) -> bool {
-        self.require_assign
+        self.requires_assign
     }
 
     /// Returns the `Argument` this option takes or `None` if have more than 1 argument.
@@ -103,6 +115,18 @@ impl CommandOption {
     ///
     /// # Panics:
     /// Panics if the `alias` is empty.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, CommandOption};
+    ///
+    /// let result = Command::new("MyApp")
+    ///     .option(CommandOption::new("test").alias("t"))
+    ///     .parse_from(vec!["-t"])
+    ///     .unwrap();
+    ///
+    /// assert!(result.contains_option("test"));
+    /// ```
     pub fn alias<S: Into<String>>(mut self, alias: S) -> Self {
         let alias = alias.into();
         assert!(!alias.is_empty(), "option `alias` cannot be empty");
@@ -111,36 +135,148 @@ impl CommandOption {
     }
 
     /// Sets a short description of this option.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::CommandOption;
+    ///
+    /// let option = CommandOption::new("test")
+    ///     .description("Enable tests");
+    ///
+    /// assert_eq!(option.get_description(), Some("Enable tests"));
+    /// ```
     pub fn description<S: Into<String>>(mut self, description: S) -> Self {
         self.description = Some(description.into());
         self
     }
 
     /// Specify if this option is required, by default is `false`.
+    ///
+    /// # Examples
+    /// ```
+    /// use clapi::{Command, CommandOption, Argument};
+    /// use clapi::validator::parse_validator;
+    ///
+    /// let result = Command::new("MyApp")
+    ///     .option(CommandOption::new("test"))
+    ///     .option(CommandOption::new("number")
+    ///         .required(true)
+    ///         .arg(Argument::new()
+    ///             .validator(parse_validator::<i64>())))
+    ///     .parse_from(vec!["--test", "--number", "10"])
+    ///     .unwrap();
+    ///
+    /// assert!(result.get_option_arg("number").unwrap().contains("10"));
+    /// assert!(result.contains_option("test"));
+    /// ```
+    ///
+    /// Other example where the option is ommited
+    /// ```
+    /// use clapi::{Command, CommandOption, Argument};
+    /// use clapi::validator::parse_validator;
+    ///
+    /// let result = Command::new("MyApp")
+    ///     .option(CommandOption::new("test"))
+    ///     .option(CommandOption::new("number")
+    ///         .required(true)
+    ///         .arg(Argument::new()
+    ///             .validator(parse_validator::<i64>())))
+    ///     .parse_from(vec!["--test"]);
+    ///
+    /// assert!(result.is_err());
+    /// ```
     pub fn required(mut self, is_required: bool) -> Self {
         self.is_required = is_required;
         self
     }
 
     /// Specify if this option is hidden for the `help`.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::CommandOption;
+    ///
+    /// let option = CommandOption::new("enable").hidden(true);
+    /// assert!(option.is_hidden());
+    /// ```
     pub fn hidden(mut self, is_hidden: bool) -> Self {
         self.is_hidden = is_hidden;
         self
     }
 
     /// Specify if this option can appear multiple times.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, CommandOption, Argument};
+    ///
+    /// let result = Command::new("MyApp")
+    ///     .option(CommandOption::new("numbers")
+    ///         .multiple(true)
+    ///         .arg(Argument::new().min_values(1)))
+    ///     .parse_from(vec!["--numbers", "10", "--numbers", "20", "--numbers", "30"])
+    ///     .unwrap();
+    ///
+    /// assert!(result.get_option_arg("numbers").unwrap().contains("10"));
+    /// assert!(result.get_option_arg("numbers").unwrap().contains("20"));
+    /// assert!(result.get_option_arg("numbers").unwrap().contains("30"));
+    /// ```
     pub fn multiple(mut self, allow_multiple: bool) -> Self {
         self.allow_multiple = allow_multiple;
         self
     }
 
     /// Specify if this option requires an assign operator.
-    pub fn require_assign(mut self, require_assign: bool) -> Self {
-        self.require_assign = require_assign;
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, CommandOption, Argument};
+    ///
+    /// let result = Command::new("MyApp")
+    ///     .option(CommandOption::new("numbers")
+    ///         .requires_assign(true)
+    ///         .arg(Argument::new().min_values(1)))
+    ///     .parse_from(vec!["--numbers=10,20,30"])
+    ///     .unwrap();
+    ///
+    /// assert!(result.get_option_arg("numbers").unwrap().contains("10"));
+    /// assert!(result.get_option_arg("numbers").unwrap().contains("20"));
+    /// assert!(result.get_option_arg("numbers").unwrap().contains("30"));
+    /// ```
+    ///
+    /// Using it like this will fail
+    /// ```
+    /// use clapi::{Command, CommandOption, Argument};
+    ///
+    /// let result = Command::new("MyApp")
+    ///     .option(CommandOption::new("numbers")
+    ///         .requires_assign(true)
+    ///         .arg(Argument::new().min_values(1)))
+    ///     .parse_from(vec!["--numbers", "10", "20", "30"]);
+    ///
+    /// assert!(result.is_err());
+    /// ```
+    pub fn requires_assign(mut self, requires_assign: bool) -> Self {
+        self.requires_assign = requires_assign;
         self
     }
 
     /// Adds a new `Argument` to this option.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, CommandOption, Argument};
+    ///
+    /// let result = Command::new("MyApp")
+    ///     .option(CommandOption::new("copy")
+    ///         .arg(Argument::with_name("from"))
+    ///         .arg(Argument::with_name("to")))
+    ///     .parse_from(vec!["--copy", "/src/file.txt", "/src/utils/"])
+    ///     .unwrap();
+    ///
+    /// assert!(result.get_option_args("copy").unwrap().get("from").unwrap().contains("/src/file.txt"));
+    /// assert!(result.get_option_args("copy").unwrap().get("to").unwrap().contains("/src/utils/"));
+    /// ```
     pub fn arg(mut self, mut arg: Argument) -> Self {
         arg.set_name_and_description_if_none(self.get_name(), self.get_description());
 
@@ -151,6 +287,19 @@ impl CommandOption {
     }
 
     /// Sets the arguments of this option.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{ArgumentList, Argument, CommandOption};
+    ///
+    /// let mut args = ArgumentList::new();
+    /// args.add(Argument::with_name("from")).unwrap();
+    /// args.add(Argument::with_name("to")).unwrap();
+    ///
+    /// let option = CommandOption::new("copy").args(args);
+    /// assert!(option.get_args().contains("from"));
+    /// assert!(option.get_args().contains("to"));
+    /// ```
     pub fn args(mut self, args: ArgumentList) -> Self {
         self.args = args;
         self
@@ -429,6 +578,15 @@ mod tests {
 
         let opt2 = CommandOption::new("values").multiple(true);
         assert!(opt2.allow_multiple());
+    }
+
+    #[test]
+    fn require_assign_test(){
+        let opt1 = CommandOption::new("values");
+        assert!(!opt1.is_assign_required());
+
+        let opt2 = CommandOption::new("values").requires_assign(true);
+        assert!(opt2.is_assign_required());
     }
 
     #[test]

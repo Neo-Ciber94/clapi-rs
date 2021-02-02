@@ -45,6 +45,14 @@ impl Argument {
     ///
     /// # Panics:
     /// Panics if the argument `name` is empty or contains whitespaces.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::Argument;
+    ///
+    /// let arg = Argument::with_name("number");
+    /// assert_eq!(arg.get_name(), "number");
+    /// ```
     pub fn with_name<S: Into<String>>(name: S) -> Self {
         let name = name.into();
         assert!(!name.is_empty(), "argument `name` cannot be empty");
@@ -99,7 +107,7 @@ impl Argument {
 
     /// Returns the number of values this argument takes.
     pub fn get_values_count(&self) -> ArgCount {
-        self.values_count.unwrap_or_else(|| ArgCount::one())
+        self.values_count.unwrap_or_else(ArgCount::one)
     }
 
     /// Returns the value `Validator` used by this argument.
@@ -127,6 +135,18 @@ impl Argument {
     }
 
     /// Returns `true` if this argument contains the specified value, `false` otherwise.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, Argument};
+    ///
+    /// let result = Command::new("MyApp")
+    ///     .arg(Argument::with_name("data"))
+    ///     .parse_from(vec!["Hello World"])
+    ///     .unwrap();
+    ///
+    /// assert!(result.get_arg("data").unwrap().contains("Hello World"));
+    /// ```
     pub fn contains<S: AsRef<str>>(&self, value: S) -> bool {
         self.get_values().iter().any(|s| s == value.as_ref())
     }
@@ -137,6 +157,20 @@ impl Argument {
     }
 
     /// Returns `true` if the given value is valid for this argument.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, Argument};
+    /// use clapi::validator::parse_validator;
+    ///
+    /// let arg = Argument::with_name("number")
+    ///     .validator(parse_validator::<i64>());
+    ///
+    /// assert!(arg.is_valid("25"));        // Valid `i64` value
+    /// assert!(arg.is_valid("-20"));       // Valid `i64` value
+    /// assert!(!arg.is_valid("true"));     // Invalid `i64` value
+    /// assert!(!arg.is_valid("Hello"));    // Invalid `i64` value
+    /// ```
     pub fn is_valid<S: AsRef<str>>(&self, value: S) -> bool {
         if let Some(validator) = &self.validator {
             if validator.validate(value.as_ref()).is_err() {
@@ -153,6 +187,19 @@ impl Argument {
 
     /// Returns `true` if this `Argument` contains values, or false if don't contains values
     /// or only contains default values.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, Argument};
+    ///
+    /// let result = Command::new("MyApp")
+    ///     .arg(Argument::zero_or_more("data")
+    ///         .default("Hello World"))
+    ///         .parse_from(Vec::<String>::new())
+    ///         .unwrap();
+    ///
+    /// assert!(!result.arg().unwrap().is_set());
+    /// ```
     pub fn is_set(&self) -> bool {
         self.values.is_some()
     }
@@ -161,6 +208,18 @@ impl Argument {
     ///
     /// # Panics
     /// If the value is exactly 0, an argument must take from 0 to 1 values.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, Argument};
+    ///
+    /// let command = Command::new("MyApp")
+    ///     .arg(Argument::with_name("numbers")
+    ///         .values_count(1..=2));
+    ///
+    /// assert!(command.clone().parse_from(vec!["10"]).is_ok());
+    /// assert!(command.clone().parse_from(vec!["10", "20", "30"]).is_err());
+    /// ```
     pub fn values_count<A: Into<ArgCount>>(mut self, value_count: A) -> Self {
         let count = value_count.into();
         assert!(!count.takes_exactly(0), "`{}` cannot takes 0 values", self.get_name());
@@ -169,6 +228,18 @@ impl Argument {
     }
 
     /// Sets the min number of values this argument takes.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, Argument};
+    ///
+    /// let command = Command::new("MyApp")
+    ///     .arg(Argument::with_name("numbers")
+    ///         .min_values(1));
+    ///
+    /// assert!(command.clone().parse_from(vec!["10"]).is_ok());
+    /// assert!(command.clone().parse_from(Vec::<String>::new()).is_err());
+    /// ```
     pub fn min_values(self, min: usize) -> Self {
         match self.values_count {
             Some(n) => {
@@ -181,6 +252,18 @@ impl Argument {
     }
 
     /// Sets the max number of values this argument takes.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, Argument};
+    ///
+    /// let command = Command::new("MyApp")
+    ///     .arg(Argument::with_name("numbers")
+    ///         .max_values(2));
+    ///
+    /// assert!(command.clone().parse_from(vec!["10"]).is_ok());
+    /// assert!(command.clone().parse_from(vec!["10", "20", "30"]).is_err());
+    /// ```
     pub fn max_values(self, max: usize) -> Self {
         match self.values_count {
             Some(n) => {
@@ -204,6 +287,19 @@ impl Argument {
     /// - If there is already a validator.
     /// - If there is default values; a validator must be set before the default values.
     /// - If there is values.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, Argument};
+    /// use clapi::validator::parse_validator;
+    ///
+    /// let command = Command::new("MyApp")
+    ///     .arg(Argument::with_name("numbers")
+    ///         .validator(parse_validator::<i64>()));
+    ///
+    /// assert!(command.clone().parse_from(vec!["10"]).is_ok());
+    /// assert!(command.clone().parse_from(vec!["10", "true"]).is_err());
+    /// ```
     pub fn validator<V: Validator + 'static>(mut self, validator: V) -> Self {
         assert!(self.validator.is_none(), "validator is already set");
         assert!(
@@ -227,6 +323,21 @@ impl Argument {
     /// # Panics
     /// If the argument contains default values.
     /// Default values must be set before the valid values.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, Argument};
+    ///
+    /// let command = Command::new("MyApp")
+    ///     .arg(Argument::with_name("color")
+    ///         .valid_values(&["red", "green", "blue"]));
+    ///
+    /// let result = command.clone().parse_from(vec!["green"]).unwrap();
+    /// assert!(result.arg().unwrap().contains("green"));
+    ///
+    /// // Yellow is an invalid value
+    /// assert!(command.clone().parse_from(vec!["yellow"]).is_err());
+    /// ```
     pub fn valid_values<S, I>(mut self, values: I) -> Self
     where
         S: ToString,
@@ -260,6 +371,21 @@ impl Argument {
     /// - If argument already contains values.
     /// - If already contains default values.
     /// - If the number of arguments is invalid.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, Argument};
+    ///
+    /// let command = Command::new("MyApp")
+    ///     .arg(Argument::with_name("number")
+    ///         .default(0));
+    ///
+    /// let result_with_value = command.clone().parse_from(vec!["10"]).unwrap();
+    /// assert!(result_with_value.arg().unwrap().contains("10"));
+    ///
+    /// let result = command.clone().parse_from(Vec::<String>::new()).unwrap();
+    /// assert!(result.arg().unwrap().contains("0"));
+    /// ```
     pub fn default<S: ToString>(self, value: S) -> Self {
         self.defaults(vec![value])
     }
@@ -270,6 +396,24 @@ impl Argument {
     /// - If argument already contains values.
     /// - If already contains default values.
     /// - If the number of arguments is invalid.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, Argument};
+    ///
+    /// let command = Command::new("MyApp")
+    ///     .arg(Argument::one_or_more("numbers")
+    ///         .defaults(vec![1, 2, 3]));
+    ///
+    /// let without_values = command.clone().parse_from(Vec::<String>::new()).unwrap();
+    /// assert!(without_values.arg().unwrap().contains("1"));
+    /// assert!(without_values.arg().unwrap().contains("2"));
+    /// assert!(without_values.arg().unwrap().contains("3"));
+    ///
+    /// let with_values = command.clone().parse_from(vec!["10", "true"]).unwrap();
+    /// assert!(with_values.arg().unwrap().contains("10"));
+    /// assert!(with_values.arg().unwrap().contains("true"));
+    /// ```
     pub fn defaults<S, I>(mut self, values: I) -> Self
     where
         S: ToString,
@@ -312,6 +456,19 @@ impl Argument {
     }
 
     /// Sets the values of this argument.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::Argument;
+    /// use clapi::validator::parse_validator;
+    ///
+    /// let mut arg = Argument::with_name("number")
+    ///     .validator(parse_validator::<i64>())
+    ///     .default(0);
+    ///
+    /// assert!(arg.set_values(vec![2]).is_ok());
+    /// assert!(arg.set_values(vec!["hello"]).is_err());
+    /// ```
     pub fn set_values<S, I>(&mut self, values: I) -> Result<()>
     where
         S: ToString,
@@ -363,6 +520,21 @@ impl Argument {
     ///     - If the value cannot be parse.
     ///     - if there no value to parse.
     ///     - if there is more than 1 value.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, Argument};
+    /// use clapi::validator::parse_validator;
+    ///
+    /// let result = Command::new("MyApp")
+    ///     .arg(Argument::one_or_more("numbers")
+    ///         .validator(parse_validator::<i64>()))
+    ///     .parse_from(vec!["10"])
+    ///     .unwrap();
+    ///
+    /// assert_eq!(result.get_arg("numbers").unwrap().convert::<i64>().ok(), Some(10));
+    /// assert!(result.get_arg("numbers").unwrap().convert::<f32>().is_err());
+    /// ```
     pub fn convert<T>(&self) -> Result<T>
     where
         T: FromStr + 'static,
@@ -395,6 +567,21 @@ impl Argument {
     /// - `Err(error)`:
     ///     - If one of the values cannot be parse.
     ///     - if there no values to parse.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, Argument};
+    /// use clapi::validator::parse_validator;
+    ///
+    /// let result = Command::new("MyApp")
+    ///     .arg(Argument::one_or_more("numbers")
+    ///         .validator(parse_validator::<i64>()))
+    ///     .parse_from(vec!["1", "2", "3"])
+    ///     .unwrap();
+    ///
+    /// assert_eq!(result.get_arg("numbers").unwrap().convert_all::<i64>().ok(), Some(vec![1, 2, 3]));
+    /// assert!(result.get_arg("numbers").unwrap().convert_all::<f32>().is_err());
+    /// ```
     pub fn convert_all<T>(&self) -> Result<Vec<T>>
     where
         T: FromStr + 'static,
