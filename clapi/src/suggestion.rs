@@ -184,68 +184,72 @@ pub fn compute_levenshtein_distance_ignore_case(x: &str, y: &str) -> usize {
 
 /// Compute the `Levenshtein distance` between 2 `str` with ignore case.
 ///
+/// # Implementation from
+/// https://github.com/wooorm/levenshtein-rs/blob/main/src/lib.rs
+///
 /// # See
 /// https://en.wikipedia.org/wiki/Levenshtein_distance
 #[doc(hidden)]
-#[allow(clippy::needless_range_loop)]
-pub fn compute_levenshtein_distance(x: &str, y: &str, ignore_case: bool) -> usize {
-    if x == y {
+pub fn compute_levenshtein_distance(a: &str, b: &str, ignore_case: bool) -> usize {
+    if a == b {
         return 0;
     }
 
-    let len_x = x.chars().count();
-    let len_y = y.chars().count();
+    let length_a = a.chars().count();
+    let length_b = b.chars().count();
 
-    if len_x == 0 {
-        return len_y;
+    if length_a == 0 {
+        return length_b;
     }
-    if len_y == 0 {
-        return len_x;
+
+    if length_b == 0 {
+        return length_a;
     }
 
     #[inline(always)]
-    fn calculate_cost(a: char, b: char) -> usize {
-        if a == b {
-            0
+    fn equals(a: char, b: char, ignore_case: bool) -> bool {
+        if ignore_case {
+            a.eq_ignore_ascii_case(&b)
         } else {
-            1
+            a == b
         }
     }
 
-    #[inline(always)]
-    fn min<T: Ord>(a: T, b: T, c: T) -> T {
-        std::cmp::min(std::cmp::min(a, b), c)
-    }
+    let mut cache: Vec<usize> = (1..=length_a).collect::<Vec<_>>();
+    let mut result = 0;
+    let mut distance_a: usize;
+    let mut distance_b: usize;
 
-    // This could be expensive, a better implementation is needed
-    let mut distance = vec![vec![0; len_y + 1]; len_x + 1];
+    for (index_b, char_b) in b.chars().enumerate() {
+        result = index_b;
+        distance_a = index_b;
 
-    for i in 0..=len_x {
-        distance[i][0] = i;
-    }
-    for j in 0..=len_y {
-        distance[0][j] = j;
-    }
+        for (index_a, char_a) in a.chars().enumerate() {
+            distance_b = if equals(char_a, char_b, ignore_case) {
+                distance_a
+            } else {
+                distance_a + 1
+            };
 
-    for i in 1..=len_x {
-        for j in 1..=len_y {
-            let mut c1 = x.chars().nth(i - 1).unwrap();
-            let mut c2 = y.chars().nth(j - 1).unwrap();
+            distance_a = cache[index_a];
 
-            if ignore_case {
-                c1 = c1.to_ascii_lowercase();
-                c2 = c2.to_ascii_lowercase();
-            }
+            result = if distance_a > result {
+                if distance_b > result {
+                    result + 1
+                } else {
+                    distance_b
+                }
+            } else if distance_b > distance_a {
+                distance_a + 1
+            } else {
+                distance_b
+            };
 
-            distance[i][j] = min(
-                distance[i - 1][j] + 1,
-                distance[i][j - 1] + 1,
-                distance[i - 1][j - 1] + calculate_cost(c1, c2),
-            );
+            cache[index_a] = result;
         }
     }
 
-    distance[len_x][len_y]
+    result
 }
 
 #[cfg(test)]

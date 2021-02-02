@@ -3,6 +3,7 @@ use crate::args::{Argument, ArgumentList};
 use linked_hash_set::LinkedHashSet;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
+use std::ops::Index;
 
 /// Represents a command-line option.
 #[derive(Debug, Clone)]
@@ -506,6 +507,17 @@ impl IntoIterator for OptionList {
     }
 }
 
+impl Index<&str> for OptionList {
+    type Output = CommandOption;
+
+    fn index(&self, index: &str) -> &Self::Output {
+        match self.get(index) {
+            Some(option) => option,
+            None => panic!("cannot find option named: `{}`", index)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -688,5 +700,15 @@ mod tests {
             .add(CommandOption::new("V").alias("version"))
             .is_err());
         assert!(options.add(CommandOption::new("value").alias("v")).is_err());
+    }
+
+    #[test]
+    fn option_list_indexer_test(){
+        let mut options = OptionList::new();
+        options.add(CommandOption::new("number")).unwrap();
+        options.add(CommandOption::new("enable")).unwrap();
+
+        assert_eq!(options["number"].get_name(), "number");
+        assert_eq!(options["enable"].get_name(), "enable");
     }
 }

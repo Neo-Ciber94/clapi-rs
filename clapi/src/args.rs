@@ -8,6 +8,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Index;
 use std::rc::Rc;
 use std::str::FromStr;
+use std::slice::SliceIndex;
 use validator::Type;
 use validator::Validator;
 
@@ -690,6 +691,14 @@ impl Debug for Argument {
     }
 }
 
+impl<I: SliceIndex<[String]>> Index<I> for Argument {
+    type Output = I::Output;
+
+    fn index(&self, index: I) -> &Self::Output {
+        self.get_values().index(index)
+    }
+}
+
 #[doc(hidden)]
 pub fn try_parse_str<T: 'static>(value: &str) -> Result<T>
 where
@@ -1297,6 +1306,30 @@ mod tests {
                 "3".to_owned()
             ]
         );
+    }
+
+    #[test]
+    fn argument_indexer_test(){
+        let mut arg = Argument::one_or_more("numbers");
+        arg.set_values(vec![1, 2, 3]).unwrap();
+
+        assert_eq!(arg[0].as_str(), "1");
+        assert_eq!(arg[1].as_str(), "2");
+        assert_eq!(arg[2].as_str(), "3");
+        assert_eq!(&arg[1..], &["2".to_owned(), "3".to_owned()]);
+    }
+
+    #[test]
+    fn argument_list_indexer_test(){
+        let mut args = ArgumentList::new();
+        args.add(Argument::with_name("number")).unwrap();
+        args.add(Argument::one_or_more("values")).unwrap();
+
+        assert_eq!(args["number"].get_name(), "number");
+        assert_eq!(args["values"].get_name(), "values");
+
+        assert_eq!(args[0].get_name(), "number");
+        assert_eq!(args[1].get_name(), "values");
     }
 
     #[test]

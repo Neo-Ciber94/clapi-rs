@@ -8,7 +8,33 @@ use std::fmt::{Debug, Formatter};
 use crate::utils::debug_option;
 use crate::{VersionProvider, DefaultVersionProvider};
 
-/// Provides common values used for a command-line parsing.
+/// Provides configuration info for parsing a command.
+///
+/// # Example
+/// ```
+/// use clapi::{Command, Argument, CommandOption, Context, Parser};
+/// use clapi::validator::parse_validator;
+///
+/// let command = Command::new("MyApp")
+///     .arg(Argument::one_or_more("values"))
+///     .option(CommandOption::new("enable")
+///         .alias("e")
+///         .requires_assign(true)
+///         .arg(Argument::new().validator(parse_validator::<bool>())));
+///
+/// let context = Context::builder(command)
+///     .alias_prefix("/")      // An alias prefix
+///     .assign_operator(':')   // An assign operator for options: `--option:value`
+///     .build();
+///
+/// let result = Parser::new(&context)
+///     .parse(vec!["/e:false", "--", "hello", "hola"])
+///     .unwrap();
+///
+/// assert!(result.get_option_arg("enable").unwrap().contains("false"));
+/// assert!(result.arg().unwrap().contains("hello"));
+/// assert!(result.arg().unwrap().contains("hola"));
+/// ```
 #[derive(Clone)]
 pub struct Context {
     root: Command,
@@ -21,46 +47,39 @@ pub struct Context {
     delimiter: char,
 }
 
-/*
-struct Config {
-    enum ContextOptions {
-        AllowWhitespaces,
-    }
-}
-*/
-
 impl Context {
-    /// Constructs a new `Context` with the `RootCommand`.
+    /// Constructs a default `Context` with the given command.
     #[inline]
     pub fn new(root: Command) -> Self {
         ContextBuilder::new(root).build()
     }
 
+    /// Constructs a `ContextBuilder` with the given command.
     #[inline]
     pub fn builder(root: Command) -> ContextBuilder {
         ContextBuilder::new(root)
     }
 
-    /// Returns the `RootCommand` used by this context.
+    /// Returns the `Command` used by this context.
     pub fn root(&self) -> &Command {
         &self.root
     }
 
-    /// Returns an `Iterator` over the option name prefixes of this context.
+    /// Returns an iterator over the option name prefixes of this context.
     pub fn name_prefixes(&self) -> Prefixes<'_> {
         Prefixes {
             iter: self.name_prefixes.iter()
         }
     }
 
-    /// Returns an `Iterator` over the option alias prefixes of this context.
+    /// Returns an iterator over the option alias prefixes of this context.
     pub fn alias_prefixes(&self) -> Prefixes<'_> {
         Prefixes {
             iter: self.alias_prefixes.iter()
         }
     }
 
-    /// Returns an `Iterator` over the value assign `char`s.
+    /// Returns an iterator over the assign operator `char`s.
     pub fn assign_operators(&self) -> impl ExactSizeIterator<Item = &char> {
         self.assign_operators.iter()
     }
@@ -95,7 +114,7 @@ impl Context {
         self.suggestions = Some(Rc::new(suggestions));
     }
 
-    /// Returns the `CommandOption` by the specified name or alias or `None` if not found.
+    /// Returns the `CommandOption` with the given name or alias or `None` if not found.
     pub fn get_option(&self, name_or_alias: &str) -> Option<&CommandOption> {
         if let Some(opt) = self.root().get_options().get(name_or_alias) {
             return Some(opt);
@@ -110,7 +129,7 @@ impl Context {
         None
     }
 
-    /// Returns the `Command` by the specified name or `None` if not found.
+    /// Returns the `Command` with the given name or `None` if not found.
     pub fn get_command(&self, name: &str) -> Option<&Command> {
         self.root().get_children().find(|c| c.get_name() == name)
     }
@@ -168,6 +187,7 @@ impl Debug for Context {
             .field("root", &self.root)
             .field("help", &debug_option(&self.help, "Help"))
             .field("suggestions", &debug_option(&self.suggestions, "SuggestionProvider"))
+            .field("version", &"VersionProvider")
             .field("name_prefixes", &self.name_prefixes)
             .field("alias_prefixes", &self.alias_prefixes)
             .field("arg_assign", &self.assign_operators)
@@ -176,6 +196,7 @@ impl Debug for Context {
     }
 }
 
+/// An iterator over option prefixes.
 #[derive(Debug, Clone)]
 pub struct Prefixes<'a> {
     iter: linked_hash_set::Iter<'a, String>
@@ -195,6 +216,7 @@ impl<'a> ExactSizeIterator for Prefixes<'a>{
     }
 }
 
+/// A builder for `Context`.
 #[derive(Clone)]
 pub struct ContextBuilder {
     root: Command,
@@ -208,6 +230,7 @@ pub struct ContextBuilder {
 }
 
 impl ContextBuilder {
+    /// Constructs a default `ContextBuilder` for the given command.
     pub fn new(root: Command) -> Self {
         ContextBuilder {
             root,
@@ -221,6 +244,7 @@ impl ContextBuilder {
         }
     }
 
+    /// Adds an option name prefix to the context.
     pub fn name_prefix<S: Into<String>>(mut self, prefix: S) -> Self {
         let prefix = prefix.into();
         assert_valid_symbol("prefixes", prefix.as_str());
@@ -228,6 +252,7 @@ impl ContextBuilder {
         self
     }
 
+    /// Adds a option alias prefix to the context.
     pub fn alias_prefix<S: Into<String>>(mut self, prefix: S) -> Self {
         let prefix = prefix.into();
         assert_valid_symbol("prefixes", prefix.as_str());
@@ -235,6 +260,7 @@ impl ContextBuilder {
         self
     }
 
+    /// Adds an assign operator for this context.
     pub fn assign_operator(mut self, value: char) -> Self {
         // A char is always 4 bytes
         assert_valid_symbol("assign chars", value.encode_utf8(&mut [0;4]));
@@ -242,6 +268,7 @@ impl ContextBuilder {
         self
     }
 
+    /// Sets the delimiter for this context.
     pub fn delimiter(mut self, value: char) -> Self {
         // A char is always 4 bytes
         assert_valid_symbol("delimiters", value.encode_utf8(&mut [0;4]));
@@ -249,21 +276,25 @@ impl ContextBuilder {
         self
     }
 
+    /// Sets the `Help` for this context.
     pub fn help<H: Help + 'static>(mut self, help: H) -> Self {
         self.help = Some(Rc::new(help));
         self
     }
 
+    /// Sets the `SuggestionProvider` for this context.
     pub fn suggestions<S: SuggestionProvider + 'static>(mut self, suggestions: S) -> Self {
         self.suggestions = Some(Rc::new(suggestions));
         self
     }
 
+    /// Sets the `VersionProvider` for this context.
     pub fn version<V: VersionProvider + 'static>(mut self, version: V) -> Self {
         self.version = Some(Rc::new(version));
         self
     }
 
+    /// Constructs a `Context` using this builder data.
     pub fn build(mut self) -> Context {
         Context {
             // Root Command
@@ -308,6 +339,7 @@ impl ContextBuilder {
     }
 }
 
+// Checks if the given string is a help command.
 pub(crate) fn is_help_command(context: &Context, name: &str) -> bool {
     if let Some(help) = context.help() {
         matches!(help.kind(), HelpKind::Any | HelpKind::Subcommand) && help.name() == name
@@ -316,6 +348,7 @@ pub(crate) fn is_help_command(context: &Context, name: &str) -> bool {
     }
 }
 
+// Checks if the given string is a help option.
 pub(crate) fn is_help_option(context: &Context, name: &str) -> bool {
     if let Some(help) = context.help() {
         matches!(help.kind(), HelpKind::Any | HelpKind::Option)

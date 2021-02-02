@@ -12,6 +12,27 @@ use crate::Argument;
 use std::cell::Cell;
 
 /// A command-line argument parser.
+///
+/// # Example
+/// ```
+/// use clapi::{Command, CommandOption, Argument, Context, Parser};
+/// use clapi::validator::parse_validator;
+///
+/// let command = Command::new("MyApp")
+///     .option(CommandOption::new("number")
+///         .arg(Argument::new().validator(parse_validator::<i64>())))
+///     .option(CommandOption::new("enable")
+///         .requires_assign(true)
+///         .arg(Argument::new().validator(parse_validator::<bool>())));
+///
+/// let context = Context::new(command);
+/// let result = Parser::new(&context)
+///     .parse(vec!["--number", "25", "--enable=false"])
+///     .unwrap();
+///
+/// assert_eq!(result.get_option_arg("number").unwrap().convert::<i64>().ok(), Some(25));
+/// assert_eq!(result.get_option_arg("enable").unwrap().convert::<bool>().ok(), Some(false));
+/// ```
 #[derive(Debug, Clone)]
 pub struct Parser<'a> {
     context: &'a Context,
@@ -22,6 +43,7 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+    /// Constructs a new `Parser`
     pub fn new(context: &'a Context) -> Self {
         Parser {
             context,
@@ -32,18 +54,19 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn command(&self) -> Option<&Command> {
-        self.command.as_ref()
-    }
-
-    pub fn options(&self) -> Option<&OptionList> {
-        self.options.as_ref()
-    }
-
-    pub fn args(&self) -> Option<&ArgumentList> {
-        self.args.as_ref()
-    }
-
+    /// Parsers the given arguments and returns the `Ok(ParseResult)` if the parsing succeed
+    /// otherwise `Err(Error)`.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, Argument, Parser, Context};
+    /// let command = Command::new("MyApp")
+    ///     .arg(Argument::with_name("value"));
+    ///
+    /// let context = Context::new(command);
+    /// let result = Parser::new(&context).parse(vec!["hello world"]).unwrap();
+    /// assert_eq!(&result.arg().unwrap()[0], "hello world");
+    /// ```
     pub fn parse<S, I>(&mut self, args: I) -> Result<ParseResult>
         where S: Borrow<str>,
               I: IntoIterator<Item = S> {
@@ -63,6 +86,21 @@ impl<'a> Parser<'a> {
         // Parse all the tokens
         self.parse_tokens()
     }
+
+    // Returns the executing `Command` if the parse failed, otherwise `None`
+    pub(crate) fn command(&self) -> Option<&Command> {
+        self.command.as_ref()
+    }
+
+    // Returns the options if the parse failed, otherwise `None`
+    pub(crate) fn options(&self) -> Option<&OptionList> {
+        self.options.as_ref()
+    }
+
+    // Returns the arguments if the parse failed, otherwise `None`
+    // pub(crate) fn args(&self) -> Option<&ArgumentList> {
+    //     self.args.as_ref()
+    // }
 
     fn parse_tokens(&mut self) -> Result<ParseResult> {
         // Parse executing command
@@ -178,11 +216,11 @@ impl<'a> Parser<'a> {
                     if let Some(Token::Arg(arg)) = cursor.peek() {
                         let assign_op : char = *self.context.assign_operators().next().unwrap();
                         return Err(
+                            // assignment operator is required: `--option=value`
                             Error::new(
                                 ErrorKind::InvalidArgument(arg.clone()),
                                 format!(
-                                    "`{}` requires an assignment operator like `{}` for the arguments", s, assign_op
-                                )
+                                    "assignment operator is required: `{}{}{}`", s, assign_op, arg)
                             )
                         );
                     }
