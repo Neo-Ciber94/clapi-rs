@@ -36,8 +36,8 @@ macro_rules! crate_version {
 ///
 /// You use the `@subcommand`, `@option` and `@arg` tags to create subcommand, option and args
 /// respectively. A list of the tags and its properties:
-/// - `@subcommand` : description, usage, help, handler, @subcommand, @option and @arg.
-/// - `@option` : description, alias, required and @arg.
+/// - `@subcommand` : description, usage, help, handler, hidden, @subcommand, @option and @arg.
+/// - `@option` : description, alias, required, multiple, requires_assign and @arg.
 /// - `@arg` : description, values, default, count, validator and type,
 ///
 /// # Usage
@@ -142,6 +142,14 @@ macro_rules! app {
     (@command ($builder:expr) (help => $help:expr) $($tt:tt)*) => {
         $crate::app!{
             @command ($builder.help($help)) $($tt)*
+        }
+    };
+
+    // Command `hidden`:
+    // clapi::app! { MyApp => (hidden => ... ) }
+    (@command ($builder:expr) (hidden => $hidden:expr) $($tt:tt)*) => {
+        $crate::app!{
+            @command ($builder.hidden($hidden)) $($tt)*
         }
     };
 
@@ -378,6 +386,30 @@ macro_rules! app {
     (@option ($option_builder:expr) (required => $required:expr) $($tt:tt)*) => {
         $crate::app!{
             @option ($option_builder.required($required)) $($tt)*
+        }
+    };
+
+    // Option multiple
+    // clapi::app! { (@option => (multiple => ... ) ) }
+    (@option ($option_builder:expr) (multiple => $multiple:expr) $($tt:tt)*) => {
+        $crate::app!{
+            @option ($option_builder.multiple($multiple)) $($tt)*
+        }
+    };
+
+    // Option hidden
+    // clapi::app! { (@option => (hidden => ... ) ) }
+    (@option ($option_builder:expr) (hidden => $hidden:expr) $($tt:tt)*) => {
+        $crate::app!{
+            @option ($option_builder.hidden($hidden)) $($tt)*
+        }
+    };
+
+    // Option requires assign
+    // clapi::app! { (@option => (requires_assign => ... ) ) }
+    (@option ($option_builder:expr) (requires_assign => $requires_assign:expr) $($tt:tt)*) => {
+        $crate::app!{
+            @option ($option_builder.requires_assign($requires_assign)) $($tt)*
         }
     };
 

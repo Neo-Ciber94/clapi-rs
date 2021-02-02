@@ -2,7 +2,6 @@
 use crate::args::{Argument, ArgumentList};
 use crate::error::Result;
 use crate::option::{CommandOption, OptionList};
-use crate::symbol::Symbol;
 use crate::utils::debug_option;
 use crate::{CommandLine, ParseResult};
 use linked_hash_set::LinkedHashSet;
@@ -15,7 +14,6 @@ use std::rc::Rc;
 /// A command-line command.
 #[derive(Clone)]
 pub struct Command {
-    parent: Option<Symbol>,
     name: String,
     description: Option<String>,
     usage: Option<String>,
@@ -81,7 +79,6 @@ impl Command {
 
         Command {
             name,
-            parent: None,
             description: None,
             usage: None,
             help: None,
@@ -148,11 +145,6 @@ impl Command {
     /// Returns `true` if this command take args.
     pub fn take_args(&self) -> bool {
         self.args.len() > 0
-    }
-
-    /// Returns the parent `Symbol` of this command, or `None` if is a root command.
-    pub fn get_parent(&self) -> Option<&Symbol> {
-        self.parent.as_ref()
     }
 
     /// Returns `true` if this command is no visible for `help`.
@@ -381,7 +373,7 @@ impl Command {
         self
     }
 
-    pub(crate) fn add_command(&mut self, mut command: Command) -> bool {
+    pub(crate) fn add_command(&mut self, command: Command) -> bool {
         if self.children.contains(&command) {
             panic!(
                 "`{}` already contains a subcommand named: `{}`",
@@ -390,7 +382,6 @@ impl Command {
             );
         }
 
-        command.parent = Some(Symbol::Cmd(self.name.clone()));
         self.children.insert(command)
     }
 
@@ -523,7 +514,6 @@ impl Debug for Command {
             .field("description", &self.get_description())
             .field("about", &self.get_usage())
             .field("help", &self.get_help())
-            .field("parent", &self.get_parent())
             .field("options", &self.get_options())
             .field("arguments", &self.get_args())
             .field(

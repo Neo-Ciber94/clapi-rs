@@ -171,7 +171,6 @@ mod error;
 mod option;
 mod parse_result;
 mod parser;
-mod symbol;
 mod tokenizer;
 mod version;
 
@@ -191,7 +190,6 @@ pub use self::error::*;
 pub use self::option::*;
 pub use self::parse_result::*;
 pub use self::parser::*;
-pub use self::symbol::*;
 pub use self::tokenizer::*;
 pub use self::version::*;
 

@@ -12,6 +12,9 @@ fn main(){
             (alias => "t", "T")
             (description => "Number of times to sum the numbers")
             (required => false)
+            (multiple => true)
+            (hidden => false)
+            (requires_assign => true)
             (@arg =>
                 (count => 1)
                 (type => u64)
@@ -28,6 +31,7 @@ fn main(){
         )
         (@subcommand "author" =>
             (description => "Shows the authors")
+            (hidden => false)
             (@arg "count" =>
                 (description => "Number of authors to show")
                 (type => u64)
