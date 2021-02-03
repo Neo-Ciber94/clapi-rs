@@ -23,6 +23,7 @@ pub struct Argument {
     description: Option<String>,
     values_count: Option<ArgCount>,
     validator: Option<Rc<dyn Validator>>,
+    validation_error: Option<String>,
     default_values: Vec<String>,
     valid_values: Vec<String>,
     values: Option<Vec<String>>,
@@ -36,6 +37,7 @@ impl Argument {
             description: None,
             values_count: None,
             validator: None,
+            validation_error: None,
             default_values: vec![],
             valid_values: vec![],
             values: None,
@@ -63,6 +65,7 @@ impl Argument {
             description: None,
             values_count: None,
             validator: None,
+            validation_error: None,
             default_values: vec![],
             valid_values: vec![],
             values: None,
@@ -114,6 +117,11 @@ impl Argument {
     /// Returns the value `Validator` used by this argument.
     pub fn get_validator(&self) -> Option<&dyn Validator> {
         self.validator.as_ref().map(|s| s.as_ref())
+    }
+
+    /// Returns the validation error message.
+    pub fn get_validation_error(&self) -> Option<&str>{
+        self.validation_error.as_deref()
     }
 
     /// Returns the default values of this argument or a 0-length slice if none.
@@ -319,6 +327,29 @@ impl Argument {
         self
     }
 
+    /// Sets the error message returned when a value is no valid.
+    ///
+    /// # Example
+    /// ```
+    /// use clapi::{Command, Argument, Error, ErrorKind};
+    /// use clapi::validator::parse_validator;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let error = Command::new("MyApp")
+    ///     .arg(Argument::with_name("number")
+    ///         .validator(parse_validator::<NonZeroUsize>())
+    ///         .validation_error("expected number greater than 0"))
+    ///         .parse_from(vec!["0"])
+    ///         .err()
+    ///         .unwrap();
+    ///
+    /// assert_eq!(error.kind(), &ErrorKind::InvalidArgument("expected number greater than 0".to_owned()));
+    /// ```
+    pub fn validation_error<S: Into<String>>(mut self, error: S) -> Self {
+        self.validation_error = Some(error.into());
+        self
+    }
+
     /// Sets the valid values of this argument.
     ///
     /// # Panics
@@ -494,7 +525,14 @@ impl Argument {
 
         if let Some(validator) = &self.validator {
             for value in &values {
-                validator.validate(value)?;
+                match self.validation_error.clone() {
+                    Some(error) => {
+                       return Err(
+                           Error::from(ErrorKind::InvalidArgument(error))
+                       );
+                    },
+                    None => validator.validate(value)?
+                }
             }
         }
 
@@ -1217,12 +1255,14 @@ mod tests {
             .description("the values to use")
             .values_count(1..)
             .validator(parse_validator::<i64>())
+            .validation_error("expected integer")
             .default(1);
 
         assert_eq!(arg.get_name(), "number");
         assert_eq!(arg.get_description(), Some("the values to use"));
         assert_eq!(arg.get_values_count(), ArgCount::more_than(1));
         assert!(arg.get_validator().is_some());
+        assert_eq!(arg.get_validation_error(), Some("expected integer"));
         assert_eq!(arg.get_default_values()[0].clone(), "1".to_owned());
         assert!(!arg.is_set());
     }

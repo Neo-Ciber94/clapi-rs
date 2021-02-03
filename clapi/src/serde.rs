@@ -25,12 +25,13 @@ impl Serialize for Argument {
             }
         }
 
-        let mut state = serializer.serialize_struct("Argument", 7)?;
+        let mut state = serializer.serialize_struct("Argument", 8)?;
         state.serialize_field("name", &self.get_name())?;
         state.serialize_field("description", &self.get_description())?;
         state.serialize_field("min_values", &self.get_values_count().min())?;
         state.serialize_field("max_values", &self.get_values_count().max())?;
         state.serialize_field("type", &get_valid_type(self.get_validator()))?;
+        state.serialize_field("error", &self.get_validation_error())?;
         state.serialize_field("valid_values", &self.get_valid_values())?;
         state.serialize_field("default_values", &self.get_default_values())?;
         state.end()
@@ -788,6 +789,7 @@ mod argument {
         "min_values",
         "max_values",
         "type",
+        "error",
         "valid_values",
         "default_values",
     ];
@@ -798,6 +800,7 @@ mod argument {
         MinCount,
         MaxCount,
         Type,
+        Error,
         ValidValues,
         DefaultValues,
     }
@@ -825,6 +828,7 @@ mod argument {
                         "min_values" => Ok(Field::MinCount),
                         "max_values" => Ok(Field::MaxCount),
                         "type" => Ok(Field::Type),
+                        "error" => Ok(Field::Error),
                         "valid_values" => Ok(Field::ValidValues),
                         "default_values" => Ok(Field::DefaultValues),
                         _ => Err(de::Error::unknown_field(v, FIELDS)),
@@ -841,6 +845,7 @@ mod argument {
                         b"min_values" => Ok(Field::MinCount),
                         b"max_values" => Ok(Field::MaxCount),
                         b"type" => Ok(Field::Type),
+                        b"error" => Ok(Field::Error),
                         b"valid_values" => Ok(Field::ValidValues),
                         b"default_values" => Ok(Field::DefaultValues),
                         _ => {
@@ -872,6 +877,7 @@ mod argument {
             let mut min_values: Option<Option<usize>> = None;
             let mut max_values: Option<Option<usize>> = None;
             let mut valid_type : Option<Option<ValidType>> = None;
+            let mut validation_error: Option<Option<String>> = None;
             let mut valid_values: Option<Vec<String>> = None;
             let mut default_values: Option<Vec<String>> = None;
 
@@ -911,6 +917,13 @@ mod argument {
                         }
 
                         valid_type = Some(map.next_value()?);
+                    },
+                    Field::Error => {
+                        if validation_error.is_some() {
+                            return Err(de::Error::duplicate_field("error"));
+                        }
+
+                        validation_error = Some(map.next_value()?);
                     }
                     Field::ValidValues => {
                         if valid_values.is_some() {
@@ -963,6 +976,10 @@ mod argument {
                 argument = valid_type.set_validator(argument);
             }
 
+            if let Some(Some(validation_error)) = validation_error {
+                argument = argument.validation_error(validation_error);
+            }
+
             if let Some(valid_values) = valid_values {
                 if valid_values.len() > 0 {
                     argument = argument.valid_values(valid_values);
@@ -996,6 +1013,7 @@ mod tests {
                 .description("A set of numbers")
                 .values_count(1..=10)
                 .validator(parse_validator::<i64>())
+                .validation_error("expected integer")
                 .valid_values(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
                 .defaults(&[1, 2, 3]);
 
@@ -1006,6 +1024,7 @@ mod tests {
                     .min_values(1)
                     .max_values(10)
                     .valid_type(ValidType::I64)
+                    .validation_error("expected integer")
                     .valid_values(vec!["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"])
                     .default_values(vec!["1", "2", "3"])
                     .to_tokens()
@@ -1343,6 +1362,155 @@ mod test_utils {
     use crate::serde::internal::ValidType;
 
     #[derive(Debug, Clone)]
+    pub struct ArgTokens {
+        name: &'static str,
+        description: Option<&'static str>,
+        min_values: Option<u64>,
+        max_values: Option<u64>,
+        valid_type: Option<ValidType>,
+        validation_error: Option<&'static str>,
+        valid_values: Vec<&'static str>,
+        default_values: Vec<&'static str>,
+    }
+
+    impl ArgTokens {
+        pub fn new(name: &'static str) -> Self {
+            ArgTokens {
+                name,
+                description: None,
+                min_values: None,
+                max_values: None,
+                valid_type: None,
+                validation_error: None,
+                valid_values: vec![],
+                default_values: vec![]
+            }
+        }
+
+        pub fn description(mut self, description: &'static str) -> Self {
+            self.description = Some(description);
+            self
+        }
+
+        pub fn min_values(mut self, min_values: u64) -> Self {
+            self.min_values = Some(min_values);
+            self
+        }
+
+        pub fn max_values(mut self, max_values: u64) -> Self {
+            self.max_values = Some(max_values);
+            self
+        }
+
+        pub fn value_count(mut self, value_count: u64) -> Self {
+            self.min_values = Some(value_count);
+            self.max_values = Some(value_count);
+            self
+        }
+
+        pub fn valid_type(mut self, valid_type: ValidType) -> Self {
+            self.valid_type = Some(valid_type);
+            self
+        }
+
+        pub fn validation_error(mut self, error: &'static str) -> Self {
+            self.validation_error = Some(error);
+            self
+        }
+
+        pub fn valid_values(mut self, values: Vec<&'static str>) -> Self {
+            self.valid_values = values;
+            self
+        }
+
+        pub fn default_values(mut self, values: Vec<&'static str>) -> Self {
+            self.default_values = values;
+            self
+        }
+
+        pub fn to_tokens(&self) -> Vec<Token> {
+            let mut tokens = Vec::new();
+            tokens.push(Token::Struct {
+                name: "Argument",
+                len: 8,
+            });
+
+            // Argument name
+            tokens.push(Token::Str("name"));
+            tokens.push(Token::String(self.name));
+
+            // Argument description
+            tokens.push(Token::Str("description"));
+            if let Some(description) = self.description {
+                tokens.push(Token::Some);
+                tokens.push(Token::String(description));
+            } else {
+                tokens.push(Token::None);
+            }
+
+            // Argument min values
+            tokens.push(Token::Str("min_values"));
+            if let Some(min_values) = self.min_values {
+                tokens.push(Token::Some);
+                tokens.push(Token::U64(min_values))
+            } else {
+                tokens.push(Token::None);
+            }
+
+            // Argument max values
+            tokens.push(Token::Str("max_values"));
+            if let Some(max_values) = self.max_values {
+                tokens.push(Token::Some);
+                tokens.push(Token::U64(max_values))
+            } else {
+                tokens.push(Token::None);
+            }
+
+            // Argument valid type
+            tokens.push(Token::Str("type"));
+            if let Some(valid_type) = &self.valid_type {
+                tokens.push(Token::Some);
+                tokens.push(Token::UnitVariant { name: "ValidType", variant: valid_type.as_str() });
+            } else {
+                tokens.push(Token::None);
+            }
+
+            // Argument validation error
+            tokens.push(Token::Str("error"));
+            if let Some(validation_error) = self.validation_error {
+                tokens.push(Token::Some);
+                tokens.push(Token::String(validation_error));
+            } else {
+                tokens.push(Token::None);
+            }
+
+            // Argument valid values
+            tokens.push(Token::Str("valid_values"));
+            tokens.push(Token::Seq {
+                len: Some(self.valid_values.len()),
+            });
+            for value in &self.valid_values {
+                tokens.push(Token::Str(value));
+            }
+            tokens.push(Token::SeqEnd);
+
+            // Argument default values
+            tokens.push(Token::Str("default_values"));
+            tokens.push(Token::Seq {
+                len: Some(self.default_values.len()),
+            });
+            for value in &self.default_values {
+                tokens.push(Token::Str(value));
+            }
+            tokens.push(Token::SeqEnd);
+
+            // End
+            tokens.push(Token::StructEnd);
+            tokens
+        }
+    }
+
+    #[derive(Debug, Clone)]
     pub struct OptionTokens {
         name: &'static str,
         aliases: Vec<&'static str>,
@@ -1463,139 +1631,6 @@ mod test_utils {
             // Option assign required
             tokens.push(Token::Str("requires_assign"));
             tokens.push(Token::Bool(self.requires_assign));
-
-            // End
-            tokens.push(Token::StructEnd);
-            tokens
-        }
-    }
-
-    #[derive(Debug, Clone)]
-    pub struct ArgTokens {
-        name: &'static str,
-        description: Option<&'static str>,
-        min_values: Option<u64>,
-        max_values: Option<u64>,
-        valid_type: Option<ValidType>,
-        valid_values: Vec<&'static str>,
-        default_values: Vec<&'static str>,
-    }
-
-    impl ArgTokens {
-        pub fn new(name: &'static str) -> Self {
-            ArgTokens {
-                name,
-                description: None,
-                min_values: None,
-                max_values: None,
-                valid_type: None,
-                valid_values: vec![],
-                default_values: vec![]
-            }
-        }
-
-        pub fn description(mut self, description: &'static str) -> Self {
-            self.description = Some(description);
-            self
-        }
-
-        pub fn min_values(mut self, min_values: u64) -> Self {
-            self.min_values = Some(min_values);
-            self
-        }
-
-        pub fn max_values(mut self, max_values: u64) -> Self {
-            self.max_values = Some(max_values);
-            self
-        }
-
-        pub fn value_count(mut self, value_count: u64) -> Self {
-            self.min_values = Some(value_count);
-            self.max_values = Some(value_count);
-            self
-        }
-
-        pub fn valid_type(mut self, valid_type: ValidType) -> Self {
-            self.valid_type = Some(valid_type);
-            self
-        }
-
-        pub fn valid_values(mut self, values: Vec<&'static str>) -> Self {
-            self.valid_values = values;
-            self
-        }
-
-        pub fn default_values(mut self, values: Vec<&'static str>) -> Self {
-            self.default_values = values;
-            self
-        }
-
-        pub fn to_tokens(&self) -> Vec<Token> {
-            let mut tokens = Vec::new();
-            tokens.push(Token::Struct {
-                name: "Argument",
-                len: 7,
-            });
-
-            // Argument name
-            tokens.push(Token::Str("name"));
-            tokens.push(Token::String(self.name));
-
-            // Argument description
-            tokens.push(Token::Str("description"));
-            if let Some(description) = self.description {
-                tokens.push(Token::Some);
-                tokens.push(Token::String(description));
-            } else {
-                tokens.push(Token::None);
-            }
-
-            // Argument min values
-            tokens.push(Token::Str("min_values"));
-            if let Some(min_values) = self.min_values {
-                tokens.push(Token::Some);
-                tokens.push(Token::U64(min_values))
-            } else {
-                tokens.push(Token::None);
-            }
-
-            // Argument max values
-            tokens.push(Token::Str("max_values"));
-            if let Some(max_values) = self.max_values {
-                tokens.push(Token::Some);
-                tokens.push(Token::U64(max_values))
-            } else {
-                tokens.push(Token::None);
-            }
-
-            // Argument valid type
-            tokens.push(Token::Str("type"));
-            if let Some(valid_type) = &self.valid_type {
-                tokens.push(Token::Some);
-                tokens.push(Token::UnitVariant { name: "ValidType", variant: valid_type.as_str() });
-            } else {
-                tokens.push(Token::None);
-            }
-
-            // Argument valid values
-            tokens.push(Token::Str("valid_values"));
-            tokens.push(Token::Seq {
-                len: Some(self.valid_values.len()),
-            });
-            for value in &self.valid_values {
-                tokens.push(Token::Str(value));
-            }
-            tokens.push(Token::SeqEnd);
-
-            // Argument default values
-            tokens.push(Token::Str("default_values"));
-            tokens.push(Token::Seq {
-                len: Some(self.default_values.len()),
-            });
-            for value in &self.default_values {
-                tokens.push(Token::Str(value));
-            }
-            tokens.push(Token::SeqEnd);
 
             // End
             tokens.push(Token::StructEnd);

@@ -20,6 +20,7 @@ pub const VALUES: &str = "values";
 pub const HIDDEN: &str = "hidden";
 pub const MULTIPLE: &str = "multiple";
 pub const REQUIRES_ASSIGN : &str = "requires_assign";
+pub const ERROR : &str = "error";
 
 pub fn is_clapi_attribute(path: &str) -> bool {
     is_command(path) || is_subcommand(path) || is_option(path) || is_arg(path) || is_help(path)

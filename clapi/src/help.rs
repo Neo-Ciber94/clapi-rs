@@ -81,12 +81,12 @@ impl Buffer {
     }
 
     /// Returns a reference to the buffer.
-    pub fn buffer(&self) -> &Vec<u8>{
+    pub fn get(&self) -> &Vec<u8>{
         &self.buffer
     }
 
     /// Returns a mutable reference to the buffer.
-    pub fn buffer_mut(&mut self) -> &mut Vec<u8>{
+    pub fn get_mut(&mut self) -> &mut Vec<u8>{
         &mut self.buffer
     }
 }
@@ -212,7 +212,7 @@ impl<'a> DefaultHelp<'a> {
             writeln!(buf, "USAGE:").unwrap();
 
             // command [OPTIONS] [ARGS]...
-            {
+            if command.take_args() || option_count > 0 {
                 write_indent(buf, self.indent);
                 write!(buf, "{}", command.get_name()).unwrap();
 
@@ -277,10 +277,16 @@ impl<'a> Help for DefaultHelp<'a> {
             writeln!(buf).unwrap();
             writeln!(buf, "{}", msg).unwrap();
         }
+
+        // Removes the newline at the end of the buffer
+        remove_newline(buf);
     }
 
     fn usage(&self, buf: &mut Buffer, context: &Context, command: &Command) {
-        self.write_usage(buf, context, command, true)
+        self.write_usage(buf, context, command, true);
+
+        // Removes the newline at the end of the buffer
+        remove_newline(buf);
     }
 
     fn kind(&self) -> HelpKind {
@@ -304,7 +310,18 @@ fn count_subcommands(parent: &Command) -> usize {
 
 // Add indentation to the buffer
 fn write_indent(buf: &mut Buffer, indent: &[u8]) {
-    buf.buffer_mut().extend_from_slice(indent);
+    buf.get_mut().extend_from_slice(indent);
+}
+
+// Removes the newline from the buffer
+fn remove_newline(buf: &mut Buffer) {
+    // Remove the newline at the buffer end
+    if matches!(buf.get_mut().last(), Some(b'\n')) {
+        buf.get_mut().pop();
+        if matches!(buf.get_mut().last(), Some(b'\r')) {
+            buf.get_mut().pop();
+        }
+    }
 }
 
 // -v, --version        Shows the version

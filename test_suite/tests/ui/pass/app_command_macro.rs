@@ -28,6 +28,7 @@ fn main(){
             (description => "Numbers to sum")
             (count => 1..)
             (type => i64)
+            (error => "expected integer")
         )
         (@subcommand "author" =>
             (description => "Shows the authors")

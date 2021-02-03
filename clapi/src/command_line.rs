@@ -222,8 +222,7 @@ impl CommandLine {
     }
 
     fn display_help(&self, args: Option<&Argument>) -> Result<()> {
-        // `print` to avoid adding other `\n` to the help message
-        print!("{}", self.get_help_message(args, MessageKind::Help)?);
+        println!("{}", self.get_help_message(args, MessageKind::Help)?);
         Ok(())
     }
 
@@ -292,7 +291,7 @@ impl CommandLine {
                 }))
             })
             .flatten()
-            .map(|s| format!("\n\n{}\n", s));
+            .map(|s| format!("\n\n{}", s));
 
         if let Some(msg) = msg {
             Err(error.join(&msg))

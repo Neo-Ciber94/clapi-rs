@@ -1,0 +1,8 @@
+[package]
+name = "clapi_with_parser"
+version = "0.1.0"
+authors = ["Freddy L"]
+edition = "2018"
+
+[dependencies]
+clapi = { path="../../clapi" }

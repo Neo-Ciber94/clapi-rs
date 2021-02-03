@@ -495,6 +495,14 @@ macro_rules! app {
         }
     };
 
+    // Argument validation error
+    // clapi::app! { (@arg => (error => ... ) }
+    (@arg ($arg_builder:expr) (error => $error:expr) $($tt:tt)*) => {
+        $crate::app!{
+            @arg ($arg_builder.validation_error($error)) $($tt)*
+        }
+    };
+
     //////////////////////////////////////////////////////////////////////
     // Some special cases to only create `Command` and not `CommandLine`//
     //////////////////////////////////////////////////////////////////////

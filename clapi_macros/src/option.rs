@@ -52,7 +52,7 @@ impl OptionAttrData {
 
     pub fn from_arg_data(arg_data: FnArgData) -> Self {
         let mut option = OptionAttrData::new(arg_data.arg_name.clone());
-        let mut args = ArgAttrData::from_arg_data(arg_data.clone());
+        let mut arg = ArgAttrData::from_arg_data(arg_data.clone());
 
         if let Some(att) = &arg_data.name_value {
             for (key, value) in att {
@@ -69,43 +69,43 @@ impl OptionAttrData {
                             .to_string_literal()
                             .expect("option `arg` must be a string literal");
 
-                        args.set_name(arg_name);
-                    }
+                        arg.set_name(arg_name);
+                    },
                     consts::ALIAS => {
                         let alias = value
                             .to_string_literal()
                             .expect("option `alias` must be a string literal");
 
                         option.set_alias(alias);
-                    }
+                    },
                     consts::DESCRIPTION => {
                         let description = value
                             .to_string_literal()
                             .expect("option `description` must be a string literal");
 
                         option.set_description(description);
-                    }
+                    },
                     consts::MIN => {
                         let min = value
                             .to_integer_literal::<usize>()
                             .expect("option `min` must be an integer literal");
 
-                        args.set_min(min);
-                    }
+                        arg.set_min(min);
+                    },
                     consts::MAX => {
                         let max = value
                             .to_integer_literal::<usize>()
                             .expect("option `max` must be an integer literal");
 
-                        args.set_max(max);
-                    }
+                        arg.set_max(max);
+                    },
                     consts::HIDDEN => {
                         let is_hidden = value
                             .to_bool_literal()
                             .expect("option `hidden` must be a bool literal");
 
                         option.set_hidden(is_hidden);
-                    }
+                    },
                     consts::MULTIPLE => {
                         let allow_multiple = value
                             .to_bool_literal()
@@ -120,13 +120,20 @@ impl OptionAttrData {
 
                         option.set_requires_assign(requires_assign);
                     },
+                    consts::ERROR => {
+                        let error = value
+                            .to_string_literal()
+                            .expect("option `error` must be a string literal");
+
+                        arg.set_validation_error(error);
+                    },
                     consts::DEFAULT => match value {
-                        Value::Literal(lit) => args.set_default_values(vec![lit.clone()]),
-                        Value::Array(array) => args.set_default_values(array.clone()),
+                        Value::Literal(lit) => arg.set_default_values(vec![lit.clone()]),
+                        Value::Array(array) => arg.set_default_values(array.clone()),
                     },
                     consts::VALUES => match value {
-                        Value::Literal(lit) => args.set_valid_values(vec![lit.clone()]),
-                        Value::Array(array) => args.set_valid_values(array.clone()),
+                        Value::Literal(lit) => arg.set_valid_values(vec![lit.clone()]),
+                        Value::Array(array) => arg.set_valid_values(array.clone()),
                     },
                     _ => panic!("invalid `option` key `{}`", key),
                 }
@@ -149,14 +156,14 @@ impl OptionAttrData {
                 value: false,
                 span: Span::call_site(),
             };
-            args.set_default_values(vec![syn::Lit::Bool(lit)]);
-            args.set_min(0);
-            args.set_max(1); //#[option]
+            arg.set_default_values(vec![syn::Lit::Bool(lit)]);
+            arg.set_min(0);
+            arg.set_max(1); //#[option]
         }
 
         // Sets the attribute and the args
         option.attribute = arg_data.attribute;
-        option.set_args(args);
+        option.set_args(arg);
         option
     }
 

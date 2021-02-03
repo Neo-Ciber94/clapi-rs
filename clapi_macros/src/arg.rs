@@ -26,6 +26,7 @@ pub struct ArgAttrData {
     fn_arg: (FnArgData, ArgumentType),
     default_values: Vec<Lit>,
     valid_values: Vec<Lit>,
+    validation_error: Option<String>,
     attribute: Option<MacroAttribute>,
 }
 
@@ -48,7 +49,8 @@ impl ArgAttrData {
             fn_arg: (arg_data, ArgumentType::new(&pat_type)),
             valid_values: vec![],
             default_values: vec![],
-            attribute
+            attribute,
+            validation_error: None
         };
 
         // If is an option, we delegates reading the attribute to it
@@ -62,28 +64,35 @@ impl ArgAttrData {
                                 .expect("arg `name` must be a string literal");
 
                             arg.set_name(name);
-                        }
+                        },
                         consts::MIN => {
                             let min = value
                                 .to_integer_literal::<usize>()
                                 .expect("arg `min` must be an integer literal");
 
                             arg.set_min(min);
-                        }
+                        },
                         consts::MAX => {
                             let max = value
                                 .to_integer_literal::<usize>()
                                 .expect("arg `max` must be an integer literal");
 
                             arg.set_max(max);
-                        }
+                        },
                         consts::DESCRIPTION => {
                             let description = value
                                 .to_string_literal()
-                                .expect("arg `description` is expected to be a string literal");
+                                .expect("arg `description` must be a string literal");
 
                             arg.set_description(description);
-                        }
+                        },
+                        consts::ERROR => {
+                            let error = value
+                                .to_string_literal()
+                                .expect("arg `error` must be a string literal");
+
+                            arg.set_validation_error(error);
+                        },
                         consts::DEFAULT => match value {
                             Value::Literal(lit) => arg.set_default_values(vec![lit]),
                             Value::Array(array) => arg.set_default_values(array),
@@ -140,6 +149,10 @@ impl ArgAttrData {
             )
         }
         self.default_values = default_values;
+    }
+
+    pub fn set_validation_error(&mut self, error: String) {
+        self.validation_error = Some(error);
     }
 
     pub fn set_valid_values(&mut self, valid_values: Vec<Lit>) {
@@ -202,6 +215,13 @@ impl ArgAttrData {
             .map(|s| quote! { .description(#s)})
             .unwrap_or_else(|| quote! {});
 
+        // Argument validation error
+        let validation_error = self
+            .validation_error
+            .as_ref()
+            .map(|s| quote! { .validation_error(#s)})
+            .unwrap_or_else(|| quote! {});
+
         // Argument name
         let name = quote_expr!(self.name);
 
@@ -210,6 +230,7 @@ impl ArgAttrData {
             #value_count
             #description
             #valid_values
+            #validation_error
             #default_values
         }
     }
