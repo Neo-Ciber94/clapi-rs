@@ -3,7 +3,7 @@ use crate::args::{Argument, ArgumentList};
 use crate::error::Result;
 use crate::option::{CommandOption, OptionList};
 use crate::utils::debug_option;
-use crate::{CommandLine, ParseResult};
+use crate::{CommandLine, ParseResult, Context};
 use linked_hash_set::LinkedHashSet;
 use std::borrow::Borrow;
 use std::cell::{RefCell, RefMut};
@@ -459,7 +459,13 @@ impl Command {
     /// ```
     #[inline]
     pub fn parse_args(self) -> Result<ParseResult> {
-        self.parse_from(std::env::args().skip(1))
+        self.parse_args_and_get_context().map(|(_, result)| result)
+    }
+
+    /// Parse the arguments from `std::env::args` using this command and returns the `ParseResult` and the context used.
+    #[inline]
+    pub fn parse_args_and_get_context(self) -> Result<(Context, ParseResult)> {
+        self.parse_from_and_get_context(std::env::args().skip(1))
     }
 
     /// Parse the arguments using this command and returns the `ParseResult`.
@@ -485,9 +491,20 @@ impl Command {
         I: IntoIterator<Item = S>,
         S: Borrow<str>,
     {
+        self.parse_from_and_get_context(args).map(|(_, result)| result)
+    }
+
+    /// Parse the arguments using this command and returns the `ParseResult` and the `Context` used.
+    #[inline]
+    pub fn parse_from_and_get_context<I, S>(self, args: I) -> Result<(Context, ParseResult)>
+        where
+            I: IntoIterator<Item = S>,
+            S: Borrow<str>,
+    {
         let context = crate::Context::new(self);
         let mut parser = crate::Parser::new(&context);
         parser.parse(args)
+            .map(|result| (context, result))
     }
 }
 

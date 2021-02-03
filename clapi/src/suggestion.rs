@@ -262,9 +262,6 @@ mod tests {
         assert_eq!(compute_levenshtein_distance_ignore_case("casa", "calle"), 3);
         assert_eq!(compute_levenshtein_distance_ignore_case("shot", "spot"), 1);
         assert_eq!(compute_levenshtein_distance_ignore_case("dad", "mom"), 3);
-        assert_eq!(
-            compute_levenshtein_distance_ignore_case("blueberry", "berry"),
-            4
-        );
+        assert_eq!(compute_levenshtein_distance_ignore_case("blueberry", "berry"), 4);
     }
 }

@@ -92,28 +92,28 @@ macro_rules! app {
     //////////////////////////////////////////////////////////////////////
 
     // Create a `CommandLine` with `Command::root()`
-    (=> $($rest:tt)+) => {{
+    (=> $($rest:tt)*) => {{
         $crate::CommandLine::new(
             $crate::app!{
-                @command ($crate::Command::root()) $($rest)+
+                @command ($crate::Command::root()) $($rest)*
             }
         )
     }};
 
     // Create a `CommandLine` with `Command::new(command_name)`
-    ($command_name:ident => $($rest:tt)+) => {{
+    ($command_name:ident => $($rest:tt)*) => {{
         $crate::CommandLine::new(
             $crate::app!{
-                @command ($crate::Command::new(stringify!($command_name))) $($rest)+
+                @command ($crate::Command::new(stringify!($command_name))) $($rest)*
             }
         )
     }};
 
     // Create a `CommandLine` with `Command::new(command_name)`
-    ($command_name:expr => $($rest:tt)+) => {{
+    ($command_name:expr => $($rest:tt)*) => {{
         $crate::CommandLine::new(
             $crate::app!{
-                @command ($crate::Command::new($command_name)) $($rest)+
+                @command ($crate::Command::new($command_name)) $($rest)*
             }
         )
     }};

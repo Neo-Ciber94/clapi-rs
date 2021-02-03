@@ -155,7 +155,6 @@ impl<'a> Parser<'a> {
         // Parse the command arguments
         self.parse_args()?;
 
-        println!("{:?}", self.cursor.as_ref().unwrap().remaining());
         // If there is arguments left and the current command takes no arguments is an error
         if self.cursor.as_ref().unwrap().peek().is_some() {
             let command = self.command.as_ref().unwrap();
