@@ -525,13 +525,12 @@ impl Argument {
 
         if let Some(validator) = &self.validator {
             for value in &values {
-                match self.validation_error.clone() {
-                    Some(error) => {
-                       return Err(
-                           Error::from(ErrorKind::InvalidArgument(error))
-                       );
-                    },
-                    None => validator.validate(value)?
+                // Checks if the value is valid
+                if let Err(error) = validator.validate(value) {
+                    return match self.validation_error.clone() {
+                        Some(error) => Err(Error::from(ErrorKind::InvalidArgument(error))),
+                        None => Err(error)
+                    }
                 }
             }
         }

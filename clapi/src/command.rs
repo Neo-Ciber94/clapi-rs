@@ -4,12 +4,13 @@ use crate::error::Result;
 use crate::option::{CommandOption, OptionList};
 use crate::utils::debug_option;
 use crate::{CommandLine, ParseResult, Context};
-use linked_hash_set::LinkedHashSet;
 use std::borrow::Borrow;
 use std::cell::{RefCell, RefMut};
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
+
+// pub trait Handler = FnMut(&OptionList, &ArgumentList) -> Result<()>;
 
 /// A command-line command.
 #[derive(Clone)]
@@ -19,7 +20,7 @@ pub struct Command {
     usage: Option<String>,
     help: Option<String>,
     version: Option<String>,
-    children: LinkedHashSet<Command>,
+    subcommands: Vec<Command>,
     options: OptionList,
     args: ArgumentList,
     is_hidden: bool,
@@ -83,7 +84,7 @@ impl Command {
             usage: None,
             help: None,
             version: None,
-            children: LinkedHashSet::new(),
+            subcommands: Default::default(),
             handler: None,
             args: ArgumentList::new(),
             options,
@@ -116,10 +117,17 @@ impl Command {
         self.version.as_deref()
     }
 
-    /// Returns an `ExactSizeIterator` over the children of this command.
-    pub fn get_children(&self) -> Iter<'_> {
+    /// Returns an iterator over the subcommands of this command.
+    pub fn get_subcommands(&self) -> Iter<'_> {
         Iter {
-            iter: self.children.iter(),
+            iter: self.subcommands.iter()
+        }
+    }
+
+    /// Returns an `ExactSizeIterator` over the children of this command.
+    pub fn get_subcommands_mut(&mut self) -> IterMut<'_> {
+        IterMut {
+            iter: self.subcommands.iter_mut()
         }
     }
 
@@ -161,7 +169,7 @@ impl Command {
 
     /// Returns the child with the given name, or `None` if not child if found.
     pub fn find_subcommand<S: AsRef<str>>(&self, name: S) -> Option<&Command> {
-        self.children.iter().find(|c| c.get_name() == name.as_ref())
+        self.subcommands.iter().find(|c| c.get_name() == name.as_ref())
     }
 
     /// Sets a short description of this command.
@@ -373,8 +381,8 @@ impl Command {
         self
     }
 
-    pub(crate) fn add_command(&mut self, command: Command) -> bool {
-        if self.children.contains(&command) {
+    pub(crate) fn add_command(&mut self, command: Command) {
+        if self.subcommands.contains(&command) {
             panic!(
                 "`{}` already contains a subcommand named: `{}`",
                 self.name,
@@ -382,7 +390,7 @@ impl Command {
             );
         }
 
-        self.children.insert(command)
+        self.subcommands.push(command)
     }
 
     pub(crate) fn add_option(&mut self, option: CommandOption) {
@@ -541,15 +549,15 @@ impl Debug for Command {
                 ),
             )
             .field("is_hidden", &self.is_hidden())
-            .field("children", &self.get_children())
+            .field("children", &self.get_subcommands())
             .finish()
     }
 }
 
-/// An iterator over the children of a `Command`.
+/// An iterator over the subcommands of a `Command`.
 #[derive(Debug, Clone)]
 pub struct Iter<'a> {
-    iter: linked_hash_set::Iter<'a, Command>,
+    iter: std::slice::Iter<'a, Command>
 }
 
 impl<'a> Iterator for Iter<'a> {
@@ -573,7 +581,28 @@ impl<'a> IntoIterator for &'a Command {
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.get_children()
+        self.get_subcommands()
+    }
+}
+
+/// A mutable iterator over the subcommands of a `Command`.
+#[derive(Debug)]
+pub struct IterMut<'a> {
+    iter: std::slice::IterMut<'a, Command>
+}
+
+impl<'a> Iterator for IterMut<'a> {
+    type Item = &'a mut Command;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+impl<'a> ExactSizeIterator for IterMut<'a> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.iter.len()
     }
 }
 
@@ -608,9 +637,10 @@ mod tests {
     fn children_test() {
         let cmd = Command::new("data")
             .subcommand(Command::new("set"))
-            .subcommand(Command::new("get").subcommand(Command::new("first")));
+            .subcommand(Command::new("get")
+                .subcommand(Command::new("first")));
 
-        assert_eq!(cmd.get_children().count(), 2);
+        assert_eq!(cmd.get_subcommands().count(), 2);
         assert_eq!(cmd.find_subcommand("set"), Some(&Command::new("set")));
         assert_eq!(cmd.find_subcommand("get"), Some(&Command::new("get")));
         assert_eq!(

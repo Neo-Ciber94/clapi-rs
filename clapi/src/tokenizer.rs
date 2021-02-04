@@ -105,7 +105,7 @@ impl Tokenizer {
                     // If the current don't take args, have subcommands and is not an option
                     // the next should be an unknown subcommand
                     if !current_command.take_args()
-                        && current_command.get_children().len() > 0
+                        && current_command.get_subcommands().len() > 0
                         && !is_prefixed_option(context, arg.borrow())
                     {
                         tokens.push(Token::Cmd(arg.borrow().to_string()));

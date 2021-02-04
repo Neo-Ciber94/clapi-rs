@@ -397,7 +397,7 @@ impl Serialize for Command {
         state.serialize_field("description", &self.get_description())?;
         state.serialize_field("usage", &self.get_usage())?;
         state.serialize_field("help", &self.get_help())?;
-        state.serialize_field("subcommands", &self.get_children().cloned().collect::<Vec<Command>>())?;
+        state.serialize_field("subcommands", &self.get_subcommands().cloned().collect::<Vec<Command>>())?;
         state.serialize_field("options", &self.get_options())?;
         state.serialize_field("args", &self.get_args())?;
         state.serialize_field("hidden", &self.is_hidden())?;

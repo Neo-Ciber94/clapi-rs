@@ -106,7 +106,9 @@ impl Context {
 
     /// Sets the `Help` provider of this context.
     pub fn set_help<H: Help + 'static>(&mut self, help: H) {
+        assert!(self.help.is_none(), "help is already set");
         self.help = Some(Rc::new(help));
+        insert_command_help_recursive(self);
     }
 
     /// Sets the `SuggestionProvider` of this context.
@@ -120,7 +122,7 @@ impl Context {
             return Some(opt);
         }
 
-        for child in self.root().get_children() {
+        for child in self.root().get_subcommands() {
             if let Some(opt) = child.get_options().get(name_or_alias) {
                 return Some(opt);
             }
@@ -131,7 +133,7 @@ impl Context {
 
     /// Returns the `Command` with the given name or `None` if not found.
     pub fn get_command(&self, name: &str) -> Option<&Command> {
-        self.root().get_children().find(|c| c.get_name() == name)
+        self.root().get_subcommands().find(|c| c.get_name() == name)
     }
 
     /// Returns `true` if the value is a name prefix.
@@ -146,27 +148,16 @@ impl Context {
 
     /// Returns `true` if the name match with the `help` provider.
     pub fn is_help<S: AsRef<str>>(&self, name: S) -> bool {
-        if let Some(help) = &self.help {
-            if help.name() == name.as_ref() {
-                return true;
-            }
-
-            if matches!(help.kind(), HelpKind::Option | HelpKind::Any) {
-                if let Some(alias) = help.alias() {
-                    return alias == name.as_ref();
-                }
-            }
-        }
-
-        false
+        is_help_command(self, name.as_ref()) || is_help_option(self, name.as_ref())
     }
 
     /// Returns `true` if the name match with a `version` provider.
     pub fn is_version<S: AsRef<str>>(&self, name: S) -> bool {
-        if let Some(alias) = self.version.alias() {
-            self.version.name() == name.as_ref() || alias == name.as_ref()
+        let version = self.version();
+        if let Some(alias) = version.alias() {
+            version.name() == name.as_ref() || alias == name.as_ref()
         } else {
-            self.version.name() == name.as_ref()
+            version.name() == name.as_ref()
         }
     }
 
@@ -296,7 +287,7 @@ impl ContextBuilder {
 
     /// Constructs a `Context` using this builder data.
     pub fn build(mut self) -> Context {
-        Context {
+        let mut context = Context {
             // Root Command
             root: self.root,
 
@@ -335,6 +326,23 @@ impl ContextBuilder {
                 }
                 self.assign_operators
             },
+        };
+
+        insert_command_help_recursive(&mut context);
+        insert_command_version_recursive(&mut context);
+        context
+    }
+}
+
+#[inline]
+fn assert_valid_symbol(source: &str, value: &str) {
+    for c in value.chars() {
+        if c.is_whitespace() {
+            panic!("{} cannot contains whitespaces: `{}`", source, value);
+        }
+
+        if c.is_ascii_alphanumeric() {
+            panic!("{} cannot contains numbers or letters: `{}`", source, value);
         }
     }
 }
@@ -358,17 +366,59 @@ pub(crate) fn is_help_option(context: &Context, name: &str) -> bool {
     }
 }
 
-#[inline]
-fn assert_valid_symbol(source: &str, value: &str) {
-    for c in value.chars() {
-        if c.is_whitespace() {
-            panic!("{} cannot contains whitespaces: `{}`", source, value);
+// Inserts the command help `option`
+fn insert_command_help_recursive(context: &mut Context) {
+    #[inline(always)]
+    fn add_help_option(help: &dyn Help, command: &mut Command) {
+        let help_option = crate::help::to_option(help);
+        command.add_option(help_option);
+    }
+
+    #[inline(always)]
+    fn add_help_subcommand(help: &dyn Help, command: &mut Command) {
+        let help_command = crate::help::to_command(help);
+        command.add_command(help_command);
+    }
+
+    fn insert_help(help: &dyn Help, command: &mut Command, is_root: bool) {
+        match help.kind() {
+            HelpKind::Option => add_help_option(help, command),
+            HelpKind::Subcommand if is_root => add_help_subcommand(help, command),
+            HelpKind::Any => {
+                add_help_option(help, command);
+
+                if is_root {
+                    add_help_subcommand(help, command);
+                }
+            },
+            _ => {}
         }
 
-        if c.is_ascii_alphanumeric() {
-            panic!("{} cannot contains numbers or letters: `{}`", source, value);
+        for subcommand in command.get_subcommands_mut() {
+            insert_help(help, subcommand, false);
         }
     }
+
+    if let Some(help) = context.help().cloned() {
+        insert_help(help.as_ref(), &mut context.root, true);
+    }
+}
+
+// Inserts the command `version`
+fn insert_command_version_recursive(context: &mut Context) {
+    fn insert_version(version: &dyn VersionProvider, command: &mut Command) {
+        if command.get_version().is_some() {
+            let version_option = crate::version::to_option(version);
+            command.add_option(version_option);
+        }
+
+        for child in command.get_subcommands_mut() {
+            insert_version(version, child);
+        }
+    }
+
+    let version = context.version().clone();
+    insert_version(version.as_ref(), &mut context.root);
 }
 
 #[cfg(test)]

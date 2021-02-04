@@ -24,7 +24,9 @@ fn main() -> clapi::Result<()> {
                 .option(
                     CommandOption::new("precision")
                         .requires_assign(true)
-                        .arg(Argument::new().validator(parse_validator::<NonZeroUsize>())),
+                        .arg(Argument::new()
+                            .validator(parse_validator::<NonZeroUsize>())
+                            .validation_error("`precision` expect a value greater than 0")),
                 ),
         )
         // Subcommand for product the numbers
@@ -45,7 +47,8 @@ fn main() -> clapi::Result<()> {
                     CommandOption::new("precision")
                         .requires_assign(true)
                         .arg(Argument::new()
-                            .validator(parse_validator::<NonZeroUsize>())),
+                            .validator(parse_validator::<NonZeroUsize>())
+                            .validation_error("`precision` expect a value greater than 0")),
                 ),
         )
         .parse_args_and_get_context()?;
@@ -56,10 +59,9 @@ fn main() -> clapi::Result<()> {
     // We check here if the subcommand is `sum` and `prod` to ensure is safe to get
     // `pretty`, `precision` and `values` which are share between those 2 subcommands
     if !matches!(subcommand.get_name(), "sum" | "prod") {
-        // Help
         static HELP: DefaultHelp = DefaultHelp::new();
 
-        // Shows the help message if the command is no `sum` or `prod`
+        // Shows a help message if the command is no `sum` or `prod`
         let mut buf = Buffer::new();
         HELP.help(&mut buf, &context, &subcommand);
         println!("{}", buf);
@@ -73,18 +75,15 @@ fn main() -> clapi::Result<()> {
             .get("precision")
             .map(|o| o.get_arg())
             .flatten()
-            .map(|arg| {
-                arg.convert::<NonZeroUsize>()
-                    .expect("expected a value greater than 0")
-            });
+            .map(|arg| arg.convert::<NonZeroUsize>().unwrap());
 
-        // The numbers to calculates
+        // The numbers
         let values = result.get_arg("values").unwrap().convert_all::<f64>()?;
 
         // Check the executing subcommand name
         match subcommand.get_name() {
-            "sum" => calculates(0_f64, values, pretty, '+', precision, |a, b| a + b),
-            "prod" => calculates(1_f64, values, pretty, '*', precision, |a, b| a * b),
+            "sum" => calculate(0_f64, values, pretty, '+', precision, |a, b| a + b),
+            "prod" => calculate(1_f64, values, pretty, '*', precision, |a, b| a * b),
             _ => unreachable!(),
         }
     }
@@ -92,7 +91,7 @@ fn main() -> clapi::Result<()> {
     Ok(())
 }
 
-fn calculates<F>(
+fn calculate<F>(
     initial_value: f64,
     values: Vec<f64>,
     pretty: bool,

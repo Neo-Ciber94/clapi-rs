@@ -312,7 +312,7 @@ impl CommandLine {
         let suggestions = self.suggestions().unwrap();
         let command_options = parser.command()
             .unwrap()
-            .get_children()
+            .get_subcommands()
             .map(|c| c.get_name().to_string())
             .collect::<Vec<String>>();
 

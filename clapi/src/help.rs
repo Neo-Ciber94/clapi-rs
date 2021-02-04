@@ -187,7 +187,7 @@ impl<'a> DefaultHelp<'a> {
             writeln!(buf).unwrap();
             writeln!(buf, "SUBCOMMANDS:").unwrap();
 
-            for command in command.get_children().filter(|c| !c.is_hidden()) {
+            for command in command.get_subcommands().filter(|c| !c.is_hidden()) {
                 write_indent(buf, self.indent);
                 writeln!(buf, "{}", command_to_string(command)).unwrap();
             }
@@ -241,11 +241,11 @@ impl<'a> DefaultHelp<'a> {
                 write_indent(buf, self.indent);
                 write!(buf, "{} [SUBCOMMAND]", command.get_name()).unwrap();
 
-                if command.get_children().any(|c| count_options(c.get_options()) > 0) {
+                if command.get_subcommands().any(|c| count_options(c.get_options()) > 0) {
                     write!(buf, " [OPTIONS]").unwrap();
                 }
 
-                if command.get_children()
+                if command.get_subcommands()
                     .filter(|c| !c.is_hidden())
                     .any(|c| c.take_args()) {
                     write!(buf, " [ARGS]").unwrap();
@@ -292,6 +292,10 @@ impl<'a> Help for DefaultHelp<'a> {
     fn kind(&self) -> HelpKind {
         self.kind
     }
+
+    fn alias(&self) -> Option<&str> {
+        Some("h")
+    }
 }
 
 // Number of no-hidden options
@@ -303,7 +307,7 @@ fn count_options(options: &OptionList) -> usize {
 
 // Number of no-hidden subcommands
 fn count_subcommands(parent: &Command) -> usize {
-    parent.get_children()
+    parent.get_subcommands()
         .filter(|c| !c.is_hidden())
         .count()
 }

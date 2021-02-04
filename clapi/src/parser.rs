@@ -109,9 +109,8 @@ impl<'a> Parser<'a> {
         // Parse the commands options and its arguments
         self.parse_options()?;
 
-        // Quick path: If the current parsing result contains a `help` command or option exit
-        // due it consumes all the tokens in the `Cursor`
-        if self.contains_help() {
+        // Quick path: If the current parsing result contains `help` or `version` we should exit
+        if self.help_is_set() || self.version_is_set() {
             let command = self.command.take().unwrap();
             let options = self.options.take().unwrap();
             let args = self.args.take().unwrap();
@@ -203,6 +202,7 @@ impl<'a> Parser<'a> {
         let command = self.command.as_ref().unwrap();
 
         while let Some(Token::Opt(s)) = cursor.peek() {
+            // Checks if is a `help` option like: `--help`
             if crate::context::is_help_option(&self.context, s) {
                 return self.parse_help_option();
             }
@@ -428,7 +428,7 @@ impl<'a> Parser<'a> {
             // Ignore the rest of tokens
             cursor.move_to_end();
 
-            // Set all the values to the help `CommandOption`
+            // Adds the help `CommandOption` and sets its values
             self.options.as_mut().unwrap().add(option.args(args)).unwrap();
             Ok(())
         } else {
@@ -507,7 +507,7 @@ impl<'a> Parser<'a> {
         false
     }
 
-    fn contains_help(&self) -> bool {
+    fn help_is_set(&self) -> bool {
         #[inline]
         fn contains_help_command(parser: &Parser, help: &dyn Help) -> bool {
             parser.command.as_ref().unwrap().get_name() == help.name()
@@ -528,6 +528,14 @@ impl<'a> Parser<'a> {
                     || contains_help_option(self, help.as_ref())
             }
 
+        } else {
+            false
+        }
+    }
+
+    fn version_is_set(&self) -> bool {
+        if let Some(options) = &self.options {
+            options.contains(self.context.version().name())
         } else {
             false
         }
@@ -597,18 +605,13 @@ impl Cursor {
 
 fn find_prefixed_option<'a>(
     context: &'a Context,
-    command: &'a Command,
+    _command: &'a Command,
     prefixed_option: &'a str,
 ) -> Option<CommandOption> {
     let unprefixed_option = context.trim_prefix(prefixed_option);
 
-    // Check if the option is a `help`, like: `--help`
+    // Check if is a help option, like: `--help`
     if context.is_help(unprefixed_option) {
-        // Check if the command already contains a `--help` defined
-        if let Some(opt) = command.get_options().get(unprefixed_option){
-            panic!("duplicated option: `{}`", opt.get_name());
-        }
-
         if let Some(help) = context.help() {
             if matches!(help.kind(), HelpKind::Option | HelpKind::Any) {
                 // Returns the `help` option.
@@ -617,7 +620,7 @@ fn find_prefixed_option<'a>(
         }
     }
 
-    // Check if the option is a `version`, like: `--version`
+    // Check if the command already contains a `--version` defined
     if context.is_version(unprefixed_option) {
         return Some(crate::version::to_option(context.version().as_ref()));
     }
