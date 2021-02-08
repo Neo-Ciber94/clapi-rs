@@ -4,7 +4,7 @@ use crate::args::ArgumentList;
 use crate::command::Command;
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, Result};
-use crate::help::{HelpKind, Help};
+use crate::help::{HelpSource, Help};
 use crate::option::{CommandOption, OptionList};
 use crate::parse_result::ParseResult;
 use crate::tokenizer::{Token, Tokenizer};
@@ -522,9 +522,9 @@ impl<'a> Parser<'a> {
 
         if let Some(help) = self.context.help() {
             match help.kind(){
-                HelpKind::Subcommand => contains_help_command(self, help.as_ref()),
-                HelpKind::Option => contains_help_option(self, help.as_ref()),
-                HelpKind::Any => contains_help_command(self, help.as_ref())
+                HelpSource::Subcommand => contains_help_command(self, help.as_ref()),
+                HelpSource::Option => contains_help_option(self, help.as_ref()),
+                HelpSource::Any => contains_help_command(self, help.as_ref())
                     || contains_help_option(self, help.as_ref())
             }
 
@@ -613,7 +613,7 @@ fn find_prefixed_option<'a>(
     // Check if is a help option, like: `--help`
     if context.is_help(unprefixed_option) {
         if let Some(help) = context.help() {
-            if matches!(help.kind(), HelpKind::Option | HelpKind::Any) {
+            if matches!(help.kind(), HelpSource::Option | HelpSource::Any) {
                 // Returns the `help` option.
                 return Some(crate::help::to_option(context.help().unwrap().as_ref()));
             }

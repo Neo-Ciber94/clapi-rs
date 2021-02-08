@@ -1,7 +1,7 @@
 use crate::command::Command;
 use crate::option::CommandOption;
 use linked_hash_set::LinkedHashSet;
-use crate::help::{Help, HelpKind};
+use crate::help::{Help, HelpSource};
 use crate::suggestion::SuggestionProvider;
 use std::rc::Rc;
 use std::fmt::{Debug, Formatter};
@@ -350,7 +350,7 @@ fn assert_valid_symbol(source: &str, value: &str) {
 // Checks if the given string is a help command.
 pub(crate) fn is_help_command(context: &Context, name: &str) -> bool {
     if let Some(help) = context.help() {
-        matches!(help.kind(), HelpKind::Any | HelpKind::Subcommand) && help.name() == name
+        matches!(help.kind(), HelpSource::Any | HelpSource::Subcommand) && help.name() == name
     } else {
         false
     }
@@ -359,7 +359,7 @@ pub(crate) fn is_help_command(context: &Context, name: &str) -> bool {
 // Checks if the given string is a help option.
 pub(crate) fn is_help_option(context: &Context, name: &str) -> bool {
     if let Some(help) = context.help() {
-        matches!(help.kind(), HelpKind::Any | HelpKind::Option)
+        matches!(help.kind(), HelpSource::Any | HelpSource::Option)
             && (help.name() == name || help.alias().map_or(false, |s| s == name))
     } else {
         false
@@ -382,9 +382,9 @@ fn insert_command_help_recursive(context: &mut Context) {
 
     fn insert_help(help: &dyn Help, command: &mut Command, is_root: bool) {
         match help.kind() {
-            HelpKind::Option => add_help_option(help, command),
-            HelpKind::Subcommand if is_root => add_help_subcommand(help, command),
-            HelpKind::Any => {
+            HelpSource::Option => add_help_option(help, command),
+            HelpSource::Subcommand if is_root => add_help_subcommand(help, command),
+            HelpSource::Any => {
                 add_help_option(help, command);
 
                 if is_root {

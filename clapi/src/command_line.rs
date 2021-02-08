@@ -2,7 +2,7 @@
 use crate::command::Command;
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, Result};
-use crate::help::{DefaultHelp, HelpKind, Help};
+use crate::help::{DefaultHelp, HelpSource, Help};
 use crate::parser::Parser;
 use crate::suggestion::{SingleSuggestionProvider, SuggestionProvider};
 use crate::{Argument, ParseResult, OptionList};
@@ -174,13 +174,13 @@ impl CommandLine {
         match result {
             Ok(parse_result) => {
                 match help.kind() {
-                    HelpKind::Subcommand => {
+                    HelpSource::Subcommand => {
                         is_help_subcommand(help, parse_result.executing_command())
                     },
-                    HelpKind::Option => {
+                    HelpSource::Option => {
                         is_help_option(help, parse_result.options())
                     },
-                    HelpKind::Any => {
+                    HelpSource::Any => {
                         is_help_subcommand(help, parse_result.executing_command())
                             || is_help_option(help, parse_result.options())
                     }
@@ -188,13 +188,13 @@ impl CommandLine {
             },
             Err(parser) => {
                 match help.kind() {
-                    HelpKind::Subcommand => {
+                    HelpSource::Subcommand => {
                         is_help_subcommand(help, parser.command().unwrap())
                     }
-                    HelpKind::Option => {
+                    HelpSource::Option => {
                         is_help_option(help, parser.options().unwrap())
                     }
-                    HelpKind::Any => {
+                    HelpSource::Any => {
                         is_help_subcommand(help, parser.command().unwrap())
                             || is_help_option(help, parser.options().unwrap())
                     }

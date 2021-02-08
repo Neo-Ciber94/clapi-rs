@@ -297,7 +297,8 @@ impl Argument {
     /// - If there is default values; a validator must be set before the default values.
     /// - If there is values.
     ///
-    /// # Example
+    /// # Examples
+    /// Using the `parse_validator` to ensure the value is an `i64`.
     /// ```
     /// use clapi::{Command, Argument};
     /// use clapi::validator::parse_validator;
@@ -305,6 +306,25 @@ impl Argument {
     /// let command = Command::new("MyApp")
     ///     .arg(Argument::with_name("numbers")
     ///         .validator(parse_validator::<i64>()));
+    ///
+    /// assert!(command.clone().parse_from(vec!["10"]).is_ok());
+    /// assert!(command.clone().parse_from(vec!["10", "true"]).is_err());
+    /// ```
+    ///
+    /// Also you can use a closure as a validator in the form: `fn(&str) -> Result<T, String>`.
+    /// ```
+    /// use clapi::{Command, Argument};
+    /// use std::str::FromStr;
+    ///
+    /// let command = Command::new("MyApp")
+    ///     .arg(Argument::with_name("numbers")
+    ///         .validator(|s: &str| match i64::from_str(s) {
+    ///             // The returned value type will be used
+    ///             // as the valid type of the validator
+    ///             Ok(v) => Ok(v),
+    ///             Err(_) => Err("expected an integer".into())
+    ///         }
+    ///     ));
     ///
     /// assert!(command.clone().parse_from(vec!["10"]).is_ok());
     /// assert!(command.clone().parse_from(vec!["10", "true"]).is_err());
@@ -1084,6 +1104,7 @@ pub mod validator {
     use std::hash::{Hash, Hasher};
     use std::marker::PhantomData;
     use std::str::FromStr;
+    use crate::ErrorKind::InvalidArgument;
 
     /// Exposes a method for check if an `str` value is a valid argument value.
     pub trait Validator {
@@ -1166,12 +1187,27 @@ pub mod validator {
         }
     }
 
+    // This allow to use a closure as a `Validator`
+    impl<T: 'static, F> Validator for F where F: Fn(&str) -> std::result::Result<T, String> {
+        fn validate(&self, value: &str) -> Result<()> {
+            match (self)(value){
+                Ok(_) => Ok(()),
+                Err(msg) => Err(Error::from(InvalidArgument(msg)))
+            }
+        }
+
+        fn valid_type(&self) -> Option<Type> {
+            Some(Type::of::<T>())
+        }
+    }
+
     /// Constructs a `Validator` for the specified type.
     #[inline]
     pub fn parse_validator<T: 'static + FromStr>() -> ParseValidator<T> {
         ParseValidator::new()
     }
 
+    /// Constructs a `Validator` for the given range.
     #[inline]
     pub fn range_validator<T: 'static>(min: T, max: T) -> RangeValidator<T>
     where
@@ -1206,12 +1242,12 @@ pub mod validator {
         }
 
         /// Returns the type name of this type.
-        pub fn name(&self) -> &'static str {
+        pub const fn name(&self) -> &'static str {
             self.type_name
         }
 
         /// Returns the `TypeId` of this type.
-        pub fn id(&self) -> TypeId {
+        pub const fn id(&self) -> TypeId {
             self.type_id
         }
     }

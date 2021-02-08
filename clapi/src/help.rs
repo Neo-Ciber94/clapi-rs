@@ -3,7 +3,7 @@ use std::fmt::{Write, Display, Formatter};
 use crate::{Context, Command, CommandOption, Argument, OptionList};
 
 /// A trait for provide help information about a `Command`.
-pub trait Help {
+pub trait Help { // HelpProvider
     /// Provides help information about the command like:
     /// name, description, options, subcommands and usage
     fn help(&self, buf: &mut Buffer, context: &Context, command: &Command);
@@ -16,8 +16,9 @@ pub trait Help {
     }
 
     /// Type of the `HelpProvider`, the default is `HelpKind::Any`.
-    fn kind(&self) -> HelpKind {
-        HelpKind::Any
+    #[inline]
+    fn kind(&self) -> HelpSource {
+        HelpSource::Any
     }
 
     /// Returns the name of this help command, the default is: `help`.
@@ -39,9 +40,9 @@ pub trait Help {
     }
 }
 
-/// Type of the `HelpProvider`.
+/// The source of the help `option` or `subcommand`.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum HelpKind {
+pub enum HelpSource {
     /// The help is a command, for example:
     ///
     /// `command help [args]`.
@@ -108,7 +109,7 @@ impl Display for Buffer {
 #[derive(Debug, Clone)]
 pub struct DefaultHelp<'a> {
     indent: &'a [u8],
-    kind: HelpKind,
+    kind: HelpSource,
     after_help_message: Option<Option<&'a str>>,
 }
 
@@ -122,16 +123,16 @@ impl<'a> Default for DefaultHelp<'a>{
 impl<'a> DefaultHelp<'a> {
     #[inline]
     pub const fn new() -> Self {
-        Self::with_kind(HelpKind::Any)
+        Self::with_kind(HelpSource::Any)
     }
 
     #[inline]
-    pub const fn with_kind(kind: HelpKind) -> Self {
+    pub const fn with_kind(kind: HelpSource) -> Self {
         Self::with_indent(kind, "   ".as_bytes())
     }
 
     #[inline]
-    pub const fn with_indent(kind: HelpKind, indent: &'a [u8]) -> Self {
+    pub const fn with_indent(kind: HelpSource, indent: &'a [u8]) -> Self {
         DefaultHelp {
             indent,
             kind,
@@ -289,7 +290,7 @@ impl<'a> Help for DefaultHelp<'a> {
         remove_newline(buf);
     }
 
-    fn kind(&self) -> HelpKind {
+    fn kind(&self) -> HelpSource {
         self.kind
     }
 
@@ -361,11 +362,11 @@ fn command_to_string(command: &Command) -> String {
 pub(crate) fn after_help_message(context: &Context) -> Option<String> {
     if let Some(help) = context.help() {
         match help.kind() {
-            HelpKind::Any | HelpKind::Subcommand => {
+            HelpSource::Any | HelpSource::Subcommand => {
                 let command = context.root().get_name();
                 Some(format!("Use '{} {} <subcommand>' for more information about a command.", command, help.name()))
             }
-            HelpKind::Option => {
+            HelpSource::Option => {
                 // SAFETY: `name_prefixes` is never empty
                 let prefix = context.name_prefixes().next().unwrap();
                 let command = context.root().get_name();

@@ -13,7 +13,7 @@
 //! ## Parsing the arguments
 //! ```no_run
 //! use clapi::{Command, CommandOption, Argument, Parser, Context};
-//! use clapi::help::{DefaultHelp, HelpKind, Help, Buffer};
+//! use clapi::help::{DefaultHelp, HelpSource, Help, Buffer};
 //! use clapi::validator::parse_validator;
 //!
 //! let command = Command::root()
