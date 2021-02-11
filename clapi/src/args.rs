@@ -311,7 +311,7 @@ impl Argument {
     /// assert!(command.clone().parse_from(vec!["10", "true"]).is_err());
     /// ```
     ///
-    /// Also you can use a closure as a validator in the form: `fn(&str) -> Result<T, String>`.
+    /// Also you can use a closure as a validator in the form: `fn(&str) -> Result<(), String>`.
     /// ```
     /// use clapi::{Command, Argument};
     /// use std::str::FromStr;
@@ -319,9 +319,7 @@ impl Argument {
     /// let command = Command::new("MyApp")
     ///     .arg(Argument::with_name("numbers")
     ///         .validator(|s: &str| match i64::from_str(s) {
-    ///             // The returned value type will be used
-    ///             // as the valid type of the validator
-    ///             Ok(v) => Ok(v),
+    ///             Ok(v) => Ok(()),
     ///             Err(_) => Err("expected an integer".into())
     ///         }
     ///     ));
@@ -358,12 +356,12 @@ impl Argument {
     /// let error = Command::new("MyApp")
     ///     .arg(Argument::with_name("number")
     ///         .validator(parse_validator::<NonZeroUsize>())
-    ///         .validation_error("expected number greater than 0"))
+    ///         .validation_error("expected a number greater than 0"))
     ///         .parse_from(vec!["0"])
     ///         .err()
     ///         .unwrap();
     ///
-    /// assert_eq!(error.kind(), &ErrorKind::InvalidArgument("expected number greater than 0".to_owned()));
+    /// assert_eq!(error.to_string(), "invalid argument value for 'number': expected a number greater than 0".to_owned());
     /// ```
     pub fn validation_error<S: Into<String>>(mut self, error: S) -> Self {
         self.validation_error = Some(error.into());
@@ -535,7 +533,7 @@ impl Argument {
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
                 format!(
-                    "argument `{}` expect {} but was {}",
+                    "`{}` expect {} but was {}",
                     self.get_name(),
                     self.get_values_count(),
                     values.len()
@@ -548,8 +546,8 @@ impl Argument {
                 // Checks if the value is valid
                 if let Err(error) = validator.validate(value) {
                     return match self.validation_error.clone() {
-                        Some(error) => Err(Error::from(ErrorKind::InvalidArgument(error))),
-                        None => Err(error)
+                        Some(msg) => Err(self.invalid_argument(msg)),
+                        None => Err(self.invalid_argument(error))
                     }
                 }
             }
@@ -558,10 +556,14 @@ impl Argument {
         if !self.valid_values.is_empty() {
             for value in &values {
                 if !self.valid_values.iter().any(|s| s == value) {
-                    return Err(Error::new(
-                        ErrorKind::InvalidArgument(value.clone()),
-                        format!("valid values: {}", self.valid_values.join(", ")),
-                    ));
+                    return Err(
+                        self.invalid_argument(
+                            format!("expected {} but was {}",
+                                    self.valid_values.join(", "),
+                                    value
+                            )
+                        )
+                    );
                 }
             }
         }
@@ -684,6 +686,12 @@ impl Argument {
         }
 
         Ok(())
+    }
+
+    // Returns an `InvalidArgument` error with the given message
+    #[inline(always)]
+    fn invalid_argument(&self, msg: String) -> Error {
+        Error::new(ErrorKind::InvalidArgument(self.get_name().to_owned()), msg)
     }
 
     #[inline(always)]
@@ -887,7 +895,10 @@ impl ArgumentList {
         <T as FromStr>::Err: Display, {
         match &self.get(arg_name) {
             Some(arg) => arg.convert(),
-            None => Err(Error::from(ErrorKind::InvalidArgument(arg_name.to_owned()))),
+            None => Err(Error::new(
+                ErrorKind::Other,
+                format!("cannot find argument named '{}'", arg_name))
+            ),
         }
     }
 
@@ -933,9 +944,9 @@ impl ArgumentList {
         match &self.get(arg_name) {
             Some(arg) => arg.convert_all(),
             None => Err(Error::new(
-                ErrorKind::InvalidArgument(arg_name.to_owned()),
-                format!("cannot find: `{}`", arg_name),
-            )),
+                ErrorKind::Other,
+                format!("cannot find argument named '{}'", arg_name))
+            ),
         }
     }
 
@@ -1097,20 +1108,18 @@ impl Index<String> for ArgumentList {
 
 /// Provides the `Validator` trait used for validate the values of an `Argument`.
 pub mod validator {
-    use crate::error::{Error, ErrorKind, Result};
     use std::any::TypeId;
     use std::cmp::Ordering;
     use std::fmt::Display;
     use std::hash::{Hash, Hasher};
     use std::marker::PhantomData;
     use std::str::FromStr;
-    use crate::ErrorKind::InvalidArgument;
 
     /// Exposes a method for check if an `str` value is a valid argument value.
     pub trait Validator {
         /// Checks if the given string slice is valid.
         /// Returns `Ok()` if is valid otherwise `Err(error)`.
-        fn validate(&self, value: &str) -> Result<()>;
+        fn validate(&self, value: &str) -> Result<(), String>;
 
         /// Returns the `Type` that is valid for this `Validator`, by default returns `None`.
         ///
@@ -1137,10 +1146,10 @@ pub mod validator {
     where
         T: FromStr,
     {
-        fn validate(&self, value: &str) -> Result<()> {
+        fn validate(&self, value: &str) -> Result<(), String> {
             match T::from_str(value) {
                 Ok(_) => Ok(()),
-                Err(_) => Err(Error::from(ErrorKind::InvalidArgument(value.to_string()))),
+                Err(_) => Err(format!("`{}`", value)),
             }
         }
 
@@ -1166,17 +1175,14 @@ pub mod validator {
     where
         T: FromStr + PartialOrd + Display,
     {
-        fn validate(&self, value: &str) -> Result<()> {
+        fn validate(&self, value: &str) -> Result<(), String> {
             match T::from_str(value) {
-                Err(_) => Err(Error::from(ErrorKind::InvalidArgument(value.to_string()))),
+                Err(_) => Err(format!("`{}`", value)),
                 Ok(n) => {
                     if n >= self.0 && n <= self.1 {
                         Ok(())
                     } else {
-                        Err(Error::new(
-                            ErrorKind::InvalidArgument(value.to_string()),
-                            format!("{} is out of range: {}..{}", n, self.0, self.1),
-                        ))
+                        Err(format!("{} is out of range: {}..{}", n, self.0, self.1))
                     }
                 }
             }
@@ -1188,16 +1194,12 @@ pub mod validator {
     }
 
     // This allow to use a closure as a `Validator`
-    impl<T: 'static, F> Validator for F where F: Fn(&str) -> std::result::Result<T, String> {
-        fn validate(&self, value: &str) -> Result<()> {
+    impl<F> Validator for F where F: Fn(&str) -> std::result::Result<(), String> {
+        fn validate(&self, value: &str) -> Result<(), String> {
             match (self)(value){
                 Ok(_) => Ok(()),
-                Err(msg) => Err(Error::from(InvalidArgument(msg)))
+                Err(msg) => Err(msg)
             }
-        }
-
-        fn valid_type(&self) -> Option<Type> {
-            Some(Type::of::<T>())
         }
     }
 

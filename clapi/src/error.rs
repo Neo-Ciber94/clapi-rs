@@ -50,13 +50,13 @@ impl Error {
     /// use clapi::{Error, ErrorKind};
     ///
     /// let error = Error::from(ErrorKind::InvalidArgument("xyz".to_string()));
-    /// let new_error = error.join(", expected a number");
-    /// assert_eq!(new_error.to_string(), "invalid argument: 'xyz', expected a number".to_string())
+    /// let new_error = error.join("expected a number");
+    /// assert_eq!(new_error.to_string(), "invalid argument value for 'xyz': expected a number".to_string())
     /// ```
     pub fn join(&self, msg: &str) -> Self {
         let source = match std::error::Error::source(self) {
             Some(s) => s.to_string(),
-            None => self.to_string()
+            None => String::new()
         };
 
         Error::new(self.kind().clone(), format!("{}{}", source, msg))
@@ -76,7 +76,14 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.inner {
             Inner::Simple(kind) => Display::fmt(kind, f),
-            Inner::Custom(custom) => Display::fmt(&custom.error, f),
+            //Inner::Custom(custom) => Display::fmt(&custom.error, f),
+            Inner::Custom(custom) => {
+                if matches!(custom.kind, ErrorKind::Other){
+                    write!(f, "{}", custom.error)
+                } else {
+                    write!(f, "{}: {}", custom.kind, custom.error)
+                }
+            }
         }
     }
 }
@@ -98,7 +105,7 @@ impl From<ErrorKind> for Error {
 /// Types of errors.
 #[derive(Clone, Eq, PartialEq)]
 pub enum ErrorKind {
-    /// The argument is invalid.
+    /// The value passed to the argument is invalid.
     InvalidArgument(String),
     /// Invalid number of arguments being passed.
     InvalidArgumentCount,
@@ -120,7 +127,10 @@ pub enum ErrorKind {
 impl Display for ErrorKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ErrorKind::InvalidArgument(s) => write!(f, "invalid argument: '{}'", s),
+            // invalid value for argument 'number': `a`
+            // invalid argument value for 'number: `a`
+            // invalid value for 'number': `a`
+            ErrorKind::InvalidArgument(s) => write!(f, "invalid argument value for '{}'", s),
             ErrorKind::InvalidArgumentCount => write!(f, "invalid argument count"),
             ErrorKind::InvalidExpression => write!(f, "invalid expression"),
             ErrorKind::UnexpectedOption(s) => write!(f, "unexpected option: '{}'", s),

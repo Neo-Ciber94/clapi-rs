@@ -137,8 +137,8 @@ impl<'a> Parser<'a> {
                     .into_string();
 
                 return Err(Error::new(
-                    ErrorKind::InvalidArgument(value),
-                    "there is no options that expect arguments",
+                    ErrorKind::Other,
+                    format!("there is no option that expect arguments but `{}` was found", value)
                 ));
             } else {
                 self.cursor.as_ref().unwrap().next();
@@ -215,11 +215,10 @@ impl<'a> Parser<'a> {
                     if let Some(Token::Arg(arg)) = cursor.peek() {
                         let assign_op : char = *self.context.assign_operators().next().unwrap();
                         return Err(
-                            // assignment operator is required: `--option=value`
                             Error::new(
-                                ErrorKind::InvalidArgument(arg.clone()),
+                                ErrorKind::Other,
                                 format!(
-                                    "assignment operator is required: `{}{}{}`", s, assign_op, arg)
+                                    "assignment operator was expected: `{}{}{}`", s, assign_op, arg)
                             )
                         );
                     }

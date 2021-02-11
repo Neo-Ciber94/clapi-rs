@@ -342,7 +342,7 @@ impl CommandAttrData {
                 }
 
                 #[inline]
-                fn kind(&self) -> clapi::help::HelpKind {
+                fn kind(&self) -> clapi::help::HelpSource {
                     #help.kind()
                 }
 
