@@ -355,7 +355,7 @@ impl Command {
     ///         Ok(())
     /// })
     /// .into_command_line()
-    /// .run();
+    /// .parse_args();
     /// ```
     pub fn handler<F>(mut self, f: F) -> Self
     where
@@ -383,8 +383,10 @@ impl Command {
 
     pub(crate) fn add_command(&mut self, command: Command) {
         if self.subcommands.contains(&command) {
+            // command `app` already contains a subcommand named: `get`
+            // command `app` already contains a subcommand with name `get`
             panic!(
-                "`{}` already contains a subcommand named: `{}`",
+                "command `{}` already contains a subcommand named: `{}`",
                 self.name,
                 command.get_name()
             );
@@ -397,7 +399,7 @@ impl Command {
         if let Err(duplicated) = self.options.add(option) {
             if self.options.contains(duplicated.get_name()) {
                 panic!(
-                    "`{}` already contains an option named: `{}`",
+                    "command `{}` already contains an option named: `{}`",
                     self.name,
                     duplicated.get_name()
                 );
@@ -405,7 +407,7 @@ impl Command {
                 for alias in duplicated.get_aliases() {
                     if self.options.contains(alias) {
                         panic!(
-                            "`{}` already contains an option with alias: `{}`",
+                            "command `{}` already contains an option with alias: `{}`",
                             self.name, alias
                         );
                     }
@@ -444,7 +446,7 @@ impl Command {
     ///     .into_command_line()
     ///     .use_default_suggestions()
     ///     .use_default_suggestions()
-    ///     .run();
+    ///     .parse_args();
     /// ```
     #[inline]
     pub fn into_command_line(self) -> CommandLine {

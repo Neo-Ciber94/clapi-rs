@@ -1,4 +1,3 @@
-use clapi::help::{Buffer, DefaultHelp, Help};
 use clapi::validator::parse_validator;
 use clapi::{Argument, Command, CommandOption};
 use std::num::NonZeroUsize;
@@ -59,11 +58,9 @@ fn main() -> clapi::Result<()> {
     // We check here if the subcommand is `sum` and `prod` to ensure is safe to get
     // `pretty`, `precision` and `values` which are share between those 2 subcommands
     if !matches!(subcommand.get_name(), "sum" | "prod") {
-        static HELP: DefaultHelp = DefaultHelp::new();
-
         // Shows a help message if the command is no `sum` or `prod`
-        let mut buf = Buffer::new();
-        HELP.help(&mut buf, &context, &subcommand);
+        let mut buf = String::new();
+        clapi::help::command_help(&mut buf, &context, subcommand);
         println!("{}", buf);
     } else {
         // Check if contains the `pretty` flag

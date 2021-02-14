@@ -1,12 +1,11 @@
 use crate::command::Command;
 use crate::option::CommandOption;
 use linked_hash_set::LinkedHashSet;
-use crate::help::{Help, HelpSource};
 use crate::suggestion::SuggestionProvider;
 use std::rc::Rc;
 use std::fmt::{Debug, Formatter};
 use crate::utils::debug_option;
-use crate::{VersionProvider, DefaultVersionProvider};
+use crate::Argument;
 
 /// Provides configuration info for parsing a command.
 ///
@@ -38,13 +37,15 @@ use crate::{VersionProvider, DefaultVersionProvider};
 #[derive(Clone)]
 pub struct Context {
     root: Command,
-    help: Option<Rc<dyn Help + 'static>>,
     suggestions: Option<Rc<dyn SuggestionProvider + 'static>>,
-    version: Rc<dyn VersionProvider + 'static>,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
     assign_operators: LinkedHashSet<char>,
     delimiter: char,
+    help_option: Option<CommandOption>,
+    help_command: Option<Command>,
+    version_option: Option<CommandOption>,
+    version_command: Option<Command>,
 }
 
 impl Context {
@@ -89,31 +90,62 @@ impl Context {
         self.delimiter
     }
 
-    /// Returns the `Help` provider or `None` if not set.
-    pub fn help(&self) -> Option<&Rc<dyn Help>> {
-        self.help.as_ref()
-    }
-
     /// Returns the `SuggestionProvider` or `None` if not set.
     pub fn suggestions(&self) -> Option<&Rc<dyn SuggestionProvider>> {
         self.suggestions.as_ref()
     }
 
-    /// Returns the `VersionProvider` used by this context.
-    pub fn version(&self) -> &Rc<dyn VersionProvider> {
-        &self.version
+    /// Gets the help `CommandOption` of this context.
+    pub fn help_option(&self) -> Option<&CommandOption> {
+        self.help_option.as_ref()
     }
 
-    /// Sets the `Help` provider of this context.
-    pub fn set_help<H: Help + 'static>(&mut self, help: H) {
-        assert!(self.help.is_none(), "help is already set");
-        self.help = Some(Rc::new(help));
-        insert_command_help_recursive(self);
+    /// Gets the help `Command` of this context.
+    pub fn help_command(&self) -> Option<&Command> {
+        self.help_command.as_ref()
+    }
+
+    /// Gets the version `CommandOption` of this context.
+    pub fn version_option(&self) -> Option<&CommandOption> {
+        self.version_option.as_ref()
+    }
+
+    /// Gets the version `Command` of this context.
+    pub fn version_command(&self) -> Option<&Command> {
+        self.version_command.as_ref()
     }
 
     /// Sets the `SuggestionProvider` of this context.
     pub fn set_suggestions<S: SuggestionProvider + 'static>(&mut self, suggestions: S) {
         self.suggestions = Some(Rc::new(suggestions));
+    }
+
+    /// Sets the help `CommandOption` of this context.
+    pub fn set_help_option(&mut self, option: CommandOption) {
+        assert!(self.help_option.is_none(), "`Context` already contains a help option");
+        self.help_option = Some(option);
+        add_command_builtin_help_option(self);
+    }
+
+    /// Sets the help `Command` of this context.
+    pub fn set_help_command(&mut self, command: Command) {
+        assert!(self.help_command.is_none(), "`Context` already contains a help command");
+        self.help_command = Some(command);
+        add_command_builtin_help_command(self);
+    }
+
+    /// Sets the version `CommandOption` of this context.
+    pub fn set_version_option(&mut self, option: CommandOption) {
+        assert!(self.version_option.is_none(), "`Context` already contains a version option");
+        self.version_option = Some(option);
+        add_command_builtin_version_option(self);
+    }
+
+    /// Sets the version `Command` of this context.
+    pub fn set_version_command(&mut self, command: Command) {
+        assert!(self.version_command.is_none(), "`Context` already contains a version command");
+        self.version_command = Some(command);
+        add_command_builtin_version_command(self);
     }
 
     /// Returns the `CommandOption` with the given name or alias or `None` if not found.
@@ -146,21 +178,6 @@ impl Context {
         self.alias_prefixes.contains(value)
     }
 
-    /// Returns `true` if the name match with the `help` provider.
-    pub fn is_help<S: AsRef<str>>(&self, name: S) -> bool {
-        is_help_command(self, name.as_ref()) || is_help_option(self, name.as_ref())
-    }
-
-    /// Returns `true` if the name match with a `version` provider.
-    pub fn is_version<S: AsRef<str>>(&self, name: S) -> bool {
-        let version = self.version();
-        if let Some(alias) = version.alias() {
-            version.name() == name.as_ref() || alias == name.as_ref()
-        } else {
-            version.name() == name.as_ref()
-        }
-    }
-
     /// Removes the prefix from the given option
     pub fn trim_prefix<'a>(&self, option: &'a str) -> &'a str {
         self.name_prefixes.iter()
@@ -174,11 +191,10 @@ impl Context {
 
 impl Debug for Context {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // todo: add help and version
         f.debug_struct("Context")
             .field("root", &self.root)
-            .field("help", &debug_option(&self.help, "Help"))
             .field("suggestions", &debug_option(&self.suggestions, "SuggestionProvider"))
-            .field("version", &"VersionProvider")
             .field("name_prefixes", &self.name_prefixes)
             .field("alias_prefixes", &self.alias_prefixes)
             .field("arg_assign", &self.assign_operators)
@@ -211,13 +227,15 @@ impl<'a> ExactSizeIterator for Prefixes<'a>{
 #[derive(Clone)]
 pub struct ContextBuilder {
     root: Command,
-    help: Option<Rc<dyn Help>>,
     suggestions: Option<Rc<dyn SuggestionProvider>>,
-    version: Option<Rc<dyn VersionProvider + 'static>>,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
     assign_operators: LinkedHashSet<char>,
     delimiter: Option<char>,
+    help_option: Option<CommandOption>,
+    help_command: Option<Command>,
+    version_option: Option<CommandOption>,
+    version_command: Option<Command>,
 }
 
 impl ContextBuilder {
@@ -225,13 +243,15 @@ impl ContextBuilder {
     pub fn new(root: Command) -> Self {
         ContextBuilder {
             root,
-            help: None,
             suggestions: None,
-            version: None,
             name_prefixes: Default::default(),
             alias_prefixes: Default::default(),
             assign_operators: Default::default(),
             delimiter: None,
+            help_option: None,
+            help_command: None,
+            version_option: None,
+            version_command: None,
         }
     }
 
@@ -267,71 +287,115 @@ impl ContextBuilder {
         self
     }
 
-    /// Sets the `Help` for this context.
-    pub fn help<H: Help + 'static>(mut self, help: H) -> Self {
-        self.help = Some(Rc::new(help));
-        self
-    }
-
     /// Sets the `SuggestionProvider` for this context.
     pub fn suggestions<S: SuggestionProvider + 'static>(mut self, suggestions: S) -> Self {
         self.suggestions = Some(Rc::new(suggestions));
         self
     }
 
-    /// Sets the `VersionProvider` for this context.
-    pub fn version<V: VersionProvider + 'static>(mut self, version: V) -> Self {
-        self.version = Some(Rc::new(version));
+    /// Sets the help `CommandOption` for this context.
+    pub fn help_option(mut self, option: CommandOption) -> Self {
+        assert_is_help_option(&option);
+        self.help_option = Some(option);
+        self
+    }
+
+    /// Sets the help `Command` for this context.
+    pub fn help_command(mut self, command: Command) -> Self {
+        assert_is_help_command(&command);
+        self.help_command = Some(command);
+        self
+    }
+
+    /// Sets the version `CommandOption` for this context.
+    pub fn version_option(mut self, option: CommandOption) -> Self {
+        assert_is_version_option(&option);
+        self.version_option = Some(option);
+        self
+    }
+
+    /// Sets the version `Command` for this context.
+    pub fn version_command(mut self, command: Command) -> Self {
+        assert_is_version_command(&command);
+        self.version_command = Some(command);
         self
     }
 
     /// Constructs a `Context` using this builder data.
     pub fn build(mut self) -> Context {
         let mut context = Context {
-            // Root Command
+            // Root command
             root: self.root,
-
-            // Help provider
-            help: self.help,
-
-            // Suggestion Provider
+            // todo: better implementation
             suggestions: self.suggestions,
-
-            // Version provider
-            version: self.version.unwrap_or_else(|| Rc::new(DefaultVersionProvider)),
-
-            // Delimiter
-            delimiter: self.delimiter.unwrap_or(','),
-
-            // Name prefixes
+            // Option name prefixes
             name_prefixes: {
                 if self.name_prefixes.is_empty() {
                     self.name_prefixes.insert("--".to_owned());
                 }
                 self.name_prefixes
             },
-
-            // Alias prefixes
+            // Option aliases prefixes
             alias_prefixes: {
                 if self.alias_prefixes.is_empty() {
                     self.alias_prefixes.insert("-".to_owned());
                 }
                 self.alias_prefixes
             },
-
-            // Assign operators
+            // Option argument assign
             assign_operators: {
                 if self.assign_operators.is_empty() {
                     self.assign_operators.insert('=');
                 }
                 self.assign_operators
             },
+            // Argument values delimiter
+            delimiter: self.delimiter.unwrap_or(','),
+            // Help option
+            help_option: self.help_option,
+            // Help command
+            help_command: self.help_command,
+            // Version option
+            version_option: self.version_option,
+            // Version command
+            version_command: self.version_command
         };
 
-        insert_command_help_recursive(&mut context);
-        insert_command_version_recursive(&mut context);
+        add_command_builtin_help_option(&mut context);
+        add_command_builtin_help_command(&mut context);
+        add_command_builtin_version_option(&mut context);
+        add_command_builtin_version_command(&mut context);
         context
     }
+}
+
+#[inline]
+pub fn default_version_option() -> CommandOption {
+    CommandOption::new("version")
+        .alias("v")
+        .description("Shows the version of the command")
+}
+
+#[inline]
+pub fn default_version_command() -> Command {
+    Command::new("version")
+        .description("Shows the version of the command")
+}
+
+#[inline]
+pub fn default_help_option() -> CommandOption {
+    CommandOption::new("help")
+        .alias("h")
+        .description("Shows help information about a command")
+        .hidden(true)
+        .arg(Argument::zero_or_more("command"))
+}
+
+#[inline]
+pub fn default_help_command() -> Command {
+    Command::new("help")
+        .description("Shows help information about a command")
+        .arg(Argument::zero_or_more("command"))
 }
 
 #[inline]
@@ -347,10 +411,80 @@ fn assert_valid_symbol(source: &str, value: &str) {
     }
 }
 
+#[inline]
+fn assert_is_help_option(option: &CommandOption) {
+    let arg = option.get_arg().expect("help option must take only 1 argument");
+    assert_eq!(arg.get_values_count().min(), Some(0), "help option argument must take any count of values");
+    assert_eq!(arg.get_values_count().max(), None, "help option argument must take any count of values");
+}
+
+#[inline]
+fn assert_is_help_command(command: &Command) {
+    let arg = command.get_arg().expect("help command must take only 1 argument");
+    assert_eq!(arg.get_values_count().min(), Some(0), "help command argument must take any count of values");
+    assert_eq!(arg.get_values_count().max(), None, "help command argument must take any count of values");
+}
+
+#[inline]
+fn assert_is_version_option(option: &CommandOption) {
+    if option.get_arg().is_some() {
+        panic!("version option must take no arguments");
+    }
+}
+
+#[inline]
+fn assert_is_version_command(command: &Command) {
+    if command.get_arg().is_some() {
+        panic!("version command must take no arguments");
+    }
+}
+
+#[inline]
+fn add_command_builtin_help_option(context: &mut Context) {
+    if context.root.get_subcommands().count() > 0 {
+        if let Some(help_option) = context.help_option.as_ref().cloned() {
+            let command = &mut context.root;
+            add_option_recursive(command, help_option);
+        }
+    }
+}
+
+#[inline]
+fn add_command_builtin_help_command(context: &mut Context) {
+    if let Some(help_command) = context.help_command.as_ref().cloned() {
+        context.root.add_command(help_command);
+    }
+}
+
+#[inline]
+fn add_command_builtin_version_option(context: &mut Context) {
+    if context.root.get_subcommands().count() > 0 {
+        if let Some(version_option) = context.version_option.as_ref().cloned() {
+            let command = &mut context.root;
+            add_option_recursive(command, version_option);
+        }
+    }
+}
+
+#[inline]
+fn add_command_builtin_version_command(context: &mut Context) {
+    if let Some(version_command) = context.version_command.as_ref().cloned() {
+        context.root.add_command(version_command);
+    }
+}
+
+fn add_option_recursive(command: &mut Command, option: CommandOption) {
+    for subcommand in command.get_subcommands_mut() {
+        add_option_recursive(subcommand, option.clone());
+    }
+
+    command.add_option(option);
+}
+
 // Checks if the given string is a help command.
 pub(crate) fn is_help_command(context: &Context, name: &str) -> bool {
-    if let Some(help) = context.help() {
-        matches!(help.kind(), HelpSource::Any | HelpSource::Subcommand) && help.name() == name
+    if let Some(help_command) = context.help_command.as_ref() {
+        help_command.get_name() == name
     } else {
         false
     }
@@ -358,67 +492,11 @@ pub(crate) fn is_help_command(context: &Context, name: &str) -> bool {
 
 // Checks if the given string is a help option.
 pub(crate) fn is_help_option(context: &Context, name: &str) -> bool {
-    if let Some(help) = context.help() {
-        matches!(help.kind(), HelpSource::Any | HelpSource::Option)
-            && (help.name() == name || help.alias().map_or(false, |s| s == name))
+    if let Some(help_option) = context.help_option.as_ref() {
+        help_option.get_name() == name || help_option.has_alias(name)
     } else {
         false
     }
-}
-
-// Inserts the command help `option`
-fn insert_command_help_recursive(context: &mut Context) {
-    #[inline(always)]
-    fn add_help_option(help: &dyn Help, command: &mut Command) {
-        let help_option = crate::help::to_option(help);
-        command.add_option(help_option);
-    }
-
-    #[inline(always)]
-    fn add_help_subcommand(help: &dyn Help, command: &mut Command) {
-        let help_command = crate::help::to_command(help);
-        command.add_command(help_command);
-    }
-
-    fn insert_help(help: &dyn Help, command: &mut Command, is_root: bool) {
-        match help.kind() {
-            HelpSource::Option => add_help_option(help, command),
-            HelpSource::Subcommand if is_root => add_help_subcommand(help, command),
-            HelpSource::Any => {
-                add_help_option(help, command);
-
-                if is_root {
-                    add_help_subcommand(help, command);
-                }
-            },
-            _ => {}
-        }
-
-        for subcommand in command.get_subcommands_mut() {
-            insert_help(help, subcommand, false);
-        }
-    }
-
-    if let Some(help) = context.help().cloned() {
-        insert_help(help.as_ref(), &mut context.root, true);
-    }
-}
-
-// Inserts the command `version`
-fn insert_command_version_recursive(context: &mut Context) {
-    fn insert_version(version: &dyn VersionProvider, command: &mut Command) {
-        if command.get_version().is_some() {
-            let version_option = crate::version::to_option(version);
-            command.add_option(version_option);
-        }
-
-        for child in command.get_subcommands_mut() {
-            insert_version(version, child);
-        }
-    }
-
-    let version = context.version().clone();
-    insert_version(version.as_ref(), &mut context.root);
 }
 
 #[cfg(test)]

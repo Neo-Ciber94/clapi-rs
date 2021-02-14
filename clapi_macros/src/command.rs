@@ -1,9 +1,9 @@
-#![allow(clippy::len_zero, clippy::redundant_closure)]
+#![allow(clippy::len_zero, clippy::redundant_closure, clippy::bool_comparison)]
 use std::path::PathBuf;
 use proc_macro2::TokenStream;
 use quote::*;
 use syn::export::ToTokens;
-use syn::{AttrStyle, Attribute, AttributeArgs, Item, ItemFn, PatType, ReturnType, Stmt, Type, ItemStatic};
+use syn::{AttrStyle, Attribute, AttributeArgs, Item, ItemFn, PatType, ReturnType, Stmt, Type};
 use crate::arg::ArgAttrData;
 use crate::macro_attribute::{NameValueAttribute, MacroAttribute};
 use crate::option::OptionAttrData;
@@ -44,7 +44,6 @@ pub struct CommandAttrData {
     options: Vec<OptionAttrData>,
     args: Vec<ArgAttrData>,
     vars: Vec<ArgLocalVar>,
-    help_impl: Option<ItemStatic>,
 }
 
 impl CommandAttrData {
@@ -63,7 +62,6 @@ impl CommandAttrData {
             options: vec![],
             vars: vec![],
             args: vec![],
-            help_impl: None,
             is_hidden: None,
         }
     }
@@ -71,7 +69,7 @@ impl CommandAttrData {
     pub fn from_fn(args: AttributeArgs, func: ItemFn) -> Self {
         let name = func.sig.ident.to_string();
         let attr_data = NameValueAttribute::from_attribute_args(name.as_str(), args, AttrStyle::Outer).unwrap();
-        imp::command_from_fn(attr_data, func, false, true, true)
+        imp::command_from_fn(attr_data, func, false, true)
     }
 
     pub fn from_path(args: AttributeArgs, func: ItemFn, path: PathBuf) -> Self {
@@ -149,11 +147,6 @@ impl CommandAttrData {
 
     pub fn set_item_fn(&mut self, item_fn: ItemFn) {
         self.item_fn = Some(item_fn);
-    }
-
-    pub fn set_help_impl(&mut self, item: ItemStatic) {
-        assert!(!self.is_child);
-        self.help_impl = Some(item)
     }
 
     pub fn get_mut_recursive(&mut self, name_path: &NamePath) -> Option<&mut CommandAttrData> {
@@ -295,14 +288,6 @@ impl CommandAttrData {
             let ret = &self.item_fn.as_ref().unwrap().sig.output;
             let attrs = &self.item_fn.as_ref().unwrap().attrs;
             let items = self.get_body_items();
-            let help = if self.help_impl.is_some() {
-                let help_body = self.get_help_impl();
-                quote!{
-                    .use_help({ #help_body })
-                }
-            } else {
-                quote! { .use_default_help() }
-            };
             let error_handling = match ret {
                 ReturnType::Type(_, ty) if is_clapi_result_type(ty) => quote! {},
                 _ => quote! { .expect("an error occurred"); },
@@ -316,52 +301,12 @@ impl CommandAttrData {
 
                     let command = #command ;
                     clapi::CommandLine::new(command)
-                        #help
+                        .use_default_help()
                         .use_default_suggestions()
-                        .run()
+                        .parse_args()
                         #error_handling
                 }
             }
-        }
-    }
-
-    fn get_help_impl(&self) -> TokenStream {
-        let help = &self.help_impl.as_ref().unwrap().ident;
-
-        quote! {
-            struct __Help;
-            impl clapi::help::Help for __Help {
-                #[inline]
-                fn help(&self, buf: &mut clapi::help::Buffer, context: &clapi::Context, command: &clapi::Command) {
-                    #help.help(buf, context, command)
-                }
-
-                #[inline]
-                fn usage(&self, buf: &mut clapi::help::Buffer, context: &clapi::Context, command: &clapi::Command) {
-                    #help.usage(buf, context, command)
-                }
-
-                #[inline]
-                fn kind(&self) -> clapi::help::HelpSource {
-                    #help.kind()
-                }
-
-                #[inline]
-                fn name(&self) -> &str {
-                    #help.name()
-                }
-
-                #[inline]
-                fn alias(&self) -> Option<&str> {
-                    #help.alias()
-                }
-
-                #[inline]
-                fn description(&self) -> &str {
-                    #help.description()
-                }
-            }
-            __Help
         }
     }
 
@@ -624,7 +569,6 @@ mod imp {
         item_fn: ItemFn,
         is_child: bool,
         get_subcommands: bool,
-        get_help: bool,
     ) -> CommandAttrData {
         let name = item_fn.sig.ident.to_string();
         command_from_fn_with_name(
@@ -633,7 +577,6 @@ mod imp {
             item_fn,
             is_child,
             get_subcommands,
-            get_help,
         )
     }
 
@@ -643,7 +586,6 @@ mod imp {
         item_fn: ItemFn,
         is_child: bool,
         get_subcommands: bool,
-        get_help: bool,
     ) -> CommandAttrData {
         let mut command = CommandAttrData::new(name, name_value_attr.clone(), is_child);
 
@@ -764,7 +706,7 @@ mod imp {
         if get_subcommands {
             let mut subcommands = Vec::new();
             for (attribute, item_fn) in get_subcommands_from_fn(&item_fn) {
-                let subcommand = command_from_fn(attribute.clone(), item_fn, true, true, false);
+                let subcommand = command_from_fn(attribute.clone(), item_fn, true, true);
                 subcommands.push((subcommand, attribute.clone()));
             }
 
@@ -802,33 +744,6 @@ mod imp {
                 } else {
                     command.set_child(subcommand);
                 }
-            }
-        }
-
-        // Get the `#[help]` static item if any
-        if get_help {
-            let mut result = item_fn.block.stmts.iter()
-                .filter_map(|stmt| {
-                    if let Stmt::Item(Item::Static(item_static)) = &stmt {
-                        #[allow(clippy::blocks_in_if_conditions)]
-                        if item_static.attrs.iter().any(|attribute| {
-                            let macro_attr = MacroAttribute::new(attribute.clone());
-                            assert!(macro_attr.is_empty(), "`#[help]` takes not params but was `{}`", macro_attr);
-                            consts::is_help(macro_attr.path())
-                        }) {
-                            return Some(item_static.clone());
-                        }
-                    }
-
-                    None
-                }).collect::<Vec<ItemStatic>>();
-
-            if result.len() > 1 {
-                panic!("multiple `#[help]` defined");
-            }
-
-            if result.len() == 1 {
-                command.set_help_impl(result.remove(0));
             }
         }
 
@@ -995,15 +910,7 @@ mod imp {
             crate::consts::COMMAND, args, AttrStyle::Outer
         ).unwrap();
 
-        let mut root = command_from_fn(attribute, item_fn, false, true, true);
-
-        if let Some(help) = find_help(&root_path) {
-            if root.help_impl.is_some() {
-                panic!("`#[help]` is already defined in `fn {}`", root.fn_name.name());
-            }
-
-            root.set_help_impl(help)
-        }
+        let mut root = command_from_fn(attribute, item_fn, false, true);
 
         let mut subcommands = get_subcommands_data(&root_path);
 
@@ -1154,7 +1061,6 @@ mod imp {
                 item_fn,
                 true,
                 false,
-                false
             );
 
             subcommands.push((command, path, attr));

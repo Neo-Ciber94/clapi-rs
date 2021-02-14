@@ -13,10 +13,9 @@
 //! ## Parsing the arguments
 //! ```no_run
 //! use clapi::{Command, CommandOption, Argument, Parser, Context};
-//! use clapi::help::{DefaultHelp, HelpSource, Help, Buffer};
 //! use clapi::validator::parse_validator;
 //!
-//! let command = Command::root()
+//! let command = Command::new("MyApp")
 //!     .option(CommandOption::new("version").alias("v"))
 //!     .subcommand(Command::new("repeat")
 //!         .arg(Argument::one_or_more("values"))
@@ -52,10 +51,8 @@
 //!     }
 //! } else {
 //!     // Fallthrough
-//!     static HELP : DefaultHelp = DefaultHelp::new();
-//!
-//!     let mut buffer = Buffer::new();
-//!     HELP.help(&mut buffer, &context, result.executing_command());
+//!     let mut buffer = String::new();
+//!     clapi::help::command_help(&mut buffer, &context, result.executing_command());
 //!     println!("{}", buffer);
 //! }
 //! ```
@@ -66,14 +63,7 @@
 //! use clapi::{Argument, Command, CommandLine, CommandOption};
 //!
 //! fn main() -> clapi::Result<()> {
-//!     let command = Command::root()
-//!         .option(CommandOption::new("version").alias("v"))
-//!         .handler(|opts, _args| {
-//!             if opts.contains("version") {
-//!                 println!("MyApp 1.0");
-//!             }
-//!             Ok(())
-//!         })
+//!     let command = Command::new("MyApp")
 //!         .subcommand(
 //!             Command::new("repeat")
 //!                 .arg(Argument::one_or_more("values"))
@@ -101,15 +91,14 @@
 //!     CommandLine::new(command)
 //!         .use_default_suggestions()
 //!         .use_default_help()
-//!         .run()
+//!         .parse_args()
 //! }
 //! ```
 //! ## Macro
 //!```
 //! fn main() -> clapi::Result<()> {
-//!     let cli = clapi::app!{ =>
-//!         (@option version => (alias => "v"))
-//!         (handler () => println!("MyApp 1.0"))
+//!     let cli = clapi::app!{ MyApp =>
+//!         (version => "1.0")
 //!         (@subcommand repeat =>
 //!             (@arg values => (count => 1..))
 //!             (@option times =>
@@ -131,7 +120,7 @@
 //!
 //!      cli.use_default_help()
 //!         .use_default_suggestions()
-//!         .run()
+//!         .parse_args()
 //! }
 //!```
 //!
@@ -171,14 +160,18 @@ mod error;
 mod option;
 mod parse_result;
 mod parser;
-mod tokenizer;
-mod version;
 
 /// Utilities for provide suggestions.
 pub mod suggestion;
 
 /// Utilities for provide commands help information.
 pub mod help;
+
+/// Representation of the command-line command, option and args.
+pub mod token;
+
+/// Converts the command-line arguments into tokens.
+pub mod tokenizer;
 
 // Re-exports
 pub use self::arg_count::*;
@@ -190,8 +183,6 @@ pub use self::error::*;
 pub use self::option::*;
 pub use self::parse_result::*;
 pub use self::parser::*;
-pub use self::tokenizer::*;
-pub use self::version::*;
 
 /// Clapi macros
 #[macro_use]

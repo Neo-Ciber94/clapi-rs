@@ -145,6 +145,14 @@ macro_rules! app {
         }
     };
 
+    // Command `version`:
+    // clapi::app! { MyApp => (version => ... ) }
+    (@command ($builder:expr) (version => $version:expr) $($tt:tt)*) => {
+        $crate::app!{
+            @command ($builder.version($version)) $($tt)*
+        }
+    };
+
     // Command `hidden`:
     // clapi::app! { MyApp => (hidden => ... ) }
     (@command ($builder:expr) (hidden => $hidden:expr) $($tt:tt)*) => {
@@ -544,21 +552,21 @@ macro_rules! run_app {
         $crate::app!( => $($rest)+)
              .use_default_suggestions()
              .use_default_help()
-             .run()
+             .parse_args()
     };
 
     ($name:ident => $($rest:tt)+) => {
         $crate::app!($name => $($rest)+)
              .use_default_suggestions()
              .use_default_help()
-             .run()
+             .parse_args()
     };
 
     ($name:expr => $($rest:tt)+) => {
         $crate::app!($name => $($rest)+)
              .use_default_suggestions()
              .use_default_help()
-             .run()
+             .parse_args()
     };
 }
 
@@ -605,6 +613,6 @@ macro_rules! run_crate_app {
         )
         .use_default_help()
         .use_default_suggestions()
-        .run()
+        .parse_args()
     }};
 }

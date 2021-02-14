@@ -4,10 +4,10 @@ use crate::args::ArgumentList;
 use crate::command::Command;
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, Result};
-use crate::help::{HelpSource, Help};
 use crate::option::{CommandOption, OptionList};
 use crate::parse_result::ParseResult;
-use crate::tokenizer::{Token, Tokenizer};
+use crate::tokenizer::Tokenizer;
+use crate::token::Token;
 use crate::Argument;
 use std::cell::Cell;
 
@@ -110,7 +110,7 @@ impl<'a> Parser<'a> {
         self.parse_options()?;
 
         // Quick path: If the current parsing result contains `help` or `version` we should exit
-        if self.help_is_set() || self.version_is_set() {
+        if self.contains_help() || self.contains_version() {
             let command = self.command.take().unwrap();
             let options = self.options.take().unwrap();
             let args = self.args.take().unwrap();
@@ -366,10 +366,9 @@ impl<'a> Parser<'a> {
             debug_assert!(crate::context::is_help_command(&self.context, name));
 
             // SAFETY: If the `name` is a help command must exists in the context
-            let help = self.context.help().unwrap().as_ref();
-            let command = crate::help::to_command(help);
+            let help_command = self.context.help_command().cloned().unwrap();
             let mut args = ArgumentList::new();
-            let mut arg = command.get_arg().unwrap().clone();
+            let mut arg = help_command.get_arg().unwrap().clone();
             let values = cursor.remaining()
                 .iter()
                 .map(|s| s.to_string())
@@ -382,7 +381,7 @@ impl<'a> Parser<'a> {
             cursor.move_to_end();
 
             // Sets the executing `help` command and the arguments
-            self.command = Some(command);
+            self.command = Some(help_command);
             self.args = Some(args);
             Ok(())
         } else {
@@ -506,38 +505,38 @@ impl<'a> Parser<'a> {
         false
     }
 
-    fn help_is_set(&self) -> bool {
-        #[inline]
-        fn contains_help_command(parser: &Parser, help: &dyn Help) -> bool {
-            parser.command.as_ref().unwrap().get_name() == help.name()
-        }
-
-        #[inline]
-        fn contains_help_option(parser: &Parser, help: &dyn Help) -> bool {
-            let options = parser.options.as_ref().unwrap();
-            options.contains(help.name())
-                || help.alias().map_or(false, |s| options.contains(s))
-        }
-
-        if let Some(help) = self.context.help() {
-            match help.kind(){
-                HelpSource::Subcommand => contains_help_command(self, help.as_ref()),
-                HelpSource::Option => contains_help_option(self, help.as_ref()),
-                HelpSource::Any => contains_help_command(self, help.as_ref())
-                    || contains_help_option(self, help.as_ref())
+    // Returns `true` if the parser found a `help` flag
+    fn contains_help(&self) -> bool {
+        if let Some(help_option) = self.context.help_option() {
+            if self.options.as_ref().unwrap().contains(help_option.get_name()) {
+                return true;
             }
-
-        } else {
-            false
         }
+
+        if let Some(help_command) = self.context.help_command() {
+            if self.command.as_ref().unwrap().get_name() == help_command.get_name() {
+                return true;
+            }
+        }
+
+        false
     }
 
-    fn version_is_set(&self) -> bool {
-        if let Some(options) = &self.options {
-            options.contains(self.context.version().name())
-        } else {
-            false
+    // Returns `true` if the parser found a `version` flag
+    fn contains_version(&self) -> bool {
+        if let Some(version_option) = self.context.version_option() {
+            if self.options.as_ref().unwrap().contains(version_option.get_name()) {
+                return true;
+            }
         }
+
+        if let Some(version_command) = self.context.version_command() {
+            if self.command.as_ref().unwrap().get_name() == version_command.get_name() {
+                return true;
+            }
+        }
+
+        false
     }
 }
 
@@ -610,18 +609,17 @@ fn find_prefixed_option<'a>(
     let unprefixed_option = context.trim_prefix(prefixed_option);
 
     // Check if is a help option, like: `--help`
-    if context.is_help(unprefixed_option) {
-        if let Some(help) = context.help() {
-            if matches!(help.kind(), HelpSource::Option | HelpSource::Any) {
-                // Returns the `help` option.
-                return Some(crate::help::to_option(context.help().unwrap().as_ref()));
-            }
+    if let Some(help_option) = context.help_option() {
+        if help_option.get_name() == unprefixed_option || help_option.has_alias(unprefixed_option) {
+            return Some(crate::context::default_help_option());
         }
     }
 
     // Check if the command already contains a `--version` defined
-    if context.is_version(unprefixed_option) {
-        return Some(crate::version::to_option(context.version().as_ref()));
+    if let Some(version_option) = context.version_option() {
+        if version_option.get_name() == unprefixed_option || version_option.has_alias(unprefixed_option) {
+            return Some(crate::context::default_version_option());
+        }
     }
 
     // Finds and return the option from the context

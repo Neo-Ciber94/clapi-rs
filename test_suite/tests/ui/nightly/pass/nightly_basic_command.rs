@@ -1,6 +1,4 @@
 use clapi::macros::*;
-use clapi::{Context, Command};
-use clapi::help::{Buffer, Help, DefaultHelp};
 
 #[command(description="Prints a value", usage="How to use the command", version=1.0)]
 #[option(times, alias="t", arg="count", default=1, description="Times to repeat")]
@@ -13,19 +11,5 @@ fn author(){}
 
 #[subcommand(description="list the authors", parent="author")]
 fn list(){}
-
-#[help]
-static HELP : MyHelp = MyHelp;
-
-struct MyHelp;
-impl Help for MyHelp {
-    fn help(&self, buf: &mut Buffer, context: &Context, command: &Command) {
-        DefaultHelp::default().help(buf, context, command)
-    }
-
-    fn usage(&self, buf: &mut Buffer, context: &Context, command: &Command) {
-        DefaultHelp::default().usage(buf, context, command)
-    }
-}
 
 fn main(){}

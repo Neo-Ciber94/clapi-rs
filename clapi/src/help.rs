@@ -1,305 +1,158 @@
-#![allow(clippy::len_zero)]
-use std::fmt::{Write, Display, Formatter};
-use crate::{Context, Command, CommandOption, Argument, OptionList};
+use std::fmt::Write;
+use crate::{Context, Command, CommandOption, OptionList};
 
-/// A trait for provide help information about a `Command`.
-pub trait Help { // HelpProvider
-    /// Provides help information about the command like:
-    /// name, description, options, subcommands and usage
-    fn help(&self, buf: &mut Buffer, context: &Context, command: &Command);
+// Indentation used to write the help messages
+const INDENT : &[u8] = b"   ";
 
-    /// Provides information about the usage of the command.
-    ///
-    /// By default this delegates the call to `Help::help`.
-    fn usage(&self, buf: &mut Buffer, context: &Context, command: &Command) {
-        self.help(buf, context, command)
+// command_help_message
+pub fn command_help(buf: &mut String, context: &Context, command: &Command) {
+    // If the command have a `help` message use that instead
+    if let Some(msg) = command.get_help() {
+        buf.push_str(msg);
+        return;
     }
 
-    /// Type of the `HelpProvider`, the default is `HelpKind::Any`.
-    #[inline]
-    fn kind(&self) -> HelpSource {
-        HelpSource::Any
+    // Command name
+    writeln!(buf, "{}", command.get_name()).unwrap();
+
+    // Command description
+    if let Some(description) = command.get_description() {
+        write_indent(buf, INDENT);
+        writeln!(buf, "{}", description).unwrap();
     }
 
-    /// Returns the name of this help command, the default is: `help`.
-    #[inline]
-    fn name(&self) -> &str {
-        "help"
-    }
+    // Number of no-hidden options and subcommands
+    let option_count = count_options(command.get_options());
+    let subcommand_count = count_subcommands(&command);
 
-    /// Returns the alias of the help command, the default is: `None`.
-    #[inline]
-    fn alias(&self) -> Option<&str>{
-        None
-    }
+    // Command usage
+    // Write into the buffer the command usage
+    command_usage(buf, context, command, false);
 
-    /// Returns the description of this help command.
-    #[inline]
-    fn description(&self) -> &str {
-        "Provides information about a command"
-    }
-}
+    // Command Options
+    if option_count > 0 {
+        writeln!(buf).unwrap();
+        writeln!(buf, "OPTIONS:").unwrap();
 
-/// The source of the help `option` or `subcommand`.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum HelpSource {
-    /// The help is a command, for example:
-    ///
-    /// `command help [args]`.
-    Subcommand,
-    /// The help is an option, for example:
-    ///
-    /// `command --help`.
-    Option,
-    /// The help is both a command or option.
-    Any
-}
-
-/// A buffer of bytes to write to.
-#[derive(Default, Debug, Clone)]
-pub struct Buffer {
-    buffer: Vec<u8>
-}
-
-impl Buffer {
-    /// Constructs a new `Buffer`.
-    pub fn new() -> Self {
-        Buffer {
-            buffer: Default::default()
+        for option in command.get_options().iter().filter(|o| !o.is_hidden()) {
+            write_indent(buf, INDENT);
+            writeln!(buf, "{}", option_to_string(context, option)).unwrap();
         }
     }
 
-    /// Constructs a new `Buffer` with the specified initial capacity.
-    pub fn with_capacity(capacity: usize) -> Self {
-        Buffer {
-            buffer: Vec::with_capacity(capacity)
+    // Command Subcommands
+    if subcommand_count > 0 {
+        writeln!(buf).unwrap();
+        writeln!(buf, "SUBCOMMANDS:").unwrap();
+
+        for command in command.get_subcommands().filter(|c| !c.is_hidden()) {
+            write_indent(buf, INDENT);
+            writeln!(buf, "{}", command_to_string(command)).unwrap();
         }
     }
 
-    /// Reserve the specified amount of bytes in this buffer.
-    pub fn reserve(&mut self, additional: usize) {
-        self.buffer.reserve(additional)
-    }
-
-    /// Returns a reference to the buffer.
-    pub fn get(&self) -> &Vec<u8>{
-        &self.buffer
-    }
-
-    /// Returns a mutable reference to the buffer.
-    pub fn get_mut(&mut self) -> &mut Vec<u8>{
-        &mut self.buffer
+    if let Some(msg) = get_after_help_message(context) {
+        writeln!(buf).unwrap();
+        writeln!(buf, "{}", msg).unwrap();
     }
 }
 
-impl Write for Buffer {
-    fn write_str(&mut self, s: &str) -> std::fmt::Result {
-        self.buffer.extend_from_slice(s.as_bytes());
-        Ok(())
-    }
-}
-
-impl Display for Buffer {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", std::str::from_utf8(&self.buffer).unwrap())
-    }
-}
-
-/// A default implementation of the `Help` trait.
-#[derive(Debug, Clone)]
-pub struct DefaultHelp<'a> {
-    indent: &'a [u8],
-    kind: HelpSource,
-    after_help_message: Option<Option<&'a str>>,
-}
-
-impl<'a> Default for DefaultHelp<'a>{
-    #[inline]
-    fn default() -> Self {
-        DefaultHelp::new()
-    }
-}
-
-impl<'a> DefaultHelp<'a> {
-    #[inline]
-    pub const fn new() -> Self {
-        Self::with_kind(HelpSource::Any)
+// command_usage_message
+pub fn command_usage(buf: &mut String, context: &Context, command: &Command, after_help_message: bool) {
+    // If the command have a `usage` message use that instead
+    if let Some(msg) = command.get_usage() {
+        buf.push_str(msg);
+        return;
     }
 
-    #[inline]
-    pub const fn with_kind(kind: HelpSource) -> Self {
-        Self::with_indent(kind, "   ".as_bytes())
+    // Writes the usage from the `Command` if any
+    if let Some(usage) = command.get_usage() {
+        writeln!(buf).unwrap();
+        writeln!(buf, "USAGE:").unwrap();
+        buf.write_str(usage).unwrap();
+        return;
     }
 
-    #[inline]
-    pub const fn with_indent(kind: HelpSource, indent: &'a [u8]) -> Self {
-        DefaultHelp {
-            indent,
-            kind,
-            after_help_message: None,
-        }
-    }
+    // Number of no-hidden options and subcommands
+    let option_count = count_options(command.get_options());
+    let subcommand_count = count_subcommands(&command);
 
-    #[inline]
-    pub const fn after_help_message(mut self, after_help_message: Option<&'a str>) -> Self {
-        self.after_help_message = Some(after_help_message);
-        self
-    }
+    if command.take_args() || subcommand_count > 0 || option_count > 0 {
+        writeln!(buf).unwrap();
+        writeln!(buf, "USAGE:").unwrap();
 
-    fn get_after_help_message(&self, context: &Context) -> Option<String> {
-        match self.after_help_message {
-            Some(Some(msg)) => Some(msg.to_owned()),
-            Some(None) => None,
-            None => after_help_message(context)
-        }
-    }
+        // command [OPTIONS] [ARGS]...
+        if command.take_args() || option_count > 0 {
+            write_indent(buf, INDENT);
+            write!(buf, "{}", command.get_name()).unwrap();
 
-    fn write_help(&self, buf: &mut Buffer, context: &Context, command: &Command) {
-        // Command name
-        writeln!(buf, "{}", command.get_name()).unwrap();
-
-        // Command description
-        if let Some(description) = command.get_description() {
-            write_indent(buf, self.indent);
-            writeln!(buf, "{}", description).unwrap();
-        }
-
-        // Number of no-hidden options and subcommands
-        let option_count = count_options(command.get_options());
-        let subcommand_count = count_subcommands(&command);
-
-        // Command usage
-        // Write into the buffer the command usage
-        self.write_usage(buf, context, command, false);
-
-        // Command Options
-        if option_count > 0 {
-            writeln!(buf).unwrap();
-            writeln!(buf, "OPTIONS:").unwrap();
-
-            for option in command.get_options().iter().filter(|o| !o.is_hidden()) {
-                write_indent(buf, self.indent);
-                writeln!(buf, "{}", option_to_string(context, option)).unwrap();
-            }
-        }
-
-        // Command Subcommands
-        if subcommand_count > 0 {
-            writeln!(buf).unwrap();
-            writeln!(buf, "SUBCOMMANDS:").unwrap();
-
-            for command in command.get_subcommands().filter(|c| !c.is_hidden()) {
-                write_indent(buf, self.indent);
-                writeln!(buf, "{}", command_to_string(command)).unwrap();
-            }
-        }
-    }
-
-    fn write_usage(&self, buf: &mut Buffer, context: &Context, command: &Command, after_help_message: bool) {
-        // Writes the usage from the `Command` if any
-        if let Some(usage) = command.get_usage() {
-            writeln!(buf).unwrap();
-            writeln!(buf, "USAGE:").unwrap();
-            buf.write_str(usage).unwrap();
-            return;
-        }
-
-        // Number of no-hidden options and subcommands
-        let option_count = count_options(command.get_options());
-        let subcommand_count = count_subcommands(&command);
-
-        if command.take_args() || subcommand_count > 0 || option_count > 0 {
-            writeln!(buf).unwrap();
-            writeln!(buf, "USAGE:").unwrap();
-
-            // command [OPTIONS] [ARGS]...
-            if command.take_args() || option_count > 0 {
-                write_indent(buf, self.indent);
-                write!(buf, "{}", command.get_name()).unwrap();
-
-                if option_count > 1 {
-                    if option_count == 1 {
-                        write!(buf, " [OPTION]").unwrap();
-                    } else {
-                        write!(buf, " [OPTIONS]").unwrap();
-                    }
-                }
-
-                for arg in command.get_args() {
-                    let arg_name = arg.get_name().to_uppercase();
-                    if arg.get_values_count().max_or_default() > 1 {
-                        write!(buf, " [{}]...", arg_name).unwrap();
-                    } else {
-                        write!(buf, " [{}] ", arg_name).unwrap();
-                    }
-                }
-
-                writeln!(buf).unwrap();
-            }
-
-            // command [SUBCOMMAND] [OPTIONS] [ARGS]...
-            if subcommand_count > 0 {
-                write_indent(buf, self.indent);
-                write!(buf, "{} [SUBCOMMAND]", command.get_name()).unwrap();
-
-                if command.get_subcommands().any(|c| count_options(c.get_options()) > 0) {
+            if option_count > 1 {
+                if option_count == 1 {
+                    write!(buf, " [OPTION]").unwrap();
+                } else {
                     write!(buf, " [OPTIONS]").unwrap();
                 }
-
-                if command.get_subcommands()
-                    .filter(|c| !c.is_hidden())
-                    .any(|c| c.take_args()) {
-                    write!(buf, " [ARGS]").unwrap();
-                }
-
-                writeln!(buf).unwrap();
             }
 
-            if after_help_message {
-                // After help message
-                if let Some(msg) = self.get_after_help_message(context) {
-                    writeln!(buf).unwrap();
-                    writeln!(buf, "{}", msg).unwrap();
+            for arg in command.get_args() {
+                let arg_name = arg.get_name().to_uppercase();
+                if arg.get_values_count().max_or_default() > 1 {
+                    write!(buf, " [{}]...", arg_name).unwrap();
+                } else {
+                    write!(buf, " [{}] ", arg_name).unwrap();
                 }
             }
+
+            writeln!(buf).unwrap();
+        }
+
+        // command [SUBCOMMAND] [OPTIONS] [ARGS]...
+        if subcommand_count > 0 {
+            write_indent(buf, INDENT);
+            write!(buf, "{} [SUBCOMMAND]", command.get_name()).unwrap();
+
+            if command.get_subcommands().any(|c| count_options(c.get_options()) > 0) {
+                write!(buf, " [OPTIONS]").unwrap();
+            }
+
+            if command.get_subcommands()
+                .filter(|c| !c.is_hidden())
+                .any(|c| c.take_args()) {
+                write!(buf, " [ARGS]").unwrap();
+            }
+
+            writeln!(buf).unwrap();
         }
     }
-}
 
-impl<'a> Help for DefaultHelp<'a> {
-    fn help(&self, buf: &mut Buffer, context: &Context, command: &Command) {
-        match command.get_help() {
-            Some(s) => buf.write_str(s).unwrap(),
-            None => self.write_help(buf, context, command),
-        }
-
+    if after_help_message {
         // After help message
-        if let Some(msg) = self.get_after_help_message(context) {
+        if let Some(msg) = get_after_help_message(context) {
             writeln!(buf).unwrap();
             writeln!(buf, "{}", msg).unwrap();
         }
-
-        // Removes the newline at the end of the buffer
-        remove_newline(buf);
     }
+}
 
-    fn usage(&self, buf: &mut Buffer, context: &Context, command: &Command) {
-        self.write_usage(buf, context, command, true);
-
-        // Removes the newline at the end of the buffer
-        remove_newline(buf);
-    }
-
-    fn kind(&self) -> HelpSource {
-        self.kind
-    }
-
-    fn alias(&self) -> Option<&str> {
-        Some("h")
+// Use '' for see more information about a command
+pub(crate) fn get_after_help_message(context: &Context) -> Option<String> {
+    if context.help_command().is_some() {
+        let command = context.root().get_name();
+        let help_command = context.help_command().unwrap();
+        Some(format!("Use '{} {} <subcommand>' for more information about a command.", command, help_command.get_name()))
+    } else if context.help_option().is_some() {
+        // SAFETY: `name_prefixes` is never empty
+        let prefix = context.name_prefixes().next().unwrap();
+        let command = context.root().get_name();
+        let help_option = context.help_option().unwrap();
+        Some(format!("Use '{} <subcommand> {}{}' for more information about a command.", command, prefix, help_option.get_name()))
+    } else {
+        None
     }
 }
 
 // Number of no-hidden options
+#[inline]
 fn count_options(options: &OptionList) -> usize {
     options.iter()
         .filter(|opt| !opt.is_hidden())
@@ -307,6 +160,7 @@ fn count_options(options: &OptionList) -> usize {
 }
 
 // Number of no-hidden subcommands
+#[inline]
 fn count_subcommands(parent: &Command) -> usize {
     parent.get_subcommands()
         .filter(|c| !c.is_hidden())
@@ -314,19 +168,9 @@ fn count_subcommands(parent: &Command) -> usize {
 }
 
 // Add indentation to the buffer
-fn write_indent(buf: &mut Buffer, indent: &[u8]) {
-    buf.get_mut().extend_from_slice(indent);
-}
-
-// Removes the newline from the buffer
-fn remove_newline(buf: &mut Buffer) {
-    // Remove the newline at the buffer end
-    if matches!(buf.get_mut().last(), Some(b'\n')) {
-        buf.get_mut().pop();
-        if matches!(buf.get_mut().last(), Some(b'\r')) {
-            buf.get_mut().pop();
-        }
-    }
+#[inline]
+fn write_indent(buf: &mut String, indent: &[u8]) {
+    buf.push_str(std::str::from_utf8(indent).unwrap())
 }
 
 // -v, --version        Shows the version
@@ -355,45 +199,5 @@ fn command_to_string(command: &Command) -> String {
         format!("{:20} {}", command.get_name(), description)
     } else {
         command.get_name().to_owned()
-    }
-}
-
-// Use '' for see more information about a command
-pub(crate) fn after_help_message(context: &Context) -> Option<String> {
-    if let Some(help) = context.help() {
-        match help.kind() {
-            HelpSource::Any | HelpSource::Subcommand => {
-                let command = context.root().get_name();
-                Some(format!("Use '{} {} <subcommand>' for more information about a command.", command, help.name()))
-            }
-            HelpSource::Option => {
-                // SAFETY: `name_prefixes` is never empty
-                let prefix = context.name_prefixes().next().unwrap();
-                let command = context.root().get_name();
-                Some(format!("Use '{} <subcommand> {}{}' for more information about a command.", command, prefix, help.name()))
-            }
-        }
-    } else {
-        None
-    }
-}
-
-pub(crate) fn to_command<H: Help + ?Sized>(help: &H) -> Command {
-    Command::new(help.name())
-        .arg(Argument::zero_or_more("subcommand"))
-        .hidden(true)
-        .description(help.description())
-}
-
-pub(crate) fn to_option<H: Help + ?Sized>(help: &H) -> CommandOption {
-    let option = CommandOption::new(help.name())
-        .arg(Argument::zero_or_more("subcommand"))
-        .description(help.description())
-        .hidden(true);
-
-    if let Some(alias) = help.alias() {
-        option.alias(alias)
-    } else {
-        option
     }
 }
