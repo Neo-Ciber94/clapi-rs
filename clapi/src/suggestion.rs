@@ -1,175 +1,122 @@
-use std::borrow::Borrow;
+use std::num::NonZeroUsize;
 
-/// Provides suggestions matches a value.
-///
-/// # Implementing SuggestionProvider:
-/// Suggestion provided require the function `suggestions_for` where you
-/// use the `source` values and returns the matches, or `None` if not match is found.
-pub trait SuggestionProvider {
-    /// Returns the suggestion values for the given `source` and `value`,
-    /// or `None` if not suggestion if found.
-    fn suggestions_for(&self, value: &str, source: &[String]) -> Option<SuggestionResult>;
+/// Represents a suggestion for an invalid `command` or `option`
+#[derive(Debug, Clone, PartialOrd, PartialEq)]
+pub struct Suggestion {
+    /// The suggested value.
+    pub value: String,
+    /// The similarity between the suggested value and the invalid one.
+    pub similarity: f32,
+}
 
-    /// Provides a message for the given suggestions.
-    fn suggestion_message_for(&self, suggestions: SuggestionResult) -> Option<String> {
-        match suggestions {
-            // Did you mean `{}`?
-            SuggestionResult::Value(s) => Some(format!("\tDid you mean `{}`?", s)),
-            // Did you mean any of `{0}`, `{1}`, `{2}`?
-            SuggestionResult::List(values) => {
-                let values = values
-                    .into_iter()
-                    .map(|s| format!("`{}`", s))
-                    .collect::<Vec<String>>()
-                    .join(", ");
+/// Configuration for the suggestions.
+#[derive(Debug, Clone)]
+pub struct SuggestionSource {
+    /// Max number of suggestion message.
+    pub max_count: NonZeroUsize,
+    /// Ignore case when computing suggestion messages.
+    pub ignore_case: bool,
+    /// Min similarity to consider for a suggestion message.
+    pub min_similarity: f32,
+    /// Provides the message for the suggestions.
+    pub message: fn(Vec<Suggestion>) -> Option<String>,
+}
 
-                Some(format!("\tDid you mean any of {}?", values))
-            }
+impl Default for SuggestionSource {
+    #[inline]
+    fn default() -> Self {
+        SuggestionSource::new()
+    }
+}
+
+impl SuggestionSource {
+    /// Constructs a new `SuggestionProvider`
+    #[inline]
+    pub fn new() -> Self {
+        SuggestionSource {
+            max_count: NonZeroUsize::new(1).unwrap(),
+            ignore_case: true,
+            min_similarity: 0.0,
+            message: default_suggestion_message
+        }
+    }
+
+    /// Returns a suggestion message for the `value` from the `source` values
+    pub fn suggestions_for(&self, value: &str, source: &[String]) -> Vec<Suggestion> {
+        suggestions_for(
+            self.max_count,
+            self.ignore_case,
+            self.min_similarity,
+            value,
+            source
+        )
+    }
+
+    /// Returns a suggestion message for the given suggestions.
+    pub fn message_for(&self, values: Vec<Suggestion>) -> Option<String> {
+        (self.message)(values)
+    }
+}
+
+// Default suggestion message handler
+fn default_suggestion_message(suggestions: Vec<Suggestion>) -> Option<String> {
+    const INDENT: &str = "      ";
+
+    match suggestions.len() {
+        0 => None,
+        // Did you mean `value`?
+        1 => Some(format!("{}Did you mean `{}`?", INDENT, suggestions[0].value)),
+        _ => {
+            let mut values : String = suggestions[..suggestions.len() - 1]
+                .into_iter()
+                .map(|s| format!("`{}`", s.value))
+                .collect::<Vec<String>>()
+                .join(", ");
+
+            values.push_str(format!(" or `{}`", suggestions.last().unwrap().value).as_str());
+
+            // Did you mean `1`, `2` or `3`?
+            Some(format!("{}Did you mean any of {}?", INDENT, values))
         }
     }
 }
 
-/// A default implementation of `SuggestionProvider` that returns a max count of suggestions.
+/// Returns a `Vec` of similar values to `value` using the given `source` values.
 ///
-/// # Example
-/// ```rust
-/// use std::string::ToString;
-/// use clapi::suggestion::{DefaultSuggestionProvider, SuggestionProvider};
-///
-/// let source = vec!["apple", "banana", "mango", "strawberry"].iter()
-///     .map(ToString::to_string)
-///     .collect::<Vec<String>>();
-///
-/// let provider = DefaultSuggestionProvider::new();
-///
-/// assert!(provider.suggestions_for("berry", &source)
-///     .unwrap()
-///     .contains("strawberry"));
-///
-/// assert!(provider.suggestions_for("maple", &source)
-///     .unwrap()
-///     .contains("apple"));
-/// ```
-///
-/// # See
-/// https://en.wikipedia.org/wiki/Levenshtein_distance
-pub struct DefaultSuggestionProvider {
-    max_count: usize,
-}
-impl DefaultSuggestionProvider {
-    /// Constructs a new `DefaultSuggestionProvider` that returns a max of 5 suggestions.
-    pub const fn new() -> Self {
-        DefaultSuggestionProvider { max_count: 5 }
-    }
+/// # Parameters
+/// * `max_count` - Max number of suggestions to return.
+/// * `ignore_case` - If ignore case when comparing the values.
+/// * `min_similarity` - The min similarity expected between the values, from 0 to 1.
+/// * `value` - The value to compare.
+/// * `source` - The values to compare with.
+pub fn suggestions_for(
+    max_count: NonZeroUsize,
+    ignore_case: bool,
+    min_similarity: f32,
+    value: &str,
+    source: &[String],
+) -> Vec<Suggestion> {
+    debug_assert!(min_similarity >= 0_f32 && min_similarity <= 1_f32);
+    let mut result = Vec::new();
 
-    /// Constructs a new `DefaultSuggestionProvider` that returns the specified
-    /// max number of suggestions.
-    pub fn with_max_count(max_count: usize) -> Self {
-        assert!(max_count > 0);
-        DefaultSuggestionProvider { max_count }
-    }
+    for s in source {
+        let cost = compute_levenshtein_distance(value, s, ignore_case);
+        let similarity = 1_f32 - (cost as f32 / std::cmp::max(value.len(), s.len()) as f32);
 
-    /// Returns the max number of suggestions.
-    pub fn max_count(&self) -> usize {
-        self.max_count
-    }
-}
-
-impl SuggestionProvider for DefaultSuggestionProvider {
-    fn suggestions_for(&self, value: &str, source: &[String]) -> Option<SuggestionResult> {
-        let mut values = source
-            .iter()
-            .map(|s| (s, compute_levenshtein_distance_ignore_case(&value, &s)))
-            .take(self.max_count)
-            .collect::<Vec<_>>();
-
-        // Sorts the values by weight
-        values.sort_by_key(|s| s.1);
-
-        let mut result = values
-            .iter()
-            .map(|s| s.0)
-            .cloned()
-            .collect::<Vec<String>>();
-
-        if result.is_empty() {
-            None
-        } else if result.len() == 1 {
-            Some(SuggestionResult::Value(result.swap_remove(0)))
-        } else {
-            Some(SuggestionResult::List(result))
-        }
-    }
-}
-
-/// A default implementation of `SuggestionProvider` that returns a single suggestion
-/// using the `Levenshtein distance` algorithm.
-///
-/// # Example
-/// ```rust
-/// use std::string::ToString;
-/// use clapi::suggestion::{SingleSuggestionProvider, SuggestionProvider};
-///
-/// let source = vec!["apple", "banana", "mango", "strawberry"].iter()
-///     .map(ToString::to_string)
-///     .collect::<Vec<String>>();
-///
-/// let provider = SingleSuggestionProvider;
-///
-/// assert!(provider.suggestions_for("maple", &source)
-///     .unwrap()
-///     .contains("apple"));
-/// ```
-///
-/// # See
-/// https://en.wikipedia.org/wiki/Levenshtein_distance
-pub struct SingleSuggestionProvider;
-impl SuggestionProvider for SingleSuggestionProvider {
-    fn suggestions_for(&self, value: &str, source: &[String]) -> Option<SuggestionResult> {
-        let mut current = None;
-        let mut current_cost = usize::max_value();
-
-        for s in source {
-            let cost = compute_levenshtein_distance_ignore_case(&value, s);
-            if cost < current_cost {
-                current = Some(s);
-                current_cost = cost;
-            }
+        if similarity >= min_similarity {
+            result.push(Suggestion {
+                value: s.clone(),
+                similarity,
+            });
         }
 
-        if let Some(result) = current.cloned() {
-            Some(SuggestionResult::Value(result))
-        } else {
-            None
-        }
-    }
-}
-
-/// Represents the values of a suggestion.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum SuggestionResult {
-    /// A single suggestion value.
-    Value(String),
-    /// A list of suggested values.
-    List(Vec<String>),
-}
-
-impl SuggestionResult {
-    pub fn contains<S: Borrow<str>>(&self, value: S) -> bool {
-        match self {
-            SuggestionResult::Value(s) => s == value.borrow(),
-            SuggestionResult::List(values) => values.iter().any(|s| s == value.borrow()),
+        if result.len() == max_count.get() {
+            break;
         }
     }
 
-    pub fn map<F: Fn(String) -> String>(self, f: F) -> SuggestionResult {
-        match self {
-            SuggestionResult::Value(s) => SuggestionResult::Value(f(s)),
-            SuggestionResult::List(values) => {
-                SuggestionResult::List(values.into_iter().map(f).collect())
-            }
-        }
-    }
+    result.sort_by(|x, y| x.similarity.partial_cmp(&y.similarity).unwrap());
+    result
 }
 
 /// Compute the `Levenshtein distance` between 2 `str`
@@ -262,6 +209,9 @@ mod tests {
         assert_eq!(compute_levenshtein_distance_ignore_case("casa", "calle"), 3);
         assert_eq!(compute_levenshtein_distance_ignore_case("shot", "spot"), 1);
         assert_eq!(compute_levenshtein_distance_ignore_case("dad", "mom"), 3);
-        assert_eq!(compute_levenshtein_distance_ignore_case("blueberry", "berry"), 4);
+        assert_eq!(
+            compute_levenshtein_distance_ignore_case("blueberry", "berry"),
+            4
+        );
     }
 }

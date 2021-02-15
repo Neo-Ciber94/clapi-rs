@@ -3,11 +3,10 @@ use crate::command::Command;
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, Result};
 use crate::parser::Parser;
-use crate::suggestion::{SingleSuggestionProvider, SuggestionProvider};
-use crate::{Argument, ParseResult, CommandOption};
+use crate::suggestion::SuggestionSource;
+use crate::{Argument, ParseResult, CommandOption, OptionList};
 use std::borrow::Borrow;
 use std::fmt::Debug;
-use std::rc::Rc;
 use std::result::Result as StdResult;
 
 /// Represents a command-line app.
@@ -44,7 +43,7 @@ impl CommandLine {
     }
 
     /// Returns the `SuggestionProvider` used by this command-line.
-    pub fn suggestions(&self) -> Option<&Rc<dyn SuggestionProvider>> {
+    pub fn suggestions(&self) -> Option<&SuggestionSource> {
         self.context.suggestions()
     }
 
@@ -57,11 +56,11 @@ impl CommandLine {
 
     /// Sets the default `SuggestionProvider`.
     pub fn use_default_suggestions(self) -> Self {
-        self.use_suggestions(SingleSuggestionProvider)
+        self.use_suggestions(SuggestionSource::new())
     }
 
     /// Sets the specified `SuggestionProvider`.
-    pub fn use_suggestions<S: SuggestionProvider + 'static>(mut self, suggestions: S) -> Self {
+    pub fn use_suggestions(mut self, suggestions: SuggestionSource) -> Self {
         self.context.set_suggestions(suggestions);
         self
     }
@@ -291,15 +290,14 @@ impl CommandLine {
     }
 
     fn display_option_suggestions(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
-        let prefixed_option = match error.kind() {
-            ErrorKind::UnexpectedOption(s) => s,
+        let unprefixed_option = match error.kind() {
+            ErrorKind::UnexpectedOption(s) => self.context.trim_prefix(s),
             _ => unreachable!()
         };
-        let unprefixed_option = self.context.trim_prefix(prefixed_option);
 
         // SAFETY: We ensure `suggestions` is some before calling this method
         // check `CommandLine::handle_error`
-        let suggestions = self.suggestions().unwrap();
+        let suggestion_source = self.suggestions().unwrap();
         let command_options = parser.command()
             .unwrap()
             .get_options()
@@ -307,57 +305,55 @@ impl CommandLine {
             .map(|o| o.get_name().to_string())
             .collect::<Vec<String>>();
 
-        let msg = suggestions
-            .suggestions_for(unprefixed_option, &command_options)
-            .map(|result| {
-                suggestions.suggestion_message_for(result.map(|s| {
-                    let context = self.context();
-                    let options = parser.command().unwrap().get_options();
-                    prefix_option(context, options, s)
-                }))
-            })
-            .flatten()
-            .map(|s| format!("\n\n{}", s));
+        // Options suggestions
+        let mut suggestions = suggestion_source.suggestions_for(unprefixed_option, &command_options);
 
-        if let Some(msg) = msg {
-            Err(error.join(&msg))
-        } else {
-            Err(error)
+        // Prefix all the suggested options
+        let context = self.context();
+        let options = parser.command().unwrap().get_options();
+
+        for s in &mut suggestions {
+            prefix_option(context, options, &mut s.value);
+        }
+
+        // Suggestion message
+        let msg = suggestion_source
+            .message_for(suggestions)
+            .map(|s| format!("\n\n{}\n", s));
+
+        // Returns the suggestion message
+        match msg {
+            Some(ref msg) => Err(error.join(msg)),
+            None => Err(error)
         }
     }
 
     fn display_command_suggestions(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
-        let prefixed_option = match error.kind() {
+        let command_name = match error.kind() {
             ErrorKind::UnexpectedCommand(s) => s,
             _ => unreachable!()
         };
-        let unprefixed_option = self.context.trim_prefix(prefixed_option);
 
         // SAFETY: We ensure `suggestions` is some before calling this method
         // check `CommandLine::handle_error`
-        let suggestions = self.suggestions().unwrap();
-        let command_options = parser.command()
+        let suggestion_source = self.suggestions().unwrap();
+        let subcommands = parser.command()
             .unwrap()
             .get_subcommands()
             .map(|c| c.get_name().to_string())
             .collect::<Vec<String>>();
 
-        let msg = suggestions
-            .suggestions_for(unprefixed_option, &command_options)
-            .map(|result| {
-                suggestions.suggestion_message_for(result.map(|s| {
-                    let context = self.context();
-                    let options = parser.command().unwrap().get_options();
-                    prefix_option(context, options, s)
-                }))
-            })
-            .flatten()
+        // Suggested subcommands
+        let suggestions = suggestion_source.suggestions_for(command_name, &subcommands);
+
+        let msg = suggestion_source
+            .message_for(suggestions)
             .map(|s| format!("\n\n{}\n", s));
 
-        if let Some(msg) = msg {
-            Err(error.join(&msg))
-        } else {
-            Err(error)
+        // Returns the suggestion message
+        match msg {
+            Some(ref msg) => Err(error.join(msg)),
+            None => Err(error)
         }
     }
 }
@@ -371,7 +367,7 @@ enum MessageKind {
 }
 
 // Adds a prefix to the option name
-fn prefix_option(context: &Context, options: &crate::option::OptionList, mut name: String) -> String {
+fn prefix_option(context: &Context, options: &OptionList, name: &mut String) {
     if options.get_by_alias(&name).is_some() {
         let prefix = context.alias_prefixes().next().unwrap();
         name.insert_str(0, prefix);
@@ -381,8 +377,6 @@ fn prefix_option(context: &Context, options: &crate::option::OptionList, mut nam
         let prefix = context.name_prefixes().next().unwrap();
         name.insert_str(0, prefix);
     }
-
-    name
 }
 
 // Checks if the option or any of its children have `version`
