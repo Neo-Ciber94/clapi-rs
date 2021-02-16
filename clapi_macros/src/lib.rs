@@ -212,39 +212,26 @@ pub fn arg(_: TokenStream, _: TokenStream) -> TokenStream {
     panic!("`arg` should be placed after a `command` or `subcommand` attribute")
 }
 
-/// Mark a static item as the `Help` provider for the command.
-///
-/// ```ignore
-/// use clapi::macros::*;
-/// use clapi::{Context, Command};
-/// use clapi::help::{Help, DefaultHelp};
-///
-/// #[command]
-/// #[arg(value)]
-/// fn main(value: i64){}
-///
-/// // This will be called for Help.
-/// #[help]
-/// static HELP : MyHelp = MyHelp;
-///
-/// struct MyHelp;
-/// impl Help for MyHelp {
-///     fn help(&self, context: &Context, command: &Command) -> String {
-///         DefaultHelp::default().help(context, command)
-///     }
-///
-///     fn usage(&self, context: &Context, command: &Command) -> String {
-///         DefaultHelp::default().usage(context, command)
-///     }
-/// }
-/// ```
+/// Specify the function that provides a help message for a command.
 #[proc_macro_attribute]
 #[allow(unused_variables, unreachable_code)]
-pub fn help(_: TokenStream, item: TokenStream) -> TokenStream {
+pub fn command_help(_: TokenStream, item: TokenStream) -> TokenStream {
     #[cfg(not(nightly))]
     {
-        panic!("`#[help]` is only available in nightly builds");
+        panic!("`#[command_help]` is only available in nightly builds");
     }
+
+    item
+}
+
+/// Specify the function that provides a usage message for a command.
+#[proc_macro_attribute]
+#[allow(unused_variables, unreachable_code)]
+pub fn command_usage(_: TokenStream, item: TokenStream) -> TokenStream {
+    #[cfg(not(nightly))]
+        {
+            panic!("`#[command_usage]` is only available in nightly builds");
+        }
 
     item
 }

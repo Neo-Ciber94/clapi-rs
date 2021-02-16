@@ -5,8 +5,48 @@ use self::utils::*;
 // Indentation used to write the help messages
 const INDENT: &str = "   ";
 
+/// Configuration for provider help messages.
+#[derive(Clone)]
+pub struct HelpSource {
+    /// Function pointer to the `help` message function.
+    ///
+    /// # Arguments by position:
+    /// * 1 - The `String` buffer to write the message.
+    /// * 2 - The `Context` used.
+    /// * 3 - The `Command` to provide the help message.
+    pub help: fn(&mut String, &Context, &Command),
+
+    /// Function pointer to the `usage` message function.
+    ///
+    /// # Arguments by position:
+    /// * 1 - The `String` buffer to write the message.
+    /// * 2 - The `Context` used.
+    /// * 3 - The `Command` to provide the usage message.
+    /// * 4 - A flag to indicates if write a `after help` message after the usage.
+    pub usage: fn(&mut String, &Context, &Command, bool),
+}
+
+impl HelpSource {
+    /// Constructs a new default `HelpSource`
+    #[inline]
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
+
+impl Default for HelpSource {
+    #[inline]
+    fn default() -> Self {
+        HelpSource {
+            help: command_help,
+            usage: command_usage
+        }
+    }
+}
+
 // Provides a help message for the command
 #[doc(hidden)]
+// todo: add bool for `after_help_message`
 pub fn command_help(buf: &mut String, context: &Context, command: &Command) {
     // If the command have a `help` message use that instead
     if let Some(msg) = command.get_help() {
@@ -230,13 +270,13 @@ pub mod utils {
     pub const MIN_WIDTH: usize = 13;
 
     // Max width of the name, if the name exceed this will display as a column
-    pub const MAX_WIDTH: usize = 50;
+    pub const MAX_WIDTH: usize = 40;
 
     // Min spacing required between an name and description
     pub const MIN_SPACING: usize = 5;
 
     // Left padding of the column for the description
-    pub const COLUMN_DESCRIPTION_PADDING: usize = 6;
+    pub const COLUMN_DESCRIPTION_PADDING: usize = super::INDENT.len() + 3;
 
     // Align of the strings.
     #[derive(Debug, Eq, PartialEq)]
@@ -276,6 +316,7 @@ pub mod utils {
     }
 
     impl DisplayArgs {
+        #[inline]
         pub fn new() -> Self {
             Default::default()
         }

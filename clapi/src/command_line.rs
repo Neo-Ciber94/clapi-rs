@@ -8,6 +8,7 @@ use crate::{Argument, ParseResult, CommandOption, OptionList};
 use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::result::Result as StdResult;
+use crate::help::HelpSource;
 
 /// Represents a command-line app.
 #[derive(Debug)]
@@ -59,27 +60,37 @@ impl CommandLine {
         self.use_suggestions(SuggestionSource::new())
     }
 
-    /// Sets the specified `SuggestionProvider`.
+    /// Sets the `SuggestionSource` of this command-line context.
     pub fn use_suggestions(mut self, suggestions: SuggestionSource) -> Self {
         self.context.set_suggestions(suggestions);
         self
     }
 
+    /// Sets the `HelpSource` of this command-line context.
+    pub fn use_help(mut self, help: HelpSource) -> Self {
+        self.context.set_help(help);
+        self
+    }
+
+    /// Sets the help option for this command-line context.
     pub fn use_help_option(mut self, option: CommandOption) -> Self {
         self.context.set_help_option(option);
         self
     }
 
+    /// Sets the help command for this command-line context.
     pub fn use_help_command(mut self, command: Command) -> Self {
         self.context.set_help_command(command);
         self
     }
 
+    /// Sets the version option for this command-line context.
     pub fn use_version_option(mut self, option: CommandOption) -> Self {
         self.context.set_version_option(option);
         self
     }
 
+    /// Sets the version command for this command-line context.
     pub fn use_version_command(mut self, command: Command) -> Self {
         self.context.set_version_command(command);
         self
@@ -279,10 +290,10 @@ impl CommandLine {
         let mut buffer = String::new();
         match kind {
             MessageKind::Help => {
-                crate::help::command_help(&mut buffer, &self.context, command);
+                (self.context.help().help)(&mut buffer, &self.context, command)
             },
             MessageKind::Usage => {
-                crate::help::command_usage(&mut buffer, &self.context, command, true)
+                (self.context.help().usage)(&mut buffer, &self.context, command, true)
             }
         }
 

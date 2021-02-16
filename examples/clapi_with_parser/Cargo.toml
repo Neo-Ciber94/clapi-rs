@@ -5,4 +5,4 @@ authors = ["Freddy L"]
 edition = "2018"
 
 [dependencies]
-clapi = { path="../../clapi" }
+clapi = { path="../../clapi" , features=["macros"]}

@@ -44,6 +44,8 @@ pub struct CommandAttrData {
     options: Vec<OptionAttrData>,
     args: Vec<ArgAttrData>,
     vars: Vec<ArgLocalVar>,
+    command_help: Option<NamePath>,
+    command_usage: Option<NamePath>,
 }
 
 impl CommandAttrData {
@@ -63,13 +65,15 @@ impl CommandAttrData {
             vars: vec![],
             args: vec![],
             is_hidden: None,
+            command_help: None,
+            command_usage: None,
         }
     }
 
     pub fn from_fn(args: AttributeArgs, func: ItemFn) -> Self {
         let name = func.sig.ident.to_string();
         let attr_data = NameValueAttribute::from_attribute_args(name.as_str(), args, AttrStyle::Outer).unwrap();
-        imp::command_from_fn(attr_data, func, false, true)
+        imp::command_from_fn(attr_data, func, false, true, true)
     }
 
     pub fn from_path(args: AttributeArgs, func: ItemFn, path: PathBuf) -> Self {
@@ -147,6 +151,14 @@ impl CommandAttrData {
 
     pub fn set_item_fn(&mut self, item_fn: ItemFn) {
         self.item_fn = Some(item_fn);
+    }
+
+    pub fn set_command_help(&mut self, name_path: NamePath) {
+        self.command_help = Some(name_path);
+    }
+
+    pub fn set_command_usage(&mut self, name_path: NamePath) {
+        self.command_usage = Some(name_path);
     }
 
     pub fn get_mut_recursive(&mut self, name_path: &NamePath) -> Option<&mut CommandAttrData> {
@@ -292,6 +304,30 @@ impl CommandAttrData {
                 ReturnType::Type(_, ty) if is_clapi_result_type(ty) => quote! {},
                 _ => quote! { .expect("an error occurred"); },
             };
+            let set_help = {
+                if self.command_help.is_none() && self.command_usage.is_none() {
+                    None
+                } else {
+                    let command_help = self.command_help
+                        .as_ref()
+                        .map(|n| n.to_string().parse::<TokenStream>().unwrap())
+                        .unwrap_or_else(|| quote! { clapi::help::command_help });
+
+                    let command_usage = self.command_usage
+                        .as_ref()
+                        .map(|n| n.to_string().parse::<TokenStream>().unwrap())
+                        .unwrap_or_else(|| quote! { clapi::help::command_usage });
+
+                    Some(quote! {
+                       .use_help({
+                            clapi::help::HelpSource {
+                                help: #command_help,
+                                usage: #command_usage
+                            }
+                       })
+                    })
+                }
+            };
 
             // Emit the tokens to create the function with the `RootCommand`
             quote! {
@@ -303,6 +339,7 @@ impl CommandAttrData {
                     clapi::CommandLine::new(command)
                         .use_default_help()
                         .use_default_suggestions()
+                        #set_help
                         .parse_args()
                         #error_handling
                 }
@@ -550,25 +587,24 @@ pub fn is_option_bool_flag(fn_arg: &FnArgData) -> bool {
 mod imp {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, Ordering};
-
-    use syn::{AttrStyle, Attribute, AttributeArgs, FnArg, Item, ItemFn, PatType, Stmt, ItemStatic, File};
-
+    use syn::{AttrStyle, Attribute, AttributeArgs, FnArg, Item, ItemFn, PatType, Stmt, File};
     use crate::arg::ArgAttrData;
     use crate::command::{drop_command_attributes, is_option_bool_flag, CommandAttrData, FnArgData, StringSource};
     use crate::macro_attribute::{MacroAttribute, NameValueAttribute};
     use crate::option::OptionAttrData;
     use crate::utils::{path_to_string, NamePath};
     use crate::var::{ArgLocalVar, VarSource};
-    use crate::consts;
+    use crate::{consts, AttrQuery};
     use crate::query::QueryItem;
     use syn::export::ToTokens;
 
     /// Implementation of `CommandAttrData::from_fn`
-    pub fn command_from_fn(
+    pub fn command_from_fn( // todo: Move to constructor?
         name_value_attr: NameValueAttribute,
         item_fn: ItemFn,
         is_child: bool,
         get_subcommands: bool,
+        get_help: bool,
     ) -> CommandAttrData {
         let name = item_fn.sig.ident.to_string();
         command_from_fn_with_name(
@@ -577,6 +613,7 @@ mod imp {
             item_fn,
             is_child,
             get_subcommands,
+            get_help
         )
     }
 
@@ -586,6 +623,7 @@ mod imp {
         item_fn: ItemFn,
         is_child: bool,
         get_subcommands: bool,
+        get_help: bool,
     ) -> CommandAttrData {
         let mut command = CommandAttrData::new(name, name_value_attr.clone(), is_child);
 
@@ -706,7 +744,13 @@ mod imp {
         if get_subcommands {
             let mut subcommands = Vec::new();
             for (attribute, item_fn) in get_subcommands_from_fn(&item_fn) {
-                let subcommand = command_from_fn(attribute.clone(), item_fn, true, true);
+                let subcommand = command_from_fn(
+                    attribute.clone(),
+                    item_fn,
+                    true,
+                    true,
+                    false);
+
                 subcommands.push((subcommand, attribute.clone()));
             }
 
@@ -744,6 +788,45 @@ mod imp {
                 } else {
                     command.set_child(subcommand);
                 }
+            }
+        }
+
+        // Gets the command help/usage
+        if get_help {
+            // Helper function
+            fn find_inner_decorate_item_fn(item_fn: &ItemFn, attribute_name: &str) -> Option<ItemFn> {
+                let mut result = item_fn.block
+                    .stmts
+                    .iter()
+                    .filter_map(|stmt| {
+                        if let Stmt::Item(Item::Fn(item_fn)) = stmt {
+                            if item_fn.contains_attribute(attribute_name) {
+                                Some(item_fn)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .cloned()
+                    .collect::<Vec<ItemFn>>();
+
+                if result.len() > 1 {
+                    panic!("multiple `#[{}]` defined", attribute_name);
+                } else {
+                    result.pop().map(|x| x)
+                }
+            }
+
+            // Finds the `command_help` if any in the body of the function
+            if let Some(command_help) = find_inner_decorate_item_fn(&item_fn, consts::COMMAND_HELP){
+                command.set_command_help(NamePath::new(command_help.sig.ident.to_string()));
+            }
+
+            // Finds the `command_usage` if any in the body of the function
+            if let Some(command_usage) = find_inner_decorate_item_fn(&item_fn, consts::COMMAND_USAGE){
+                command.set_command_usage(NamePath::new(command_usage.sig.ident.to_string()));
             }
         }
 
@@ -897,6 +980,7 @@ mod imp {
         item_fn: ItemFn,
         root_path: PathBuf,
     ) -> CommandAttrData {
+        // Ensure there is only 1 `#[command]` defined
         static IS_DEFINED: AtomicBool = AtomicBool::new(false);
         if let Ok(true) = IS_DEFINED.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed) {
             panic!("multiple `command` entry points defined: `{}`", item_fn.sig.ident);
@@ -906,13 +990,31 @@ mod imp {
         let file = syn::parse_file(&src).unwrap();
         assert_is_top_free_function(&file, &item_fn);
 
+        // The attribute of the root command
         let attribute = NameValueAttribute::from_attribute_args(
             crate::consts::COMMAND, args, AttrStyle::Outer
         ).unwrap();
 
-        let mut root = command_from_fn(attribute, item_fn, false, true);
+        // The root command which is the command decorated with `#[command]`
+        let mut root = command_from_fn(
+            attribute,
+            item_fn,
+            false,
+            true,
+            true);
 
+        // Gets all the subcommands searching in all the modules
         let mut subcommands = get_subcommands_data(&root_path);
+
+        // Finds and set the `command_help` if any
+        if let Some(command_help) = find_decorated_item_fn(&root_path, consts::COMMAND_HELP) {
+            root.set_command_help(command_help);
+        }
+
+        // Finds and set the `command_usage` if any
+        if let Some(command_usage) = find_decorated_item_fn(&root_path, consts::COMMAND_USAGE) {
+            root.set_command_usage(command_usage);
+        }
 
         while let Some((subcommand, _, attribute)) = subcommands.pop() {
             if attribute.contains(crate::consts::PARENT){
@@ -964,28 +1066,23 @@ mod imp {
         root
     }
 
-    fn find_help(root_path: &Path) -> Option<ItemStatic> {
-        let mut result = crate::query::find_map_items(
+    // Find a `ItemFn` with the specified attribute and gets its `NamePath`
+    fn find_decorated_item_fn(root_path: &Path, attribute_name: &str) -> Option<NamePath> {
+        let mut result = crate::query::find_items(
             root_path, true, true, |item| {
-            if let Item::Static(item_static) = item {
-                let is_help = item_static.attrs.iter().any(|attribute| {
-                    let macro_attr = MacroAttribute::new(attribute.clone());
-                    assert!(macro_attr.is_empty(), "`#[help]` takes not params but was `{}`", macro_attr);
-                    consts::is_help(macro_attr.path())
-                });
-
-                if is_help {
-                    return Some(item_static.clone());
+                if let Item::Fn(item_fn) = item {
+                    item_fn.contains_attribute(attribute_name)
+                } else {
+                    false
                 }
             }
-            None
-        });
+        );
 
         if result.len() > 1 {
-            panic!("multiple `#[help]` defined");
+            panic!("multiple `#[{}]` defined", attribute_name)
         }
 
-        result.pop().map(|item| item.item)
+        result.pop().map(|x| x.name_path)
     }
 
     fn find_command_recursive<'a>(command: &'a mut CommandAttrData, name: &'a NamePath) -> Option<&'a mut CommandAttrData> {
@@ -1061,6 +1158,7 @@ mod imp {
                 item_fn,
                 true,
                 false,
+                false
             );
 
             subcommands.push((command, path, attr));

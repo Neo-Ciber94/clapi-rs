@@ -21,6 +21,8 @@ pub const HIDDEN: &str = "hidden";
 pub const MULTIPLE: &str = "multiple";
 pub const REQUIRES_ASSIGN : &str = "requires_assign";
 pub const ERROR : &str = "error";
+pub const COMMAND_HELP : &str = "command_help";
+pub const COMMAND_USAGE: &str = "command_usage";
 
 pub fn is_clapi_attribute(path: &str) -> bool {
     is_command(path) || is_subcommand(path) || is_option(path) || is_arg(path) || is_help(path)

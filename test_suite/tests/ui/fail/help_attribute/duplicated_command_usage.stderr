@@ -1,0 +1,7 @@
+error: custom attribute panicked
+ --> $DIR/duplicated_command_usage.rs:5:1
+  |
+5 | #[command]
+  | ^^^^^^^^^^
+  |
+  = help: message: multiple `#[command_usage]` defined

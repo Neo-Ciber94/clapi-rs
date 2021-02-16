@@ -5,6 +5,7 @@ use crate::suggestion::SuggestionSource;
 use std::fmt::{Debug, Formatter};
 use crate::utils::debug_option;
 use crate::Argument;
+use crate::help::HelpSource;
 
 /// Provides configuration info for parsing a command.
 ///
@@ -37,6 +38,7 @@ use crate::Argument;
 pub struct Context {
     root: Command,
     suggestions: Option<SuggestionSource>,
+    help: HelpSource,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
     assign_operators: LinkedHashSet<char>,
@@ -94,6 +96,11 @@ impl Context {
         self.suggestions.as_ref()
     }
 
+    /// Returns the `HelpSource` of this context.
+    pub fn help(&self) -> &HelpSource {
+        &self.help
+    }
+
     /// Gets the help `CommandOption` of this context.
     pub fn help_option(&self) -> Option<&CommandOption> {
         self.help_option.as_ref()
@@ -114,9 +121,14 @@ impl Context {
         self.version_command.as_ref()
     }
 
-    /// Sets the `SuggestionProvider` of this context.
+    /// Sets the `SuggestionSource` of this context.
     pub fn set_suggestions(&mut self, suggestions: SuggestionSource) {
         self.suggestions = Some(suggestions);
+    }
+
+    /// Sets the `HelpSource` of this context.
+    pub fn set_help(&mut self, help: HelpSource) {
+        self.help = help;
     }
 
     /// Sets the help `CommandOption` of this context.
@@ -192,7 +204,8 @@ impl Debug for Context {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Context")
             .field("root", &self.root)
-            .field("suggestions", &debug_option(&self.suggestions, "SuggestionProvider"))
+            .field("suggestions", &debug_option(&self.suggestions, "SuggestionSource"))
+            .field("help", &"HelpSource")
             .field("name_prefixes", &self.name_prefixes)
             .field("alias_prefixes", &self.alias_prefixes)
             .field("assign_operators", &self.assign_operators)
@@ -230,6 +243,7 @@ impl<'a> ExactSizeIterator for Prefixes<'a>{
 pub struct ContextBuilder {
     root: Command,
     suggestions: Option<SuggestionSource>,
+    help: Option<HelpSource>,
     name_prefixes: LinkedHashSet<String>,
     alias_prefixes: LinkedHashSet<String>,
     assign_operators: LinkedHashSet<char>,
@@ -246,6 +260,7 @@ impl ContextBuilder {
         ContextBuilder {
             root,
             suggestions: None,
+            help: None,
             name_prefixes: Default::default(),
             alias_prefixes: Default::default(),
             assign_operators: Default::default(),
@@ -289,9 +304,15 @@ impl ContextBuilder {
         self
     }
 
-    /// Sets the `SuggestionProvider` for this context.
+    /// Sets the `SuggestionSource` for this context.
     pub fn suggestions(mut self, suggestions: SuggestionSource) -> Self {
         self.suggestions = Some(suggestions);
+        self
+    }
+
+    /// Sets the `HelpSource` for this context.
+    pub fn help(mut self, help: HelpSource) -> Self {
+        self.help = Some(help);
         self
     }
 
@@ -331,6 +352,9 @@ impl ContextBuilder {
 
             // Suggestion provider
             suggestions: self.suggestions,
+
+            // Help provider
+            help: self.help.unwrap_or_else(|| HelpSource::default()),
 
             // Option name prefixes
             name_prefixes: {

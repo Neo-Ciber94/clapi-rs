@@ -1,3 +1,4 @@
+use clapi::{Context, Command};
 use clapi::macros::*;
 
 #[command(description="Prints a value", usage="How to use the command", version=1.0)]
@@ -11,5 +12,17 @@ fn author(){}
 
 #[subcommand(description="list the authors", parent="author")]
 fn list(){}
+
+#[command_help]
+fn help(buf: &mut String, context: &Context, command: &Command) {
+    // Just forward
+    clapi::help::command_help(buf, context, command)
+}
+
+#[command_usage]
+fn usage(buf: &mut String, context: &Context, command: &Command, after_help_msg: bool) {
+    // Just forward
+    clapi::help::command_usage(buf, context, command, after_help_msg)
+}
 
 fn main(){}

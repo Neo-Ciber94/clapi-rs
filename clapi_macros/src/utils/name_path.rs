@@ -9,14 +9,19 @@ pub struct NamePath {
 
 impl NamePath {
     /// Constructs a new `NamePath` with the given item name.
-    pub fn new(name: String) -> Self {
+    pub fn new<S: Into<String>>(name: S) -> Self {
+        let name = name.into();
         assert!(!name.trim().is_empty(), "path is empty");
         NamePath { path: vec![name] }
     }
 
     /// Constructs a new `NamePath` from the given path.
-    pub fn from_path(path: Vec<String>) -> Self {
+    pub fn from_path<S: Into<String>>(path: Vec<S>) -> Self {
         assert!(path.len() > 0, "path is invalid");
+
+        let path = path.into_iter()
+            .map(|s| s.into())
+            .collect::<Vec<String>>();
 
         for s in &path {
             assert!(!s.trim().is_empty(), "path is empty");
