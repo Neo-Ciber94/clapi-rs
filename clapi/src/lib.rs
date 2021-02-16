@@ -51,9 +51,9 @@
 //!     }
 //! } else {
 //!     // Fallthrough
-//!     let mut buffer = String::new();
-//!     clapi::help::command_help(&mut buffer, &context, result.executing_command());
-//!     println!("{}", buffer);
+//!     let mut buf = String::new();
+//!     clapi::help::command_help(&mut buf, &context, result.executing_command(), true);
+//!     println!("{}", buf);
 //! }
 //! ```
 //!

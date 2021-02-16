@@ -180,6 +180,8 @@ impl CommandLine {
     }
 
     fn handle_error(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
+        // todo: Returns the help message as a `Err` or `Ok`?
+        // `Err` was decided initially due using an invalid `command` or `argument` is an error
         match error.kind() {
             ErrorKind::InvalidArgumentCount | ErrorKind::InvalidArgument(_)
             if self.context.help_option().is_some() || self.context.help_command().is_some() => {
@@ -287,17 +289,18 @@ impl CommandLine {
     }
 
     fn get_help_message_for_command(&self, command: &Command, kind: MessageKind) -> String {
-        let mut buffer = String::new();
+        let mut buf = String::new();
+
         match kind {
             MessageKind::Help => {
-                (self.context.help().help)(&mut buffer, &self.context, command)
+                (self.context.help().help)(&mut buf, &self.context, command, true)
             },
             MessageKind::Usage => {
-                (self.context.help().usage)(&mut buffer, &self.context, command, true)
+                (self.context.help().usage)(&mut buf, &self.context, command, true)
             }
         }
 
-        buffer
+        buf
     }
 
     fn display_option_suggestions(&self, parser: &Parser<'_>, error: Error) -> Result<()> {

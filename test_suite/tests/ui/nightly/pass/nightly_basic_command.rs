@@ -14,9 +14,9 @@ fn author(){}
 fn list(){}
 
 #[command_help]
-fn help(buf: &mut String, context: &Context, command: &Command) {
+fn help(buf: &mut String, context: &Context, command: &Command, after_help_msg: bool) {
     // Just forward
-    clapi::help::command_help(buf, context, command)
+    clapi::help::command_help(buf, context, command, after_help_msg)
 }
 
 #[command_usage]

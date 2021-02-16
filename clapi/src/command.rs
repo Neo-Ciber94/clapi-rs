@@ -48,15 +48,36 @@ impl Command {
     /// Constructs a new `Command` named after the running executable.
     #[inline]
     pub fn root() -> Self {
-        let exe_name = std::env::current_exe()
-            .unwrap()
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_string();
+        fn executable_name() -> &'static str {
+            use std::sync::atomic::AtomicPtr;
+            use std::sync::atomic::Ordering;
+            use std::sync::Once;
 
-        Command::new(exe_name.trim_end_matches(std::env::consts::EXE_SUFFIX))
+            static EXE_NAME : AtomicPtr<String> = AtomicPtr::new(std::ptr::null_mut());
+            static ONCE : Once = Once::new();
+
+            ONCE.call_once(|| {
+                let exe_name = std::env::current_exe()
+                    .unwrap()
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_string();
+
+                let string = Box::new(
+                    exe_name.trim_end_matches(std::env::consts::EXE_SUFFIX).to_string()
+                );
+
+                EXE_NAME.store(Box::leak(string), Ordering::Relaxed);
+            });
+
+            unsafe {
+                &*EXE_NAME.load(Ordering::Relaxed)
+            }
+        }
+
+        Command::new(executable_name())
     }
 
     /// Constructs a new `Command` with the specified `Options`.

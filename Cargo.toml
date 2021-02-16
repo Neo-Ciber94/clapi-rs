@@ -3,10 +3,15 @@ members=[
     "clapi",
     "clapi_macros",
     "clapi_internal",
+
+    # Internal
     "test_suite",
+    "benches",
     "examples/*"
 ]
 
 exclude=[
-    "examples/*"
+    "examples/*",
+    "benches",
+    "test_suite",
 ]

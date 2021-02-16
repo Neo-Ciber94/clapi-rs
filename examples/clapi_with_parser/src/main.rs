@@ -60,7 +60,7 @@ fn main() -> clapi::Result<()> {
     if !matches!(subcommand.get_name(), "sum" | "prod") {
         // Shows a help message if the command is no `sum` or `prod`
         let mut buf = String::new();
-        clapi::help::command_help(&mut buf, &context, subcommand);
+        clapi::help::command_help(&mut buf, &context, subcommand, true);
         println!("{}", buf);
     } else {
         // Check if contains the `pretty` flag

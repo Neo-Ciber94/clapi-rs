@@ -1,6 +1,6 @@
+use self::utils::*;
 use crate::{Command, Context, OptionList};
 use std::fmt::Write;
-use self::utils::*;
 
 // Indentation used to write the help messages
 const INDENT: &str = "   ";
@@ -14,7 +14,7 @@ pub struct HelpSource {
     /// * 1 - The `String` buffer to write the message.
     /// * 2 - The `Context` used.
     /// * 3 - The `Command` to provide the help message.
-    pub help: fn(&mut String, &Context, &Command),
+    pub help: fn(&mut String, &Context, &Command, bool),
 
     /// Function pointer to the `usage` message function.
     ///
@@ -39,15 +39,19 @@ impl Default for HelpSource {
     fn default() -> Self {
         HelpSource {
             help: command_help,
-            usage: command_usage
+            usage: command_usage,
         }
     }
 }
 
 // Provides a help message for the command
 #[doc(hidden)]
-// todo: add bool for `after_help_message`
-pub fn command_help(buf: &mut String, context: &Context, command: &Command) {
+pub fn command_help(
+    buf: &mut String,
+    context: &Context,
+    command: &Command,
+    after_help_message: bool,
+) {
     // If the command have a `help` message use that instead
     if let Some(msg) = command.get_help() {
         buf.push_str(msg);
@@ -124,26 +128,17 @@ pub fn command_help(buf: &mut String, context: &Context, command: &Command) {
         }
     }
 
-    if let Some(msg) = get_after_help_message(context) {
-        writeln!(buf).unwrap();
-        writeln!(buf, "{}", msg).unwrap();
+    if after_help_message {
+        if let Some(msg) = get_after_help_message(context) {
+            writeln!(buf).unwrap();
+            writeln!(buf, "{}", msg).unwrap();
+        }
     }
 }
 
 // Provides a usage message for the command
 #[doc(hidden)]
-pub fn command_usage(
-    buf: &mut String,
-    context: &Context,
-    command: &Command,
-    after_help_message: bool,
-) {
-    // If the command have a `usage` message use that instead
-    if let Some(msg) = command.get_usage() {
-        buf.push_str(msg);
-        return;
-    }
-
+pub fn command_usage(buf: &mut String, context: &Context, command: &Command, after_help_message: bool) {
     // Writes the usage from the `Command` if any
     if let Some(usage) = command.get_usage() {
         writeln!(buf).unwrap();
@@ -297,9 +292,9 @@ pub mod utils {
         pub fn format<S: Into<String>>(&self, value: S) -> String {
             let mut string = value.into();
             match self {
-                LetterCase::Ignore => {},
-                LetterCase::Upper => { string.make_ascii_uppercase() },
-                LetterCase::Lower => { string.make_ascii_lowercase() },
+                LetterCase::Ignore => {}
+                LetterCase::Upper => string.make_ascii_uppercase(),
+                LetterCase::Lower => string.make_ascii_lowercase(),
             }
 
             string
@@ -329,7 +324,7 @@ pub mod utils {
                 letter_case: LetterCase::Upper,
                 grouping: ('<', '>'),
                 only_name: false,
-                delimiter: '|'
+                delimiter: '|',
             }
         }
     }
