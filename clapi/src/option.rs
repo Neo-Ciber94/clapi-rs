@@ -1,9 +1,10 @@
 #![allow(clippy::len_zero)]
 use crate::args::{Argument, ArgumentList};
 use linked_hash_set::LinkedHashSet;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::ops::Index;
+use std::str::FromStr;
 
 /// Represents a command-line option.
 #[derive(Debug, Clone)]
@@ -33,7 +34,7 @@ impl CommandOption {
     ///     .parse_from(vec!["--enable"])
     ///     .unwrap();
     ///
-    /// assert!(result.contains_option("enable"));
+    /// assert!(result.options().contains("enable"));
     /// ```
     pub fn new<S: Into<String>>(name: S) -> Self {
         let name = name.into();
@@ -47,7 +48,7 @@ impl CommandOption {
             is_required: false,
             is_hidden: false,
             allow_multiple: false,
-            requires_assign: false
+            requires_assign: false,
         }
     }
 
@@ -126,7 +127,7 @@ impl CommandOption {
     ///     .parse_from(vec!["-t"])
     ///     .unwrap();
     ///
-    /// assert!(result.contains_option("test"));
+    /// assert!(result.options().contains("test"));
     /// ```
     pub fn alias<S: Into<String>>(mut self, alias: S) -> Self {
         let alias = alias.into();
@@ -167,8 +168,8 @@ impl CommandOption {
     ///     .parse_from(vec!["--test", "--number", "10"])
     ///     .unwrap();
     ///
-    /// assert!(result.get_option_arg("number").unwrap().contains("10"));
-    /// assert!(result.contains_option("test"));
+    /// assert!(result.options().get_arg("number").unwrap().contains("10"));
+    /// assert!(result.options().contains("test"));
     /// ```
     ///
     /// Other example where the option is ommited
@@ -218,9 +219,9 @@ impl CommandOption {
     ///     .parse_from(vec!["--numbers", "10", "--numbers", "20", "--numbers", "30"])
     ///     .unwrap();
     ///
-    /// assert!(result.get_option_arg("numbers").unwrap().contains("10"));
-    /// assert!(result.get_option_arg("numbers").unwrap().contains("20"));
-    /// assert!(result.get_option_arg("numbers").unwrap().contains("30"));
+    /// assert!(result.options().get_arg("numbers").unwrap().contains("10"));
+    /// assert!(result.options().get_arg("numbers").unwrap().contains("20"));
+    /// assert!(result.options().get_arg("numbers").unwrap().contains("30"));
     /// ```
     pub fn multiple(mut self, allow_multiple: bool) -> Self {
         self.allow_multiple = allow_multiple;
@@ -240,9 +241,9 @@ impl CommandOption {
     ///     .parse_from(vec!["--numbers=10,20,30"])
     ///     .unwrap();
     ///
-    /// assert!(result.get_option_arg("numbers").unwrap().contains("10"));
-    /// assert!(result.get_option_arg("numbers").unwrap().contains("20"));
-    /// assert!(result.get_option_arg("numbers").unwrap().contains("30"));
+    /// assert!(result.options().get_arg("numbers").unwrap().contains("10"));
+    /// assert!(result.options().get_arg("numbers").unwrap().contains("20"));
+    /// assert!(result.options().get_arg("numbers").unwrap().contains("30"));
     /// ```
     ///
     /// Using it like this will fail
@@ -275,14 +276,18 @@ impl CommandOption {
     ///     .parse_from(vec!["--copy", "/src/file.txt", "/src/utils/"])
     ///     .unwrap();
     ///
-    /// assert!(result.get_option_args("copy").unwrap().get("from").unwrap().contains("/src/file.txt"));
-    /// assert!(result.get_option_args("copy").unwrap().get("to").unwrap().contains("/src/utils/"));
+    /// assert!(result.options().get_args("copy").unwrap().get("from").unwrap().contains("/src/file.txt"));
+    /// assert!(result.options().get_args("copy").unwrap().get("to").unwrap().contains("/src/utils/"));
     /// ```
     pub fn arg(mut self, mut arg: Argument) -> Self {
         arg.set_name_and_description_if_none(self.get_name(), self.get_description());
 
         if let Err(duplicated) = self.args.add(arg) {
-            panic!("`{}` already contains an argument named: `{}`", self.name, duplicated.get_name());
+            panic!(
+                "`{}` already contains an argument named: `{}`",
+                self.name,
+                duplicated.get_name()
+            );
         }
         self
     }
@@ -399,23 +404,55 @@ impl OptionList {
         self.inner.iter().find(|opt| opt.has_alias(alias.as_ref()))
     }
 
+    /// Converts the argument value of the given option to the type `T` or results `None` if:
+    /// * The option is not found.
+    /// * The option takes no arguments.
+    /// * The option takes more than 1 argument.
+    /// * The argument value parse fail.
+    pub fn convert<T>(&self, option: &str) -> Option<T>
+    where
+        T: FromStr + 'static,
+        <T as FromStr>::Err: Display,
+    {
+        self.get(option)
+            .map(|opt| opt.get_arg())
+            .flatten()
+            .map(|arg| arg.convert::<T>().ok())
+            .flatten()
+    }
+
+    /// Converts all the argument values of the given option to the type `T` or results `None` if:
+    /// * The option is not found.
+    /// * The option takes no arguments.
+    /// * The option takes more than 1 argument.
+    /// * The argument values parse fail.
+    pub fn convert_all<T>(&self, option: &str) -> Option<Vec<T>>
+        where
+            T: FromStr + 'static,
+            <T as FromStr>::Err: Display,
+    {
+        self.get(option)
+            .map(|opt| opt.get_arg())
+            .flatten()
+            .map(|arg| arg.convert_all::<T>().ok())
+            .flatten()
+    }
+
     /// Returns the `Argument` of the option with the given name or alias or
     /// `None` if the option cannot be found or have more than 1 argument.
-    pub fn get_arg<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&Argument> {
-        self.get(name_or_alias.as_ref())
-            .map(|o| o.get_arg())
-            .flatten()
+    pub fn get_arg<S: AsRef<str>>(&self, option: S) -> Option<&Argument> {
+        self.get(option.as_ref()).map(|o| o.get_arg()).flatten()
     }
 
     /// Returns the `ArgumentList` of the option with the given name or alias, or `None`
     /// if the option canno tbe found.
-    pub fn get_args<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&ArgumentList> {
-        self.get(name_or_alias.as_ref()).map(|o| o.get_args())
+    pub fn get_args<S: AsRef<str>>(&self, option: S) -> Option<&ArgumentList> {
+        self.get(option.as_ref()).map(|o| o.get_args())
     }
 
     /// Returns `true` if there is an option with the given name or alias.
-    pub fn contains<S: AsRef<str>>(&self, name_or_alias: S) -> bool {
-        self.get(name_or_alias).is_some()
+    pub fn contains<S: AsRef<str>>(&self, option: S) -> bool {
+        self.get(option).is_some()
     }
 
     /// Returns the number of options in this collection.
@@ -513,7 +550,7 @@ impl Index<&str> for OptionList {
     fn index(&self, index: &str) -> &Self::Output {
         match self.get(index) {
             Some(option) => option,
-            None => panic!("cannot find option named: `{}`", index)
+            None => panic!("cannot find option named: `{}`", index),
         }
     }
 }
@@ -523,13 +560,13 @@ mod tests {
     use super::*;
 
     #[test]
-    #[should_panic(expected="option `name` cannot be empty")]
+    #[should_panic(expected = "option `name` cannot be empty")]
     fn option_empty_name_test() {
         CommandOption::new("");
     }
 
     #[test]
-    #[should_panic(expected="option `alias` cannot be empty")]
+    #[should_panic(expected = "option `alias` cannot be empty")]
     fn option_empty_alias_test() {
         CommandOption::new("test").alias("");
     }
@@ -575,7 +612,7 @@ mod tests {
     }
 
     #[test]
-    fn is_hidden_test(){
+    fn is_hidden_test() {
         let opt1 = CommandOption::new("help");
         assert!(!opt1.is_hidden());
 
@@ -584,7 +621,7 @@ mod tests {
     }
 
     #[test]
-    fn allow_multiple_test(){
+    fn allow_multiple_test() {
         let opt1 = CommandOption::new("values");
         assert!(!opt1.allow_multiple());
 
@@ -593,7 +630,7 @@ mod tests {
     }
 
     #[test]
-    fn require_assign_test(){
+    fn require_assign_test() {
         let opt1 = CommandOption::new("values");
         assert!(!opt1.is_assign_required());
 
@@ -703,7 +740,7 @@ mod tests {
     }
 
     #[test]
-    fn option_list_indexer_test(){
+    fn option_list_indexer_test() {
         let mut options = OptionList::new();
         options.add(CommandOption::new("number")).unwrap();
         options.add(CommandOption::new("enable")).unwrap();

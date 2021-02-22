@@ -1,6 +1,6 @@
 # Clapi
 
-> Clapi (**C**ommand-**L**ine **API**) is a framework for create command line applications.
+> Clapi (**C**ommand-**L**ine **API**) a rust framework for create command line applications.
 
 [![Apache-2.0]][license]
 

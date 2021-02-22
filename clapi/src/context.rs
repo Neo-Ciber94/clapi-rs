@@ -30,7 +30,7 @@ use crate::help::HelpSource;
 ///     .parse(vec!["/e:false", "--", "hello", "hola"])
 ///     .unwrap();
 ///
-/// assert!(result.get_option_arg("enable").unwrap().contains("false"));
+/// assert!(result.options().get_arg("enable").unwrap().contains("false"));
 /// assert!(result.arg().unwrap().contains("hello"));
 /// assert!(result.arg().unwrap().contains("hola"));
 /// ```

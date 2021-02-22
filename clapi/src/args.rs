@@ -154,7 +154,7 @@ impl Argument {
     ///     .parse_from(vec!["Hello World"])
     ///     .unwrap();
     ///
-    /// assert!(result.get_arg("data").unwrap().contains("Hello World"));
+    /// assert!(result.args().get("data").unwrap().contains("Hello World"));
     /// ```
     pub fn contains<S: AsRef<str>>(&self, value: S) -> bool {
         self.get_values().iter().any(|s| s == value.as_ref())
@@ -361,7 +361,7 @@ impl Argument {
     ///         .err()
     ///         .unwrap();
     ///
-    /// assert_eq!(error.to_string(), "invalid argument value for 'number': expected a number greater than 0".to_owned());
+    /// assert_eq!(error.to_string(), "invalid value for argument 'number': expected a number greater than 0".to_owned());
     /// ```
     pub fn validation_error<S: Into<String>>(mut self, error: S) -> Self {
         self.validation_error = Some(error.into());
@@ -530,11 +530,19 @@ impl Argument {
             .collect::<Vec<String>>();
 
         if !self.get_values_count().takes(values.len()) {
+            // return Err(Error::new(
+            //     ErrorKind::InvalidArgumentCount,
+            //     format!(
+            //         "`{}` expected {} but was {}",
+            //         self.get_name(),
+            //         self.get_values_count(),
+            //         values.len()
+            //     ),
+            // ));
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
                 format!(
-                    "`{}` expect {} but was {}",
-                    self.get_name(),
+                    "expected {} but was {}",
                     self.get_values_count(),
                     values.len()
                 ),
@@ -592,8 +600,8 @@ impl Argument {
     ///     .parse_from(vec!["10"])
     ///     .unwrap();
     ///
-    /// assert_eq!(result.get_arg("numbers").unwrap().convert::<i64>().ok(), Some(10));
-    /// assert!(result.get_arg("numbers").unwrap().convert::<f32>().is_err());
+    /// assert_eq!(result.args().get("numbers").unwrap().convert::<i64>().ok(), Some(10));
+    /// assert!(result.args().get("numbers").unwrap().convert::<f32>().is_err());
     /// ```
     pub fn convert<T>(&self) -> Result<T>
     where
@@ -639,8 +647,8 @@ impl Argument {
     ///     .parse_from(vec!["1", "2", "3"])
     ///     .unwrap();
     ///
-    /// assert_eq!(result.get_arg("numbers").unwrap().convert_all::<i64>().ok(), Some(vec![1, 2, 3]));
-    /// assert!(result.get_arg("numbers").unwrap().convert_all::<f32>().is_err());
+    /// assert_eq!(result.args().get("numbers").unwrap().convert_all::<i64>().ok(), Some(vec![1, 2, 3]));
+    /// assert!(result.args().get("numbers").unwrap().convert_all::<f32>().is_err());
     /// ```
     pub fn convert_all<T>(&self) -> Result<Vec<T>>
     where

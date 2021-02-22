@@ -30,13 +30,13 @@
 //!                 .parse(std::env::args().skip(1))
 //!                 .expect("unexpected error");
 //!
-//! if result.contains_option("version") {
+//! if result.options().contains("version") {
 //!     println!("MyApp 1.0");
 //!     return;
 //! }
 //!
-//! if result.executing_command().get_name() == "repeat" {
-//!     let times = result.get_option_arg("times")
+//! if result.command_name() == "repeat" {
+//!     let times = result.options().get_arg("times")
 //!         .unwrap()
 //!         .convert::<u64>()
 //!         .unwrap();

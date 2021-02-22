@@ -1,0 +1,14 @@
+[package]
+name = "examples"
+version = "0.0.0"
+authors = ["Freddy L"]
+edition = "2018"
+publish = false
+
+[dependencies]
+clapi = { path="../clapi", features=["macros"] }
+
+[[example]]
+name = "0_parser"
+path = "0_parser.rs"
+

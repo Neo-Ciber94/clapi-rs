@@ -513,7 +513,7 @@ impl Command {
     ///     .parse_from(vec!["--negate=true", "1", "2", "3"])
     ///     .unwrap();
     ///
-    /// assert!(result.contains_option("negate"));
+    /// assert!(result.options().contains("negate"));
     /// assert_eq!(result.arg().unwrap().convert_all::<i64>().ok(), Some(vec![1, 2, 3]));
     /// ```
     #[inline]
@@ -532,7 +532,14 @@ impl Command {
             I: IntoIterator<Item = S>,
             S: Borrow<str>,
     {
-        let context = crate::Context::new(self);
+        let mut context = Context::new(self);
+        context.set_help_command(crate::default_help_command());
+        context.set_help_option(crate::default_help_option());
+
+        if crate::command_line::contains_version_recursive(context.root()){
+            context.set_version_option(crate::default_version_option());
+        }
+
         let mut parser = crate::Parser::new(&context);
         parser.parse(args)
             .map(|result| (context, result))

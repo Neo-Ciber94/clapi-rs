@@ -229,9 +229,9 @@ pub fn command_help(_: TokenStream, item: TokenStream) -> TokenStream {
 #[allow(unused_variables, unreachable_code)]
 pub fn command_usage(_: TokenStream, item: TokenStream) -> TokenStream {
     #[cfg(not(nightly))]
-        {
-            panic!("`#[command_usage]` is only available in nightly builds");
-        }
+    {
+        panic!("`#[command_usage]` is only available in nightly builds");
+    }
 
     item
 }

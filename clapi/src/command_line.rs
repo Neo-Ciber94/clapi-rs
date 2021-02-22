@@ -102,11 +102,11 @@ impl CommandLine {
     #[inline]
     pub fn parse_args(&mut self) -> Result<()> {
         // We skip the first element that may be the path of the executable
-        self.parse_with(std::env::args().skip(1))
+        self.parse_from(std::env::args().skip(1))
     }
 
-    /// Pares the given arguments and runs the app.
-    pub fn parse_with<S, I>(&mut self, args: I) -> Result<()>
+    /// Parses the given arguments and runs the app.
+    pub fn parse_from<S, I>(&mut self, args: I) -> Result<()>
         where
             S: Borrow<str>,
             I: IntoIterator<Item = S> {
@@ -185,7 +185,7 @@ impl CommandLine {
         match error.kind() {
             ErrorKind::InvalidArgumentCount | ErrorKind::InvalidArgument(_)
             if self.context.help_option().is_some() || self.context.help_command().is_some() => {
-                let usage_message = self.get_help_message(None, MessageKind::Usage)?;
+                let usage_message = get_help_message(&self.context, None, MessageKind::Usage)?;
                 Err(error.join(&format!("\n{}", &usage_message)))
             },
             ErrorKind::UnexpectedOption(_) if self.suggestions().is_some() => {
@@ -237,7 +237,7 @@ impl CommandLine {
         // * [subcommand] --help
         if let Some(help_option) = self.context.help_option() {
             if parse_result.options().contains(help_option.get_name()) {
-                let arg = parse_result.get_option(help_option.get_name())
+                let arg = parse_result.options().get(help_option.get_name())
                     .unwrap()
                     .get_arg();
 
@@ -258,49 +258,9 @@ impl CommandLine {
     }
 
     fn display_help(&self, args: Option<&Argument>) -> Result<()> {
-        print!("{}", self.get_help_message(args, MessageKind::Help)?);
+        let values = args.map(|s| s.get_values());
+        print!("{}", get_help_message(&self.context, values, MessageKind::Help)?);
         Ok(())
-    }
-
-    fn get_help_message(&self, args: Option<&Argument>, kind: MessageKind) -> Result<String> {
-        fn find_command<'a>(root: &'a Command, children: &[String]) -> Result<&'a Command> {
-            let mut current = root;
-
-            for child_name in children {
-                if let Some(cmd) = current.find_subcommand(child_name) {
-                    current = cmd;
-                } else {
-                    return Err(Error::from(ErrorKind::UnexpectedCommand(
-                        child_name.to_string(),
-                    )));
-                }
-            }
-
-            Ok(current)
-        }
-
-        match args {
-            None => Ok(self.get_help_message_for_command(&self.context.root(), kind)),
-            Some(arg) => {
-                let subcommand = find_command(&self.context.root(), arg.get_values())?;
-                Ok(self.get_help_message_for_command(subcommand, kind))
-            }
-        }
-    }
-
-    fn get_help_message_for_command(&self, command: &Command, kind: MessageKind) -> String {
-        let mut buf = String::new();
-
-        match kind {
-            MessageKind::Help => {
-                (self.context.help().help)(&mut buf, &self.context, command, true)
-            },
-            MessageKind::Usage => {
-                (self.context.help().usage)(&mut buf, &self.context, command, true)
-            }
-        }
-
-        buf
     }
 
     fn display_option_suggestions(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
@@ -372,8 +332,8 @@ impl CommandLine {
     }
 }
 
-// Type help message.
-enum MessageKind {
+/// Type of the help message.
+pub enum MessageKind {
     /// A help message.
     Help,
     /// A usage message.
@@ -394,7 +354,7 @@ fn prefix_option(context: &Context, options: &OptionList, name: &mut String) {
 }
 
 // Checks if the option or any of its children have `version`
-fn contains_version_recursive(command: &Command) -> bool {
+pub(crate) fn contains_version_recursive(command: &Command) -> bool {
     for c in command {
         if contains_version_recursive(c) {
             return true;
@@ -402,6 +362,43 @@ fn contains_version_recursive(command: &Command) -> bool {
     }
 
     command.get_version().is_some()
+}
+
+/// Returns a help message.
+///
+/// # Arguments
+/// * context - the context used for get the `HelpSource`.
+/// * values - the subcommand tree. For example: `["data", "get"]`, if `None` the root command will be used instead.
+/// * kind - the type of help message.
+pub fn get_help_message(context: &Context, values: Option<&[String]>, kind: MessageKind) -> Result<String> {
+    fn find_command<'a>(root: &'a Command, children: &[String]) -> Result<&'a Command> {
+        let mut current = root;
+
+        for child_name in children {
+            if let Some(cmd) = current.find_subcommand(child_name) {
+                current = cmd;
+            } else {
+                return Err(Error::from(ErrorKind::UnexpectedCommand(
+                    child_name.to_string(),
+                )));
+            }
+        }
+
+        Ok(current)
+    }
+
+    let command = match values {
+        None => context.root(),
+        Some(values) => find_command(&context.root(), values)?
+    };
+
+    let mut buf = String::new();
+    match kind {
+        MessageKind::Help => (context.help().help)(&mut buf, &context, command, true),
+        MessageKind::Usage => (context.help().usage)(&mut buf, &context, command, true)
+    }
+
+    Ok(buf)
 }
 
 /// Split the given value `&str` into command-line args.

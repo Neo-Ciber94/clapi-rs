@@ -51,7 +51,7 @@ impl Error {
     ///
     /// let error = Error::from(ErrorKind::InvalidArgument("xyz".to_string()));
     /// let new_error = error.join("expected a number");
-    /// assert_eq!(new_error.to_string(), "invalid argument value for 'xyz': expected a number".to_string())
+    /// assert_eq!(new_error.to_string(), "invalid value for argument 'xyz': expected a number".to_string())
     /// ```
     pub fn join(&self, msg: &str) -> Self {
         let source = match std::error::Error::source(self) {
@@ -130,7 +130,7 @@ impl Display for ErrorKind {
             // invalid value for argument 'number': `a`
             // invalid argument value for 'number: `a`
             // invalid value for 'number': `a`
-            ErrorKind::InvalidArgument(s) => write!(f, "invalid argument value for '{}'", s),
+            ErrorKind::InvalidArgument(s) => write!(f, "invalid value for argument '{}'", s),
             ErrorKind::InvalidArgumentCount => write!(f, "invalid argument count"),
             ErrorKind::InvalidExpression => write!(f, "invalid expression"),
             ErrorKind::UnexpectedOption(s) => write!(f, "unexpected option: '{}'", s),

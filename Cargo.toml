@@ -7,11 +7,5 @@ members=[
     # Internal
     "test_suite",
     "benches",
-    "examples/*"
-]
-
-exclude=[
-    "examples/*",
-    "benches",
-    "test_suite",
+    "examples"
 ]

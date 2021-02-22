@@ -173,7 +173,7 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
             if args.is_empty() {
                 return Err(Error::new(
                     ErrorKind::InvalidExpression,
-                    "no arguments specified",
+                    format!("no arguments specified: `{}`", value),
                 ));
             }
 

@@ -30,8 +30,8 @@ use std::cell::Cell;
 ///     .parse(vec!["--number", "25", "--enable=false"])
 ///     .unwrap();
 ///
-/// assert_eq!(result.get_option_arg("number").unwrap().convert::<i64>().ok(), Some(25));
-/// assert_eq!(result.get_option_arg("enable").unwrap().convert::<bool>().ok(), Some(false));
+/// assert_eq!(result.options().get_arg("number").unwrap().convert::<i64>().ok(), Some(25));
+/// assert_eq!(result.options().get_arg("enable").unwrap().convert::<bool>().ok(), Some(false));
 /// ```
 #[derive(Debug, Clone)]
 pub struct Parser<'a> {

@@ -1,6 +1,6 @@
 use crate::args::ArgumentList;
 use crate::command::Command;
-use crate::option::{CommandOption, OptionList};
+use crate::option::OptionList;
 use crate::Argument;
 
 /// Represents the result of a parse operation
@@ -22,9 +22,30 @@ impl ParseResult {
         }
     }
 
-    /// Returns the executing `Command`.
+    // Returns the executing command.
+    #[doc(hidden)]
     pub fn executing_command(&self) -> &Command {
         &self.command
+    }
+
+    /// Returns the name of the executing command.
+    pub fn command_name(&self) -> &str {
+        self.command.get_name()
+    }
+
+    /// Returns the version of the executing command or `None`.
+    pub fn command_version(&self) -> Option<&str> {
+        self.command.get_version()
+    }
+
+    /// Returns the help message of the executing command or `None`.
+    pub fn command_help(&self) -> Option<&str> {
+        self.command.get_help()
+    }
+
+    /// Returns the usage message of the executing command or `None`.
+    pub fn command_usage(&self) -> Option<&str> {
+        self.command.get_usage()
     }
 
     /// Returns the `Options` passed to the executing command.
@@ -45,46 +66,13 @@ impl ParseResult {
     pub fn args(&self) -> &ArgumentList {
         &self.args
     }
-
-    /// Returns `true` if the executing command contains an option with the given name or alias.
-    pub fn contains_option<S: AsRef<str>>(&self, name_or_alias: S) -> bool {
-        self.options.contains(name_or_alias)
-    }
-
-    /// Returns `true` if the executing command contains an argument with the given name.
-    pub fn contains_arg<S: AsRef<str>>(&self, arg_name: S) -> bool {
-        self.args.contains(arg_name)
-    }
-
-    /// Returns the `Argument` with the given name or `None` if not found.
-    pub fn get_arg<S: AsRef<str>>(&self, arg_name: S) -> Option<&Argument> {
-        self.args.get(arg_name)
-    }
-
-    /// Returns the `CommandOption` with the given name or alias, or `None`.
-    pub fn get_option<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&CommandOption> {
-        self.options.get(name_or_alias)
-    }
-
-    /// Returns the single argument of the option with the given name or alias,
-    /// or `None` if not found or if contains more than one argument.
-    pub fn get_option_arg<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&Argument> {
-        self.get_option(name_or_alias)
-            .map(|o| o.get_arg())
-            .flatten()
-    }
-
-    /// Returns the arguments of the option with the given name or alias, or `None` if not found.
-    pub fn get_option_args<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&ArgumentList> {
-        self.get_option(name_or_alias).map(|o| o.get_args())
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::args::validator::parse_validator;
-    use crate::{split_into_args, Context, Parser, ErrorKind};
+    use crate::{split_into_args, Context, Parser, ErrorKind, CommandOption};
 
     fn parse_with(value: &str, command: Command) -> crate::Result<ParseResult> {
         let context = Context::new(command);
@@ -109,13 +97,13 @@ mod tests {
             );
 
         let result = parse_with("--repeat 2 -c red hello world!", command.clone()).unwrap();
-        assert!(result.contains_option("repeat"));
-        assert!(result.contains_option("r"));
-        assert!(result.contains_option("color"));
-        assert!(result.contains_option("c"));
+        assert!(result.options().contains("repeat"));
+        assert!(result.options().contains("r"));
+        assert!(result.options().contains("color"));
+        assert!(result.options().contains("c"));
         assert_eq!(
             result
-                .get_option("repeat")
+                .options().get("repeat")
                 .unwrap()
                 .get_arg()
                 .unwrap()
@@ -124,7 +112,7 @@ mod tests {
             Some(2)
         );
         assert!(result
-            .get_option("color")
+            .options().get("color")
             .unwrap()
             .get_arg()
             .unwrap()
@@ -167,7 +155,7 @@ mod tests {
         let result = parse_with("set --repeat 1 1 2 3 4", command.clone()).unwrap();
         assert_eq!(result.executing_command().get_name(), "set");
         assert!(result
-            .get_option("repeat")
+            .options().get("repeat")
             .unwrap()
             .get_arg()
             .unwrap()
@@ -208,9 +196,9 @@ mod tests {
             .arg(Argument::zero_or_more("values"));
 
         let result = parse_with("--times 1 -- one two three", command.clone()).unwrap();
-        assert!(result.contains_option("times"));
+        assert!(result.options().contains("times"));
         assert!(result
-            .get_option("times")
+            .options().get("times")
             .unwrap()
             .get_arg()
             .unwrap()
@@ -256,11 +244,11 @@ mod tests {
 
         let result = parse_with("--hour -m -s --enable false", command.clone()).unwrap();
         assert_eq!(result.args().len(), 0);
-        assert!(result.contains_option("hour"));
-        assert!(result.contains_option("minute"));
-        assert!(result.contains_option("second"));
+        assert!(result.options().contains("hour"));
+        assert!(result.options().contains("minute"));
+        assert!(result.options().contains("second"));
         assert!(result
-            .get_option("enable")
+            .options().get("enable")
             .unwrap()
             .get_arg()
             .unwrap()
@@ -281,25 +269,25 @@ mod tests {
 
         let result = parse_with("--replace a A -- 2 10", command.clone()).unwrap();
         assert!(result
-            .get_option("replace")
+            .options().get("replace")
             .unwrap()
             .get_args()
             .get("from")
             .unwrap()
             .contains("a"));
         assert!(result
-            .get_option("replace")
+            .options().get("replace")
             .unwrap()
             .get_args()
             .get("to")
             .unwrap()
             .contains("A"));
         assert_eq!(
-            result.get_arg("min").unwrap().convert::<i64>().ok(),
+            result.args().get("min").unwrap().convert::<i64>().ok(),
             Some(2)
         );
         assert_eq!(
-            result.get_arg("max").unwrap().convert::<i64>().ok(),
+            result.args().get("max").unwrap().convert::<i64>().ok(),
             Some(10)
         );
 
@@ -323,8 +311,8 @@ mod tests {
         let result1 = parse_with("--A --B -- --C", command.clone()).unwrap();
         assert_eq!(result1.options().len(), 2);
         assert_eq!(result1.arg().unwrap().get_values().len(), 1);
-        assert!(result1.contains_option("A"));
-        assert!(result1.contains_option("B"));
+        assert!(result1.options().contains("A"));
+        assert!(result1.options().contains("B"));
         assert!(result1.arg().unwrap().contains("--C"));
 
         let result2 = parse_with("-- --A -b --C", command.clone()).unwrap();
@@ -344,9 +332,9 @@ mod tests {
 
         let result4 = parse_with("--D 1 2 3 -- hello world", command.clone()).unwrap();
         assert_eq!(result4.options().len(), 1);
-        assert!(result4.get_option_arg("D").unwrap().contains("1"));
-        assert!(result4.get_option_arg("D").unwrap().contains("2"));
-        assert!(result4.get_option_arg("D").unwrap().contains("3"));
+        assert!(result4.options().get_arg("D").unwrap().contains("1"));
+        assert!(result4.options().get_arg("D").unwrap().contains("2"));
+        assert!(result4.options().get_arg("D").unwrap().contains("3"));
         assert!(result4.arg().unwrap().contains("hello"));
         assert!(result4.arg().unwrap().contains("world"));
 
@@ -381,7 +369,7 @@ mod tests {
 
         assert_eq!(
             result
-                .get_option("letters")
+                .options().get("letters")
                 .unwrap()
                 .get_arg()
                 .unwrap()
@@ -390,37 +378,37 @@ mod tests {
             5
         );
         assert!(result
-            .get_option("letters")
+            .options().get("letters")
             .unwrap()
             .get_arg()
             .unwrap()
             .contains("a"));
         assert!(result
-            .get_option("letters")
+            .options().get("letters")
             .unwrap()
             .get_arg()
             .unwrap()
             .contains("b"));
         assert!(result
-            .get_option("letters")
+            .options().get("letters")
             .unwrap()
             .get_arg()
             .unwrap()
             .contains("c"));
         assert!(result
-            .get_option("letters")
+            .options().get("letters")
             .unwrap()
             .get_arg()
             .unwrap()
             .contains("d"));
         assert!(result
-            .get_option("letters")
+            .options().get("letters")
             .unwrap()
             .get_arg()
             .unwrap()
             .contains("e"));
         assert!(result
-            .get_option("numbers")
+            .options().get("numbers")
             .unwrap()
             .get_arg()
             .unwrap()
@@ -504,7 +492,7 @@ mod tests {
 
         let res1 = parse_with("--enable true", command.clone()).unwrap();
         assert_eq!(
-            res1.get_option("enable")
+            res1.options().get("enable")
                 .unwrap()
                 .get_arg()
                 .unwrap()
@@ -514,7 +502,7 @@ mod tests {
 
         let res2 = parse_with("--enable false", command.clone()).unwrap();
         assert_eq!(
-            res2.get_option("enable")
+            res2.options().get("enable")
                 .unwrap()
                 .get_arg()
                 .unwrap()
@@ -523,10 +511,10 @@ mod tests {
         );
 
         let res3 = parse_with("--enable", command.clone()).unwrap();
-        assert!(res3.contains_option("enable"));
+        assert!(res3.options().contains("enable"));
 
         let res4 = parse_with("", command.clone()).unwrap();
-        assert!(!res4.contains_option("enable"));
+        assert!(!res4.options().contains("enable"));
     }
 
     #[test]
@@ -560,24 +548,24 @@ mod tests {
                 .arg(Argument::with_name("end")));
 
         let result1 = parse_with("--range 22", command.clone()).unwrap();
-        assert!(result1.get_option_args("range")
+        assert!(result1.options().get_args("range")
             .unwrap()
             .get("start")
             .unwrap()
             .contains("1"));
-        assert!(result1.get_option_args("range")
+        assert!(result1.options().get_args("range")
             .unwrap()
             .get("end")
             .unwrap()
             .contains("22"));
 
         let result2 = parse_with("--range 10 25", command.clone()).unwrap();
-        assert!(result2.get_option_args("range")
+        assert!(result2.options().get_args("range")
             .unwrap()
             .get("start")
             .unwrap()
             .contains("10"));
-        assert!(result2.get_option_args("range")
+        assert!(result2.options().get_args("range")
             .unwrap()
             .get("end")
             .unwrap()
@@ -601,13 +589,13 @@ mod tests {
                 .arg(Argument::one_or_more("values")));
 
         let result1 = parse_with("--values 5 6", command.clone()).unwrap();
-        assert!(result1.get_option_arg("values").unwrap().contains("5"));
-        assert!(result1.get_option_arg("values").unwrap().contains("6"));
+        assert!(result1.options().get_arg("values").unwrap().contains("5"));
+        assert!(result1.options().get_arg("values").unwrap().contains("6"));
 
         let result2 = parse_with("--values 1 2 --values 3 4", command.clone()).unwrap();
-        assert!(result2.get_option_arg("values").unwrap().contains("1"));
-        assert!(result2.get_option_arg("values").unwrap().contains("2"));
-        assert!(result2.get_option_arg("values").unwrap().contains("3"));
-        assert!(result2.get_option_arg("values").unwrap().contains("4"));
+        assert!(result2.options().get_arg("values").unwrap().contains("1"));
+        assert!(result2.options().get_arg("values").unwrap().contains("2"));
+        assert!(result2.options().get_arg("values").unwrap().contains("3"));
+        assert!(result2.options().get_arg("values").unwrap().contains("4"));
     }
 }
