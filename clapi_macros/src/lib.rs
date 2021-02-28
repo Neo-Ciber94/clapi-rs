@@ -5,7 +5,7 @@ extern crate proc_macro;
 
 use crate::command::CommandAttrData;
 use proc_macro::TokenStream;
-use syn::export::ToTokens;
+use quote::ToTokens;
 use syn::{AttributeArgs, ItemFn};
 
 mod ext;

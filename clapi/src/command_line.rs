@@ -7,7 +7,6 @@ use crate::suggestion::SuggestionSource;
 use crate::{Argument, ParseResult, CommandOption, OptionList};
 use std::borrow::Borrow;
 use std::fmt::Debug;
-use std::result::Result as StdResult;
 use crate::help::HelpSource;
 
 /// Represents a command-line app.
@@ -96,6 +95,48 @@ impl CommandLine {
         self
     }
 
+    /// Parse the program arguments get the `ParseResult`
+    /// after handling any help, version or suggestion messages.
+    pub fn parse_args_and_get(&mut self) -> Result<ParseResult> {
+        self.parse_from_and_get(std::env::args().skip(1))
+    }
+
+    /// Parse given arguments get the `ParseResult`
+    /// after handling any help, version or suggestion messages.
+    pub fn parse_from_and_get<S, I>(&mut self, args: I) -> Result<ParseResult>
+        where
+            S: Borrow<str>,
+            I: IntoIterator<Item = S> {
+        let mut parser = Parser::new(&self.context);
+        let result = parser.parse(args);
+        let parse_result = match result {
+            Ok(r) => r,
+            Err(error) => {
+                return if let Err(e) = self.handle_error(&parser, error) {
+                    Err(e)
+                } else {
+                    unreachable!()
+                }
+            },
+        };
+
+        // Checks if the command requires to display help
+        if self.requires_help(&parse_result) {
+            match self.handle_help(&parse_result) {
+                Ok(_) => Ok(parse_result),
+                Err(e) => Err(e)
+            }
+        }
+        // Checks if the command requires to display the version
+        else if self.requires_version(&parse_result) {
+            self.show_version(&parse_result);
+            return Ok(parse_result);
+        }
+        else {
+            Ok(parse_result)
+        }
+    }
+
     /// Parse the program arguments and runs the app.
     ///
     /// This is equivalent to `cmd_line.exec(std::env::args().skip(1))`.
@@ -110,23 +151,8 @@ impl CommandLine {
         where
             S: Borrow<str>,
             I: IntoIterator<Item = S> {
-        let mut parser = Parser::new(&self.context);
-        let result = parser.parse(args);
-        let parse_result = match result {
-            Ok(r) => r,
-            Err(error) => return self.handle_error(&parser, error),
-        };
-
-        // Checks if the command requires to display help
-        if self.requires_help(Ok(&parse_result)) {
-            return self.handle_help(&parse_result);
-        }
-
-        // Checks if the command requires to display the version
-        if self.requires_version(&parse_result) {
-            self.show_version(&parse_result);
-            return Ok(());
-        }
+        // Parse the arguments and get the result
+        let parse_result = self.parse_from_and_get(args)?;
 
         // We borrow the value from the Option to avoid create a temporary
         let handler = parse_result.executing_command().get_handler();
@@ -180,13 +206,11 @@ impl CommandLine {
     }
 
     fn handle_error(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
-        // todo: Returns the help message as a `Err` or `Ok`?
         // `Err` was decided initially due using an invalid `command` or `argument` is an error
         match error.kind() {
             ErrorKind::InvalidArgumentCount | ErrorKind::InvalidArgument(_)
             if self.context.help_option().is_some() || self.context.help_command().is_some() => {
-                let usage_message = get_help_message(&self.context, None, MessageKind::Usage)?;
-                Err(error.join(&format!("\n{}", &usage_message)))
+                Err(error.with_message(self.get_help_message(None, MessageKind::Usage)?))
             },
             ErrorKind::UnexpectedOption(_) if self.suggestions().is_some() => {
                 self.display_option_suggestions(parser, error)
@@ -203,7 +227,7 @@ impl CommandLine {
     // Checks if the `ParseResult` or `Parser` requires to show a help message.
     // We use `std::result::Result` where `Ok` is a completed parse operation
     // and `Err` is a failed one.
-    fn requires_help(&self, result: StdResult<&ParseResult, &Parser<'_>>) -> bool {
+    fn requires_help(&self, result: &ParseResult) -> bool {
         let context = &self.context;
 
         if context.help_option().is_none() && context.help_command().is_none() {
@@ -211,21 +235,14 @@ impl CommandLine {
         }
 
         if let Some(help_option) = self.context.help_option() {
-            let options = match result {
-                Ok(parse_result) => parse_result.options(),
-                Err(parser) => parser.options().unwrap()
-            };
-
+            let options = result.options();
             if options.contains(help_option.get_name()) {
                 return true;
             }
         }
 
         if let Some(help_command) = self.context.help_command() {
-            return match result {
-                Ok(parse_result) => help_command.get_name() == parse_result.executing_command().get_name(),
-                Err(parser) => help_command.get_name() == parser.command().unwrap().get_name()
-            }
+            return help_command.get_name() == result.command_name();
         }
 
         false
@@ -259,8 +276,40 @@ impl CommandLine {
 
     fn display_help(&self, args: Option<&Argument>) -> Result<()> {
         let values = args.map(|s| s.get_values());
-        print!("{}", get_help_message(&self.context, values, MessageKind::Help)?);
+        print!("{}", self.get_help_message(values, MessageKind::Help)?);
         Ok(())
+    }
+
+    fn get_help_message(&self, values: Option<&[String]>, kind: MessageKind) -> Result<String> {
+        fn find_command<'a>(root: &'a Command, children: &[String]) -> Result<&'a Command> {
+            let mut current = root;
+
+            for child_name in children {
+                if let Some(cmd) = current.find_subcommand(child_name) {
+                    current = cmd;
+                } else {
+                    return Err(Error::from(ErrorKind::UnexpectedCommand(
+                        child_name.to_string(),
+                    )));
+                }
+            }
+
+            Ok(current)
+        }
+
+        let context = &self.context;
+        let command = match values {
+            None => context.root(),
+            Some(values) => find_command(&context.root(), values)?
+        };
+
+        let mut buf = String::new();
+        match kind {
+            MessageKind::Help => (context.help().help)(&mut buf, &context, command, true),
+            MessageKind::Usage => (context.help().usage)(&mut buf, &context, command, true)
+        }
+
+        Ok(buf)
     }
 
     fn display_option_suggestions(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
@@ -297,7 +346,7 @@ impl CommandLine {
 
         // Returns the suggestion message
         match msg {
-            Some(ref msg) => Err(error.join(msg)),
+            Some(ref msg) => Err(error.with_message(msg)),
             None => Err(error)
         }
     }
@@ -326,14 +375,14 @@ impl CommandLine {
 
         // Returns the suggestion message
         match msg {
-            Some(ref msg) => Err(error.join(msg)),
+            Some(ref msg) => Err(error.with_message(msg)),
             None => Err(error)
         }
     }
 }
 
 /// Type of the help message.
-pub enum MessageKind {
+enum MessageKind {
     /// A help message.
     Help,
     /// A usage message.
@@ -362,43 +411,6 @@ pub(crate) fn contains_version_recursive(command: &Command) -> bool {
     }
 
     command.get_version().is_some()
-}
-
-/// Returns a help message.
-///
-/// # Arguments
-/// * context - the context used for get the `HelpSource`.
-/// * values - the subcommand tree. For example: `["data", "get"]`, if `None` the root command will be used instead.
-/// * kind - the type of help message.
-pub fn get_help_message(context: &Context, values: Option<&[String]>, kind: MessageKind) -> Result<String> {
-    fn find_command<'a>(root: &'a Command, children: &[String]) -> Result<&'a Command> {
-        let mut current = root;
-
-        for child_name in children {
-            if let Some(cmd) = current.find_subcommand(child_name) {
-                current = cmd;
-            } else {
-                return Err(Error::from(ErrorKind::UnexpectedCommand(
-                    child_name.to_string(),
-                )));
-            }
-        }
-
-        Ok(current)
-    }
-
-    let command = match values {
-        None => context.root(),
-        Some(values) => find_command(&context.root(), values)?
-    };
-
-    let mut buf = String::new();
-    match kind {
-        MessageKind::Help => (context.help().help)(&mut buf, &context, command, true),
-        MessageKind::Usage => (context.help().usage)(&mut buf, &context, command, true)
-    }
-
-    Ok(buf)
 }
 
 /// Split the given value `&str` into command-line args.

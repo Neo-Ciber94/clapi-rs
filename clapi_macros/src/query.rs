@@ -1,9 +1,9 @@
 use syn::{Item, ItemMod, UseTree, File};
 use std::path::{Path, PathBuf};
-use syn::export::{ToTokens, Formatter};
 use syn::visit::Visit;
 use crate::utils::NamePath;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
+use quote::ToTokens;
 
 // A result item of a query.
 pub struct QueryItem<T>{

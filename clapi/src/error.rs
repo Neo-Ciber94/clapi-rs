@@ -28,10 +28,13 @@ impl Error {
     /// ```
     pub fn new<E: Into<AnyError>>(kind: ErrorKind, error: E) -> Self {
         Error {
-            inner: Custom(CustomError {
-                kind,
-                error: error.into(),
-            }),
+            inner: Custom(
+                CustomError::new(
+                    kind,
+                    error.into(),
+                    None
+                )
+            ),
         }
     }
 
@@ -43,23 +46,37 @@ impl Error {
         }
     }
 
-    /// Returns a copy of this `Error` adding a message at the end.
+    /// Returns this error with the given message.
     ///
     /// # Example
     /// ```
     /// use clapi::{Error, ErrorKind};
     ///
     /// let error = Error::from(ErrorKind::InvalidArgument("xyz".to_string()));
-    /// let new_error = error.join("expected a number");
+    /// let new_error = error.with_message("expected a number");
     /// assert_eq!(new_error.to_string(), "invalid value for argument 'xyz': expected a number".to_string())
     /// ```
-    pub fn join(&self, msg: &str) -> Self {
-        let source = match std::error::Error::source(self) {
-            Some(s) => s.to_string(),
-            None => String::new()
-        };
+    pub fn with_message<S: Into<String>>(&self, msg: S) -> Self {
+        match &self.inner {
+            Simple(kind) => {
+                Error::new(kind.clone(), msg.into())
+            }
+            Custom(custom) => {
+                Error {
+                    inner: Custom(CustomError::new(
+                        custom.kind.clone(),
+                        custom.error.to_string().into(),
+                        Some(msg.into())
+                    ))
+                }
+            }
+        }
+    }
 
-        Error::new(self.kind().clone(), format!("{}{}", source, msg))
+    /// Prints this error in the `stderr` and exit this process with status 1.
+    pub fn exit(self) -> ! {
+        eprintln!("Error: {}", self);
+        std::process::exit(1)
     }
 }
 
@@ -76,14 +93,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.inner {
             Inner::Simple(kind) => Display::fmt(kind, f),
-            //Inner::Custom(custom) => Display::fmt(&custom.error, f),
-            Inner::Custom(custom) => {
-                if matches!(custom.kind, ErrorKind::Other){
-                    write!(f, "{}", custom.error)
-                } else {
-                    write!(f, "{}: {}", custom.kind, custom.error)
-                }
-            }
+            Inner::Custom(custom) =>  Display::fmt(custom, f)
         }
     }
 }
@@ -127,16 +137,13 @@ pub enum ErrorKind {
 impl Display for ErrorKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            // invalid value for argument 'number': `a`
-            // invalid argument value for 'number: `a`
-            // invalid value for 'number': `a`
             ErrorKind::InvalidArgument(s) => write!(f, "invalid value for argument '{}'", s),
             ErrorKind::InvalidArgumentCount => write!(f, "invalid argument count"),
             ErrorKind::InvalidExpression => write!(f, "invalid expression"),
             ErrorKind::UnexpectedOption(s) => write!(f, "unexpected option: '{}'", s),
             ErrorKind::UnexpectedCommand(s) => write!(f, "unexpected command: '{}'", s),
             ErrorKind::MissingOption(s) => write!(f, "'{}' is required", s),
-            ErrorKind::Other => write!(f, "unknown error"),
+            ErrorKind::Other => write!(f, "unexpected error"),
             ErrorKind::FallthroughHelp => panic!("`ErrorKind::FallthroughHelp` should not be used as an error")
         }
     }
@@ -151,4 +158,25 @@ impl Debug for ErrorKind {
 struct CustomError {
     kind: ErrorKind,
     error: AnyError,
+    info: Option<String>
+}
+
+impl CustomError {
+    pub fn new(kind: ErrorKind, error: AnyError, info: Option<String>) -> Self {
+        CustomError {
+            kind,
+            error,
+            info
+        }
+    }
+}
+
+impl Display for CustomError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(info) = &self.info {
+            write!(f, "{}: {}\n{}", self.kind, self.error, info)
+        } else {
+            write!(f, "{}: {}", self.kind, self.error)
+        }
+    }
 }

@@ -361,7 +361,7 @@ impl Argument {
     ///         .err()
     ///         .unwrap();
     ///
-    /// assert_eq!(error.to_string(), "invalid value for argument 'number': expected a number greater than 0".to_owned());
+    /// assert!(error.to_string().contains("invalid value for argument 'number': expected a number greater than 0"));
     /// ```
     pub fn validation_error<S: Into<String>>(mut self, error: S) -> Self {
         self.validation_error = Some(error.into());

@@ -8,7 +8,6 @@ use crate::TypeExt;
 use proc_macro2::TokenStream;
 use quote::*;
 use std::path::PathBuf;
-use syn::export::ToTokens;
 use syn::{AttrStyle, Attribute, AttributeArgs, Item, ItemFn, PatType, ReturnType, Stmt, Type};
 
 /// Tokens for either `command` or `subcommand` attribute.
@@ -347,11 +346,11 @@ impl CommandAttrData {
             let items = self.get_body_items();
             let error_handling = match ret {
                 ReturnType::Type(_, ty) if is_clapi_result_type(ty) => quote! {},
-                _ => quote! { .expect("an error occurred"); },
+                _ => quote! { .map_err(|e| e.exit()).unwrap(); },
             };
-            let set_help = {
+            let use_help = {
                 if self.command_help.is_none() && self.command_usage.is_none() {
-                    None
+                    quote! { .use_default_help() }
                 } else {
                     let command_help = self
                         .command_help
@@ -365,14 +364,14 @@ impl CommandAttrData {
                         .map(|n| n.to_string().parse::<TokenStream>().unwrap())
                         .unwrap_or_else(|| quote! { clapi::help::command_usage });
 
-                    Some(quote! {
+                    quote! {
                        .use_help({
                             clapi::help::HelpSource {
                                 help: #command_help,
                                 usage: #command_usage
                             }
                        })
-                    })
+                    }
                 }
             };
 
@@ -384,9 +383,8 @@ impl CommandAttrData {
 
                     let command = #command ;
                     clapi::CommandLine::new(command)
-                        .use_default_help()
+                        #use_help
                         .use_default_suggestions()
-                        #set_help
                         .parse_args()
                         #error_handling
                 }
@@ -661,8 +659,8 @@ mod imp {
     use crate::{consts, AttrQuery};
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, Ordering};
-    use syn::export::ToTokens;
     use syn::{AttrStyle, Attribute, AttributeArgs, File, FnArg, Item, ItemFn, PatType, Stmt};
+    use quote::ToTokens;
 
     // Constructs a new `CommandAttrData` from a `ItemFn`
     pub fn command_from_fn_with_name(

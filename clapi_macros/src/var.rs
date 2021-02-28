@@ -1,10 +1,9 @@
 use crate::TypeExt;
 use proc_macro2::TokenStream;
 use quote::*;
-use syn::export::fmt::Display;
-use syn::export::{Formatter, ToTokens};
 use syn::spanned::Spanned;
 use syn::{GenericArgument, Pat, PatType, Type, Expr};
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone)]
 pub struct ArgLocalVar {

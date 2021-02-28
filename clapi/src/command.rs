@@ -3,7 +3,7 @@ use crate::args::{Argument, ArgumentList};
 use crate::error::Result;
 use crate::option::{CommandOption, OptionList};
 use crate::utils::debug_option;
-use crate::{CommandLine, ParseResult, Context};
+use crate::{CommandLine, ParseResult};
 use std::borrow::Borrow;
 use std::cell::{RefCell, RefMut};
 use std::fmt::{Debug, Formatter};
@@ -368,15 +368,16 @@ impl Command {
     ///
     /// # Example
     /// ```rust
-    /// use clapi::Command;
+    /// use clapi::{Command, CommandLine};
     ///
-    /// Command::new("test")
+    /// let command = Command::new("test")
     ///     .handler(|_options, _args| {
     ///         println!("This is a test");
     ///         Ok(())
-    /// })
-    /// .into_command_line()
-    /// .parse_args();
+    /// });
+    ///
+    /// let mut cli = CommandLine::new(command);
+    /// cli.parse_args();
     /// ```
     pub fn handler<F>(mut self, f: F) -> Self
     where
@@ -443,37 +444,6 @@ impl Command {
     //             Utility Parse Methods            //
     //////////////////////////////////////////////////
 
-    /// Constructs a `CommandLine` using this command.
-    ///
-    /// # Example:
-    /// ```no_run
-    /// use clapi::{Command, Argument, CommandOption};
-    /// use clapi::validator::parse_validator;
-    ///
-    /// let cli = Command::root()
-    ///     .arg(Argument::one_or_more("values").validator(parse_validator::<i64>()))
-    ///     .option(CommandOption::new("negate")
-    ///         .arg(Argument::new().validator(parse_validator::<bool>())))
-    ///         .handler(|opts, args|{
-    ///             let negate = opts.get_arg("negate").unwrap().convert::<bool>()?;
-    ///             let total = args.convert_all::<i64>("values")?.iter().sum::<i64>();
-    ///             if negate {
-    ///                     println!("{}", -total);
-    ///                 } else {
-    ///                     println!("{}", total);
-    ///                 }
-    ///             Ok(())
-    ///         })
-    ///     .into_command_line()
-    ///     .use_default_suggestions()
-    ///     .use_default_suggestions()
-    ///     .parse_args();
-    /// ```
-    #[inline]
-    pub fn into_command_line(self) -> CommandLine {
-        CommandLine::new(self)
-    }
-
     /// Parse the arguments from `std::env::args` using this command and returns the `ParseResult`.
     ///
     /// # Example:
@@ -490,13 +460,10 @@ impl Command {
     /// ```
     #[inline]
     pub fn parse_args(self) -> Result<ParseResult> {
-        self.parse_args_and_get_context().map(|(_, result)| result)
-    }
-
-    /// Parse the arguments from `std::env::args` using this command and returns the `ParseResult` and the context used.
-    #[inline]
-    pub fn parse_args_and_get_context(self) -> Result<(Context, ParseResult)> {
-        self.parse_from_and_get_context(std::env::args().skip(1))
+        CommandLine::new(self)
+            .use_default_help()
+            .use_default_suggestions()
+            .parse_args_and_get()
     }
 
     /// Parse the arguments using this command and returns the `ParseResult`.
@@ -518,31 +485,13 @@ impl Command {
     /// ```
     #[inline]
     pub fn parse_from<I, S>(self, args: I) -> Result<ParseResult>
-    where
-        I: IntoIterator<Item = S>,
-        S: Borrow<str>,
-    {
-        self.parse_from_and_get_context(args).map(|(_, result)| result)
-    }
-
-    /// Parse the arguments using this command and returns the `ParseResult` and the `Context` used.
-    #[inline]
-    pub fn parse_from_and_get_context<I, S>(self, args: I) -> Result<(Context, ParseResult)>
         where
             I: IntoIterator<Item = S>,
-            S: Borrow<str>,
-    {
-        let mut context = Context::new(self);
-        context.set_help_command(crate::default_help_command());
-        context.set_help_option(crate::default_help_option());
-
-        if crate::command_line::contains_version_recursive(context.root()){
-            context.set_version_option(crate::default_version_option());
-        }
-
-        let mut parser = crate::Parser::new(&context);
-        parser.parse(args)
-            .map(|result| (context, result))
+            S: Borrow<str> {
+        CommandLine::new(self)
+            .use_default_help()
+            .use_default_suggestions()
+            .parse_from_and_get(args)
     }
 }
 

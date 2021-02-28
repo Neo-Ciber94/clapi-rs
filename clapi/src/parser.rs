@@ -93,9 +93,9 @@ impl<'a> Parser<'a> {
     }
 
     // Returns the options if the parse failed, otherwise `None`
-    pub(crate) fn options(&self) -> Option<&OptionList> {
-        self.options.as_ref()
-    }
+    // pub(crate) fn options(&self) -> Option<&OptionList> {
+    //     self.options.as_ref()
+    // }
 
     // Returns the arguments if the parse failed, otherwise `None`
     // pub(crate) fn args(&self) -> Option<&ArgumentList> {
@@ -556,27 +556,27 @@ impl Cursor {
     }
 
     #[inline]
-    pub fn tokens(&self) -> &[Token] {
+    fn tokens(&self) -> &[Token] {
         self.tokens.as_slice()
     }
 
     #[inline]
-    pub fn position(&self) -> usize {
+    fn position(&self) -> usize {
         self.index.get()
     }
 
     #[inline]
-    pub fn remaining(&self) -> &[Token] {
+    fn remaining(&self) -> &[Token] {
         &self.tokens[self.index.get()..]
     }
 
     #[inline]
-    pub fn move_to_end(&self) {
+    fn move_to_end(&self) {
         self.index.set(self.tokens.len())
     }
 
     #[inline]
-    pub fn next(&self) -> Option<&Token> {
+    fn next(&self) -> Option<&Token> {
         let token = self.current();
         if token.is_some() {
             self.index.set(self.index.get() + 1);
@@ -585,7 +585,7 @@ impl Cursor {
     }
 
     #[inline]
-    pub fn peek(&self) -> Option<&Token> {
+    fn peek(&self) -> Option<&Token> {
         self.current()
     }
 

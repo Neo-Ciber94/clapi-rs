@@ -1,9 +1,8 @@
 use crate::macro_attribute::{NameValue, NameValueAttribute, NameValueError, Value};
-use std::fmt::{Display, Write};
+use std::fmt::{Display, Write, Formatter};
 use std::iter::Peekable;
 use std::ops::Index;
 use std::slice::SliceIndex;
-use syn::export::Formatter;
 use syn::{
     AttrStyle, Attribute, AttributeArgs, Lit, Meta, MetaList, MetaNameValue, NestedMeta, Path,
 };

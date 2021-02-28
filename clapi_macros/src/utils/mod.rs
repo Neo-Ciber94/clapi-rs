@@ -3,14 +3,13 @@ pub use name_path::NamePath;
 
 use syn::{ItemFn, Attribute};
 use syn::parse_quote::ParseQuote;
+use quote::ToTokens;
 
 #[macro_use]
 mod macros;
 
 /// Returns a formatted `PatType` as `x : i32`.
 pub fn pat_type_to_string(pat_type: &syn::PatType) -> String {
-    use syn::export::ToTokens;
-
     let arg_name = pat_type.pat.to_token_stream().to_string();
     let type_name = pat_type
         .ty
