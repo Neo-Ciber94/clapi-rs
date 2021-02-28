@@ -10,7 +10,6 @@ edition = "2018"
 macros = ["clapi_macros"]
 
 [dependencies]
-linked_hash_set = "0.1.4"
 clapi_macros = { optional=true, path="../clapi_macros" }
 clapi_internal = { path= "../clapi_internal" }
 serde = { version="1.0.118", features=["derive"], optional=true }

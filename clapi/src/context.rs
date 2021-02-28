@@ -1,6 +1,5 @@
 use crate::command::Command;
 use crate::option::CommandOption;
-use linked_hash_set::LinkedHashSet;
 use crate::suggestion::SuggestionSource;
 use std::fmt::{Debug, Formatter};
 use crate::utils::debug_option;
@@ -39,9 +38,9 @@ pub struct Context {
     root: Command,
     suggestions: Option<SuggestionSource>,
     help: HelpSource,
-    name_prefixes: LinkedHashSet<String>,
-    alias_prefixes: LinkedHashSet<String>,
-    assign_operators: LinkedHashSet<char>,
+    name_prefixes: Vec<String>,
+    alias_prefixes: Vec<String>,
+    assign_operators: Vec<char>,
     delimiter: char,
     help_option: Option<CommandOption>,
     help_command: Option<Command>,
@@ -181,12 +180,12 @@ impl Context {
 
     /// Returns `true` if the value is a name prefix.
     pub fn is_name_prefix(&self, value: &str) -> bool {
-        self.name_prefixes.contains(value)
+        self.name_prefixes.iter().any(|s| s == value)
     }
 
     /// Returns `true` if the value is an alias prefix.
     pub fn is_alias_prefix(&self, value: &str) -> bool {
-        self.alias_prefixes.contains(value)
+        self.alias_prefixes.iter().any(|s| s == value)
     }
 
     /// Removes the prefix from the given option
@@ -221,7 +220,7 @@ impl Debug for Context {
 /// An iterator over option prefixes.
 #[derive(Debug, Clone)]
 pub struct Prefixes<'a> {
-    iter: linked_hash_set::Iter<'a, String>
+    iter: std::slice::Iter<'a, String>
 }
 
 impl<'a> Iterator for Prefixes<'a> {
@@ -244,9 +243,9 @@ pub struct ContextBuilder {
     root: Command,
     suggestions: Option<SuggestionSource>,
     help: Option<HelpSource>,
-    name_prefixes: LinkedHashSet<String>,
-    alias_prefixes: LinkedHashSet<String>,
-    assign_operators: LinkedHashSet<char>,
+    name_prefixes: Vec<String>,
+    alias_prefixes: Vec<String>,
+    assign_operators: Vec<char>,
     delimiter: Option<char>,
     help_option: Option<CommandOption>,
     help_command: Option<Command>,
@@ -276,7 +275,7 @@ impl ContextBuilder {
     pub fn name_prefix<S: Into<String>>(mut self, prefix: S) -> Self {
         let prefix = prefix.into();
         assert_valid_symbol("prefixes", prefix.as_str());
-        self.name_prefixes.insert(prefix);
+        self.name_prefixes.push(prefix);
         self
     }
 
@@ -284,7 +283,7 @@ impl ContextBuilder {
     pub fn alias_prefix<S: Into<String>>(mut self, prefix: S) -> Self {
         let prefix = prefix.into();
         assert_valid_symbol("prefixes", prefix.as_str());
-        self.alias_prefixes.insert(prefix);
+        self.alias_prefixes.push(prefix);
         self
     }
 
@@ -292,7 +291,7 @@ impl ContextBuilder {
     pub fn assign_operator(mut self, value: char) -> Self {
         // A char is always 4 bytes
         assert_valid_symbol("assign chars", value.encode_utf8(&mut [0;4]));
-        self.assign_operators.insert(value);
+        self.assign_operators.push(value);
         self
     }
 
@@ -359,7 +358,7 @@ impl ContextBuilder {
             // Option name prefixes
             name_prefixes: {
                 if self.name_prefixes.is_empty() {
-                    self.name_prefixes.insert("--".to_owned());
+                    self.name_prefixes.push("--".to_owned());
                 }
                 self.name_prefixes
             },
@@ -367,7 +366,7 @@ impl ContextBuilder {
             // Option aliases prefixes
             alias_prefixes: {
                 if self.alias_prefixes.is_empty() {
-                    self.alias_prefixes.insert("-".to_owned());
+                    self.alias_prefixes.push("-".to_owned());
                 }
                 self.alias_prefixes
             },
@@ -375,7 +374,7 @@ impl ContextBuilder {
             // Option argument assign
             assign_operators: {
                 if self.assign_operators.is_empty() {
-                    self.assign_operators.insert('=');
+                    self.assign_operators.push('=');
                 }
                 self.assign_operators
             },

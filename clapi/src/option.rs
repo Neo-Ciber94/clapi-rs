@@ -1,6 +1,5 @@
 #![allow(clippy::len_zero)]
 use crate::args::{Argument, ArgumentList};
-use linked_hash_set::LinkedHashSet;
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::ops::Index;
@@ -11,7 +10,7 @@ use crate::{Error, ErrorKind, Result};
 #[derive(Debug, Clone)]
 pub struct CommandOption {
     name: String,
-    aliases: LinkedHashSet<String>,
+    aliases: Vec<String>,
     description: Option<String>,
     args: ArgumentList,
     is_required: bool,
@@ -43,7 +42,7 @@ impl CommandOption {
 
         CommandOption {
             name,
-            aliases: LinkedHashSet::new(),
+            aliases: Vec::new(),
             description: None,
             args: ArgumentList::new(),
             is_required: false,
@@ -111,7 +110,7 @@ impl CommandOption {
 
     /// Returns `true` if option contains the specified alias.
     pub fn has_alias<S: AsRef<str>>(&self, alias: S) -> bool {
-        self.aliases.contains(alias.as_ref())
+        self.aliases.iter().any(|s| s == alias.as_ref())
     }
 
     /// Adds a new alias to this option.
@@ -133,7 +132,7 @@ impl CommandOption {
     pub fn alias<S: Into<String>>(mut self, alias: S) -> Self {
         let alias = alias.into();
         assert!(!alias.is_empty(), "option `alias` cannot be empty");
-        self.aliases.insert(alias);
+        self.aliases.push(alias);
         self
     }
 
@@ -332,7 +331,7 @@ impl Hash for CommandOption {
 /// An iterator over the aliases of `CommandOption`.
 #[derive(Debug, Clone)]
 pub struct Aliases<'a> {
-    iter: linked_hash_set::Iter<'a, String>,
+    iter: std::slice::Iter<'a, String>
 }
 
 impl<'a> Iterator for Aliases<'a> {
@@ -352,14 +351,14 @@ impl<'a> ExactSizeIterator for Aliases<'a> {
 /// Represents a collection of `CommandOption`s.
 #[derive(Default, Debug, Clone, Eq, PartialEq)]
 pub struct OptionList {
-    inner: LinkedHashSet<CommandOption>,
+    inner: Vec<CommandOption>,
 }
 
 impl OptionList {
     /// Constructs a new empty `Options`.
     pub fn new() -> Self {
         OptionList {
-            inner: LinkedHashSet::new(),
+            inner: vec![],
         }
     }
 
@@ -372,24 +371,25 @@ impl OptionList {
             return Err(option);
         }
 
-        self.inner.insert_if_absent(option);
+        self.inner.push(option);
         Ok(())
     }
 
     /// Adds the specified `CommandOption` or replace it it already exists,
     pub fn add_or_replace(&mut self, option: CommandOption) {
         if self.inner.contains(&option) {
-            self.inner.remove(&option);
+            let pos = self.inner.iter().position(|o| o.get_name() == option.get_name()).unwrap();
+            self.inner[pos] = option;
+        } else {
+            self.add(option).unwrap();
         }
-
-        self.inner.insert(option);
     }
 
     /// Returns the `CommandOption` with the given name or alias or `None`
     /// if not found.
     pub fn get<S: AsRef<str>>(&self, name_or_alias: S) -> Option<&CommandOption> {
         self.inner.iter().find(|o| {
-            o.name == name_or_alias.as_ref() || o.aliases.contains(name_or_alias.as_ref())
+            o.name == name_or_alias.as_ref() || o.get_aliases().any(|s| s == name_or_alias.as_ref())
         })
     }
 
@@ -497,12 +497,12 @@ impl OptionList {
 /// An iterator over the `CommandOption`s of an option list.
 #[derive(Debug, Clone)]
 pub struct Iter<'a> {
-    iter: linked_hash_set::Iter<'a, CommandOption>,
+    iter: std::slice::Iter<'a, CommandOption>,
 }
 
 /// An owning iterator over the `CommandOption`s of an option list.
 pub struct IntoIter {
-    iter: linked_hash_set::IntoIter<CommandOption>,
+    iter: std::vec::IntoIter<CommandOption>
 }
 
 impl<'a> Iterator for Iter<'a> {

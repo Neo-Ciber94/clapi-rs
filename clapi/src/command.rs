@@ -405,8 +405,6 @@ impl Command {
 
     pub(crate) fn add_command(&mut self, command: Command) {
         if self.subcommands.contains(&command) {
-            // command `app` already contains a subcommand named: `get`
-            // command `app` already contains a subcommand with name `get`
             panic!(
                 "command `{}` already contains a subcommand named: `{}`",
                 self.name,
@@ -620,11 +618,15 @@ mod tests {
                 .subcommand(Command::new("first")));
 
         assert_eq!(cmd.get_subcommands().count(), 2);
-        assert_eq!(cmd.find_subcommand("set"), Some(&Command::new("set")));
-        assert_eq!(cmd.find_subcommand("get"), Some(&Command::new("get")));
+        assert_eq!(cmd.find_subcommand("set").unwrap().get_name(), "set");
+        assert_eq!(cmd.find_subcommand("get").unwrap().get_name(), "get");
         assert_eq!(
-            cmd.find_subcommand("get").unwrap().find_subcommand("first"),
-            Some(&Command::new("first"))
+            cmd.find_subcommand("get")
+                .unwrap()
+                .find_subcommand("first")
+                .unwrap()
+                .get_name(),
+            "first"
         );
     }
 

@@ -1,7 +1,6 @@
 #![allow(clippy::len_zero)]
 use crate::error::Result;
 use crate::{ArgCount, Error, ErrorKind};
-use linked_hash_set::LinkedHashSet;
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -805,7 +804,7 @@ where
 
 #[derive(Default, Debug, Clone, Eq, PartialEq)]
 pub struct ArgumentList {
-    inner: LinkedHashSet<Argument>,
+    inner: Vec<Argument>,
 }
 
 impl ArgumentList {
@@ -835,7 +834,7 @@ impl ArgumentList {
         if self.inner.contains(&arg) {
             Err(arg)
         } else {
-            self.inner.insert(arg);
+            self.inner.push(arg);
 
             // The list is invalid if:
             // - If there is more than 1 argument with default values
@@ -1025,12 +1024,12 @@ impl ArgumentList {
 /// An iterator over the `Argument`s of a argument list.
 #[derive(Debug, Clone)]
 pub struct Iter<'a> {
-    iter: linked_hash_set::Iter<'a, Argument>,
+    iter: std::slice::Iter<'a, Argument>
 }
 
 /// An owning iterator over the `Argument`s of a argument list.
 pub struct IntoIter {
-    iter: linked_hash_set::IntoIter<Argument>,
+    iter: std::vec::IntoIter<Argument>
 }
 
 impl<'a> Iterator for Iter<'a> {
