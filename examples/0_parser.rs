@@ -19,13 +19,13 @@ fn main() {
                 ),
         )
         .parse_args()
-        .expect("failed to execute");
+        .map_err(|e| e.exit())
+        .unwrap();
 
     let times = result
         .options()
-        .convert::<NonZeroUsize>("times")
-        .unwrap()
-        .get();
+        .convert::<usize>("times")
+        .unwrap();
 
     let values = result.arg().unwrap().get_values().join(" ") as String;
     for _ in 0..times {

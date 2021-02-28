@@ -5,6 +5,7 @@ use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::ops::Index;
 use std::str::FromStr;
+use crate::{Error, ErrorKind, Result};
 
 /// Represents a command-line option.
 #[derive(Debug, Clone)]
@@ -404,38 +405,48 @@ impl OptionList {
         self.inner.iter().find(|opt| opt.has_alias(alias.as_ref()))
     }
 
-    /// Converts the argument value of the given option to the type `T` or results `None` if:
+    /// Converts the argument value of the given option to the type `T` or results `Err` if:
     /// * The option is not found.
     /// * The option takes no arguments.
     /// * The option takes more than 1 argument.
     /// * The argument value parse fail.
-    pub fn convert<T>(&self, option: &str) -> Option<T>
+    pub fn convert<T>(&self, option: &str) -> Result<T>
     where
         T: FromStr + 'static,
-        <T as FromStr>::Err: Display,
-    {
-        self.get(option)
-            .map(|opt| opt.get_arg())
-            .flatten()
-            .map(|arg| arg.convert::<T>().ok())
-            .flatten()
+        <T as FromStr>::Err: Display {
+        match self.get(option) {
+            Some(opt) => {
+                opt.get_arg()
+                    .unwrap_or_else(|| panic!("`{}` takes no arguments", option))
+                    .convert()
+            },
+            None => Err(Error::new(
+                ErrorKind::Other,
+                format!("cannot find option named '{}'", option))
+            )
+        }
     }
 
-    /// Converts all the argument values of the given option to the type `T` or results `None` if:
+    /// Converts all the argument values of the given option to the type `T` or results `Err` if:
     /// * The option is not found.
     /// * The option takes no arguments.
     /// * The option takes more than 1 argument.
     /// * The argument values parse fail.
-    pub fn convert_all<T>(&self, option: &str) -> Option<Vec<T>>
+    pub fn convert_all<T>(&self, option: &str) -> Result<Vec<T>>
         where
             T: FromStr + 'static,
-            <T as FromStr>::Err: Display,
-    {
-        self.get(option)
-            .map(|opt| opt.get_arg())
-            .flatten()
-            .map(|arg| arg.convert_all::<T>().ok())
-            .flatten()
+            <T as FromStr>::Err: Display {
+        match self.get(option) {
+            Some(opt) => {
+                opt.get_arg()
+                    .unwrap_or_else(|| panic!("`{}` takes no arguments", option))
+                    .convert_all()
+            },
+            None => Err(Error::new(
+                ErrorKind::Other,
+                format!("cannot find option named '{}'", option))
+            )
+        }
     }
 
     /// Returns the `Argument` of the option with the given name or alias or
