@@ -461,7 +461,7 @@ impl Command {
         CommandLine::new(self)
             .use_default_help()
             .use_default_suggestions()
-            .parse_args_and_get()
+            .parse_args_and_get_result()
     }
 
     /// Parse the arguments using this command and returns the `ParseResult`.
@@ -489,7 +489,7 @@ impl Command {
         CommandLine::new(self)
             .use_default_help()
             .use_default_suggestions()
-            .parse_from_and_get(args)
+            .parse_from_and_get_result(args)
     }
 }
 

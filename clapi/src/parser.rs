@@ -636,6 +636,7 @@ fn add_option(options: &mut OptionList, new_option: CommandOption) -> Result<()>
         let mut args = ArgumentList::new();
         let option = options.get(new_option.get_name()).unwrap();
 
+        // We iterate over the arguments and add any new argument value from the `new_option`.
         for arg in option.get_args() {
             let mut values = Vec::new();
             values.extend_from_slice(arg.get_values());
@@ -648,7 +649,7 @@ fn add_option(options: &mut OptionList, new_option: CommandOption) -> Result<()>
             let mut new_arg = arg.clone();
             new_arg.set_values(values)?;
 
-            // SAFETY: If `options` already contains the `option` which have no duplicates
+            // SAFETY: the new option contains no duplicated args
             args.add(new_arg).unwrap();
         }
 

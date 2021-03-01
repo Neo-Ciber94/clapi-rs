@@ -38,6 +38,7 @@ pub struct Context {
     root: Command,
     suggestions: Option<SuggestionSource>,
     help: HelpSource,
+    exit_after_message: bool,
     name_prefixes: Vec<String>,
     alias_prefixes: Vec<String>,
     assign_operators: Vec<char>,
@@ -78,6 +79,11 @@ impl Context {
         Prefixes {
             iter: self.alias_prefixes.iter()
         }
+    }
+
+    /// Exit the process after a help, version and suggestion message.
+    pub fn exit_after_help_message(&self) -> bool {
+        self.exit_after_message
     }
 
     /// Returns an iterator over the assign operator `char`s.
@@ -243,6 +249,7 @@ pub struct ContextBuilder {
     root: Command,
     suggestions: Option<SuggestionSource>,
     help: Option<HelpSource>,
+    exit_after_message: bool,
     name_prefixes: Vec<String>,
     alias_prefixes: Vec<String>,
     assign_operators: Vec<char>,
@@ -259,6 +266,7 @@ impl ContextBuilder {
         ContextBuilder {
             root,
             suggestions: None,
+            exit_after_message: true,
             help: None,
             name_prefixes: Default::default(),
             alias_prefixes: Default::default(),
@@ -284,6 +292,12 @@ impl ContextBuilder {
         let prefix = prefix.into();
         assert_valid_symbol("prefixes", prefix.as_str());
         self.alias_prefixes.push(prefix);
+        self
+    }
+
+    /// Exit the process after a help, version and suggestion message.
+    pub fn exit_after_help_message(mut self, exit: bool) -> Self {
+        self.exit_after_message = exit;
         self
     }
 
@@ -351,6 +365,9 @@ impl ContextBuilder {
 
             // Suggestion provider
             suggestions: self.suggestions,
+
+            // Exit after a help, version or suggestion message
+            exit_after_message: self.exit_after_message,
 
             // Help provider
             help: self.help.unwrap_or_else(|| HelpSource::default()),
