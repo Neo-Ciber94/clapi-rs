@@ -377,7 +377,7 @@ impl Command {
     /// });
     ///
     /// let mut cli = CommandLine::new(command);
-    /// cli.parse_args();
+    /// cli.run();
     /// ```
     pub fn handler<F>(mut self, f: F) -> Self
     where
@@ -461,7 +461,7 @@ impl Command {
         CommandLine::new(self)
             .use_default_help()
             .use_default_suggestions()
-            .parse_args_and_get_result()
+            .parse_args()
     }
 
     /// Parse the arguments using this command and returns the `ParseResult`.
@@ -489,7 +489,7 @@ impl Command {
         CommandLine::new(self)
             .use_default_help()
             .use_default_suggestions()
-            .parse_from_and_get_result(args)
+            .parse_from(args)
     }
 }
 

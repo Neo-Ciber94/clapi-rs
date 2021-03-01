@@ -552,21 +552,21 @@ macro_rules! run_app {
         $crate::app!( => $($rest)+)
              .use_default_suggestions()
              .use_default_help()
-             .parse_args()
+             .run()
     };
 
     ($name:ident => $($rest:tt)+) => {
         $crate::app!($name => $($rest)+)
              .use_default_suggestions()
              .use_default_help()
-             .parse_args()
+             .run()
     };
 
     ($name:expr => $($rest:tt)+) => {
         $crate::app!($name => $($rest)+)
              .use_default_suggestions()
              .use_default_help()
-             .parse_args()
+             .run()
     };
 }
 
@@ -613,6 +613,6 @@ macro_rules! run_crate_app {
         )
         .use_default_help()
         .use_default_suggestions()
-        .parse_args()
+        .run()
     }};
 }

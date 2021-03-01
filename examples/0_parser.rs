@@ -24,8 +24,9 @@ fn main() {
 
     let times = result
         .options()
-        .convert::<usize>("times")
-        .unwrap();
+        .convert::<NonZeroUsize>("times")
+        .unwrap()
+        .get();
 
     let values = result.arg().unwrap().get_values().join(" ") as String;
     for _ in 0..times {

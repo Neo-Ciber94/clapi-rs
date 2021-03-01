@@ -56,7 +56,7 @@ impl Error {
     /// let new_error = error.with_message("expected a number");
     /// assert_eq!(new_error.to_string(), "invalid value for argument 'xyz': expected a number".to_string())
     /// ```
-    pub fn with_message<S: Into<String>>(&self, msg: S) -> Self {
+    pub fn with_message<S: Into<AnyError>>(&self, msg: S) -> Self {
         match &self.inner {
             Simple(kind) => {
                 Error::new(kind.clone(), msg.into())
@@ -66,7 +66,7 @@ impl Error {
                     inner: Custom(CustomError::new(
                         custom.kind.clone(),
                         custom.error.to_string().into(),
-                        Some(msg.into())
+                        Some(msg.into().to_string())
                     ))
                 }
             }
@@ -75,8 +75,13 @@ impl Error {
 
     /// Prints this error in the `stderr` and exit this process with status 1.
     pub fn exit(self) -> ! {
-        eprintln!("Error: {}", self);
-        std::process::exit(1)
+        if matches!(self.kind(), ErrorKind::DisplayHelp(_) | ErrorKind::DisplayVersion(_)) {
+            println!("{}", self);
+            std::process::exit(0)
+        } else {
+            eprintln!("Error: {}", self);
+            std::process::exit(1)
+        }
     }
 }
 
@@ -129,6 +134,17 @@ pub enum ErrorKind {
     MissingOption(String),
     /// An error no listed.
     Other,
+
+    /// *Not an actual error used for convenience*.
+    ///
+    /// Display a help message.
+    DisplayHelp(String),
+
+    /// *Not an actual error used for convenience*.
+    ///
+    /// Display a version message.
+    DisplayVersion(String),
+
     /// Indicates to the caller to show a help message. This should not be used as an `Error`.
     #[doc(hidden)]
     FallthroughHelp
@@ -144,6 +160,8 @@ impl Display for ErrorKind {
             ErrorKind::UnexpectedCommand(s) => write!(f, "unexpected command: '{}'", s),
             ErrorKind::MissingOption(s) => write!(f, "'{}' is required", s),
             ErrorKind::Other => write!(f, "unexpected error"),
+            ErrorKind::DisplayHelp(s) => write!(f, "{}", s),
+            ErrorKind::DisplayVersion(s) => write!(f, "{}", s),
             ErrorKind::FallthroughHelp => panic!("`ErrorKind::FallthroughHelp` should not be used as an error")
         }
     }

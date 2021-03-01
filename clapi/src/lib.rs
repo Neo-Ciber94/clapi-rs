@@ -91,7 +91,7 @@
 //!     CommandLine::new(command)
 //!         .use_default_suggestions()
 //!         .use_default_help()
-//!         .parse_args()
+//!         .run()
 //! }
 //! ```
 //! ## Macro
@@ -120,7 +120,7 @@
 //!
 //!      cli.use_default_help()
 //!         .use_default_suggestions()
-//!         .parse_args()
+//!         .run()
 //! }
 //!```
 //!

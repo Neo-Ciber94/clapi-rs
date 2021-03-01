@@ -97,13 +97,14 @@ impl CommandLine {
 
     /// Parse the program arguments get the `ParseResult`
     /// after handling any help, version or suggestion messages.
-    pub fn parse_args_and_get_result(&mut self) -> Result<ParseResult> {
-        self.parse_from_and_get_result(std::env::args().skip(1))
+    #[inline]
+    pub fn parse_args(&mut self) -> Result<ParseResult> {
+        self.parse_from(std::env::args().skip(1))
     }
 
     /// Parse given arguments get the `ParseResult`
     /// after handling any help, version or suggestion messages.
-    pub fn parse_from_and_get_result<S, I>(&mut self, args: I) -> Result<ParseResult>
+    pub fn parse_from<S, I>(&mut self, args: I) -> Result<ParseResult>
         where
             S: Borrow<str>,
             I: IntoIterator<Item = S> {
@@ -112,36 +113,17 @@ impl CommandLine {
         let parse_result = match result {
             Ok(r) => r,
             Err(error) => {
-                return if let Err(e) = self.handle_error(&parser, error) {
-                    Err(e)
-                } else {
-                    unreachable!()
-                }
+                return Err(self.handle_error(&parser, error).unwrap_err())
             },
         };
 
         // Checks if the command requires to display help
         if self.requires_help(&parse_result) {
-            match self.handle_help(&parse_result) {
-                Ok(_) => Ok(parse_result),
-                Err(e) => {
-                    if self.context.exit_after_help_message() {
-                        Err(e)
-                    } else {
-                        println!("{}", e);
-                        exit_successfully()
-                    }
-                }
-            }
+            Err(self.handle_help(&parse_result).unwrap_err())
         }
         // Checks if the command requires to display the version
         else if self.requires_version(&parse_result) {
-            self.show_version(&parse_result);
-            if self.context.exit_after_help_message() {
-                exit_successfully()
-            } else {
-                Ok(parse_result)
-            }
+            Err(self.show_version(&parse_result).unwrap_err())
         }
         else {
             Ok(parse_result)
@@ -150,20 +132,39 @@ impl CommandLine {
 
     /// Parse the program arguments and runs the app.
     ///
-    /// This is equivalent to `cmd_line.exec(std::env::args().skip(1))`.
+    /// This is equivalent to `CommandLine::parse_from(std::env::args().skip(1))`.
     #[inline]
-    pub fn parse_args(&mut self) -> Result<()> {
+    pub fn run(&mut self) -> Result<()> {
         // We skip the first element that may be the path of the executable
-        self.parse_from(std::env::args().skip(1))
+        self.run_from(std::env::args().skip(1))
     }
 
     /// Parses the given arguments and runs the app.
-    pub fn parse_from<S, I>(&mut self, args: I) -> Result<()>
+    pub fn run_from<S, I>(&mut self, args: I) -> Result<()>
         where
             S: Borrow<str>,
             I: IntoIterator<Item = S> {
+        fn print_help_or_version(error: Error) -> Result<()> {
+            match error.kind() {
+                ErrorKind::DisplayHelp(s) | ErrorKind::DisplayVersion(s) => {
+                    println!("{}", s);
+                    Ok(())
+                },
+                _ => unreachable!()
+            }
+        }
+
         // Parse the arguments and get the result
-        let parse_result = self.parse_from_and_get_result(args)?;
+        let parse_result = match self.parse_from(args) {
+            Err(err) => {
+                return if matches!(err.kind(), ErrorKind::DisplayHelp(_) | ErrorKind::DisplayVersion(_)) {
+                    print_help_or_version(err)
+                } else {
+                    Err(err)
+                }
+            },
+            Ok(x) => x
+        };
 
         // We borrow the value from the Option to avoid create a temporary
         let handler = parse_result.executing_command().get_handler();
@@ -186,33 +187,7 @@ impl CommandLine {
             }
         } else {
             // Shows a help message if there is no handler
-            self.display_help(None)
-        }
-    }
-
-    fn requires_version(&self, result: &ParseResult) -> bool {
-        if let Some(version_option) = self.context.version_option() {
-            if result.options().contains(version_option.get_name()) {
-                return true;
-            }
-        }
-
-        if let Some(version_command) = self.context.help_command() {
-            if result.executing_command().get_name() == version_command.get_name() {
-                return true;
-            }
-        }
-
-        false
-    }
-
-    fn show_version(&self, result: &ParseResult) {
-        match result.executing_command().get_version() {
-            Some(version) => {
-                let name = result.executing_command().get_name();
-                println!("{} {}", name, version);
-            },
-            None => unreachable!()
+            print_help_or_version(self.display_help(None).unwrap_err())
         }
     }
 
@@ -235,9 +210,32 @@ impl CommandLine {
         }
     }
 
-    // Checks if the `ParseResult` or `Parser` requires to show a help message.
-    // We use `std::result::Result` where `Ok` is a completed parse operation
-    // and `Err` is a failed one.
+    fn requires_version(&self, result: &ParseResult) -> bool {
+        if let Some(version_option) = self.context.version_option() {
+            if result.options().contains(version_option.get_name()) {
+                return true;
+            }
+        }
+
+        if let Some(version_command) = self.context.help_command() {
+            if result.command_name() == version_command.get_name() {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn show_version(&self, result: &ParseResult) -> Result<()>{
+        match result.executing_command().get_version() {
+            Some(version) => {
+                let name = result.command_name();
+                Err(Error::from(ErrorKind::DisplayVersion(format!("{} {}", name, version))))
+            },
+            None => unreachable!()
+        }
+    }
+
     fn requires_help(&self, result: &ParseResult) -> bool {
         let context = &self.context;
 
@@ -287,11 +285,18 @@ impl CommandLine {
 
     fn display_help(&self, args: Option<&Argument>) -> Result<()> {
         let values = args.map(|s| s.get_values());
-        print!("{}", self.get_help_message(values, MessageKind::Help)?);
-        if self.context.exit_after_help_message() {
-            exit_successfully()
+        let mut message = self.get_help_message(values, MessageKind::Help)?;
+
+        // Remove the last newline (if any) to have a cleaner message
+        if message.ends_with('\n') {
+            // We check for '\n' and '\r\n'
+            message.pop();
+            if message.ends_with('\r') {
+                message.pop();
+            }
         }
-        Ok(())
+
+        Err(Error::from(ErrorKind::DisplayHelp(message)))
     }
 
     fn get_help_message(&self, values: Option<&[String]>, kind: MessageKind) -> Result<String> {
@@ -390,15 +395,7 @@ impl CommandLine {
 
     fn display_suggestions(&self, error: Error, message: Option<String>) -> Result<()> {
         match message {
-            Some(ref msg) => {
-                let error = error.with_message(msg);
-                if self.context.exit_after_help_message() {
-                    print!("{}", error);
-                    exit_successfully()
-                } else {
-                    Err(error)
-                }
-            },
+            Some(msg) => Err(error.with_message(msg)),
             None => Err(error)
         }
     }
@@ -423,11 +420,6 @@ fn prefix_option(context: &Context, options: &OptionList, name: &mut String) {
         let prefix = context.name_prefixes().next().unwrap();
         name.insert_str(0, prefix);
     }
-}
-
-// Exit the current process.
-fn exit_successfully() -> ! {
-    std::process::exit(0)
 }
 
 // Checks if the option or any of its children have `version`

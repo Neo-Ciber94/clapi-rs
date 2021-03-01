@@ -385,7 +385,7 @@ impl CommandAttrData {
                     clapi::CommandLine::new(command)
                         #use_help
                         .use_default_suggestions()
-                        .parse_args()
+                        .run()
                         #error_handling
                 }
             }
