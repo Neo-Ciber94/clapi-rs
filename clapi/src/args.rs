@@ -775,8 +775,7 @@ impl<I: SliceIndex<[String]>> Index<I> for Argument {
 pub fn try_parse_str<T: 'static>(value: &str) -> Result<T>
 where
     T: FromStr,
-    <T as FromStr>::Err: Display,
-{
+    <T as FromStr>::Err: Display {
     match T::from_str(value) {
         Ok(n) => Ok(n),
         Err(_) => {
@@ -793,8 +792,7 @@ where
 pub fn try_parse_values<T: 'static>(values: Vec<String>) -> crate::Result<Vec<T>>
 where
     T: FromStr,
-    <T as FromStr>::Err: Display,
-{
+    <T as FromStr>::Err: Display {
     let mut ret = Vec::new();
     for value in values {
         ret.push(crate::try_parse_str(value.borrow())?);
@@ -850,13 +848,13 @@ impl ArgumentList {
         self.inner.iter().find(|a| a.get_name() == arg_name.as_ref())
     }
 
-    /// Returns the `String` values of all the arguments of this `ArgumentList`.
-    pub fn get_raw_args(&self) -> Vec<String> {
-        self.inner
-            .iter()
-            .flat_map(|arg| arg.get_values())
-            .cloned()
-            .collect::<Vec<String>>()
+    /// Returns an iterator over the `&str` values of this `ArgumentList`.
+    pub fn get_raw_args(&self) -> RawArgs<'_> {
+        RawArgs {
+            args: self,
+            args_index: 0,
+            index: 0
+        }
     }
 
     /// Returns the values of all the arguments of this `ArgumentList` and convert them to type `T`.
@@ -866,17 +864,12 @@ impl ArgumentList {
     pub fn get_raw_args_as_type<T: 'static>(&self) -> Result<Vec<T>>
     where
         T: std::str::FromStr,
-        <T as std::str::FromStr>::Err: std::fmt::Display,
-    {
+        <T as std::str::FromStr>::Err: std::fmt::Display {
         let mut ret = Vec::new();
         for arg in self.inner.iter() {
-            // Check if `T` is valid for the validator
-            arg.assert_valid_type::<T>()?;
-
-            for value in arg.get_values() {
-                // We use this instead of `convert_all` because it fails
-                // if the `Argument` have no values
-                ret.push(try_parse_str(value)?);
+            if arg.get_values().len() > 0 {
+                let values = arg.convert_all::<T>()?;
+                ret.extend(values);
             }
         }
         Ok(ret)
@@ -1084,13 +1077,7 @@ impl Index<usize> for ArgumentList {
     type Output = Argument;
 
     fn index(&self, index: usize) -> &Self::Output {
-        self.inner.iter().nth(index).unwrap_or_else(|| {
-            panic!(
-                "index out of bounds: len is {} but index was {}",
-                self.len(),
-                index
-            )
-        })
+        &self.inner[index]
     }
 }
 
@@ -1110,6 +1097,53 @@ impl Index<String> for ArgumentList {
     #[inline]
     fn index(&self, arg_name: String) -> &Self::Output {
         self.index(arg_name.as_str())
+    }
+}
+
+/// An iterator over the `&str` values of the arguments of an `ArgumentList`.
+#[derive(Debug, Clone)]
+pub struct RawArgs<'a> {
+    args: &'a ArgumentList,
+    args_index: usize,
+    index: usize,
+}
+
+impl<'a> RawArgs<'a> {
+    /// Returns the number of values of this arguments.
+    pub fn len(self) -> usize {
+        self.count()
+    }
+
+    /// Returns a `Vec<String>` from the values of this iterator.
+    pub fn into_vec(self) -> Vec<String> {
+        self.map(|s| s.to_owned()).collect::<Vec<String>>()
+    }
+
+    /// Returns `true` if this iterator contains the specified value.
+    pub fn contains<S: AsRef<str>>(mut self, value: S) -> bool {
+        self.any(|s| s == value.as_ref())
+    }
+}
+
+impl<'a> Iterator for RawArgs<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.args_index == self.args.len() {
+            return None;
+        }
+
+        let arg = &self.args[self.args_index];
+        let index = self.index;
+
+        if index >= arg.get_values().len() {
+            self.args_index += 1;
+            self.index = 0;
+            self.next() // Recursive call to the next `Argument`
+        } else {
+            self.index += 1;
+            Some(&arg[index])
+        }
     }
 }
 
@@ -1199,6 +1233,8 @@ pub mod validator {
             Some(Type::of::<T>())
         }
     }
+
+    // TODO: `validate_type<T>()` and `validate_range<T>(min: T, max: T)`
 
     // This allow to use a closure as a `Validator`
     impl<F> Validator for F where F: Fn(&str) -> std::result::Result<(), String> {
@@ -1382,7 +1418,7 @@ mod tests {
         assert!(arg_list.add(numbers).is_ok());
         assert_eq!(arg_list.len(), 2);
         assert_eq!(
-            arg_list.get_raw_args(),
+            arg_list.get_raw_args().into_vec(),
             vec![
                 "red".to_owned(),
                 "1".to_owned(),
@@ -1445,5 +1481,61 @@ mod tests {
         let mut args = ArgumentList::new();
         assert!(args.add(Argument::with_name("numbers").values_count(1..10)).is_ok());
         assert!(args.add(Argument::with_name("characters").values_count(1..4)).is_ok());
+    }
+
+    #[test]
+    fn get_raw_args_test() {
+        let mut args = ArgumentList::new();
+        assert!(args.get_raw_args().into_vec().is_empty());
+
+        let mut numbers = Argument::one_or_more("numbers");
+        numbers.set_values(&[1,2]).unwrap();
+
+        let mut letter = Argument::with_name("letter");
+        letter.set_values(&['a']).unwrap();
+
+        args.add(numbers).unwrap();
+        assert_eq!(
+            args.get_raw_args().into_vec(),
+            vec!["1".to_owned(), "2".to_owned()]
+        );
+
+        args.add(letter).unwrap();
+        assert_eq!(
+            args.get_raw_args().into_vec(),
+            vec!["1".to_owned(), "2".to_owned(), "a".to_owned()]
+        );
+    }
+
+    #[test]
+    fn get_raw_args_as_type_test() {
+        let mut args = ArgumentList::new();
+        let mut number = Argument::with_name("number");
+        number.set_values(&["10"]).unwrap();
+
+        let mut primes = Argument::one_or_more("letters");
+        primes.set_values(&[3, 7, 11]).unwrap();
+
+        args.add(number).unwrap();
+        args.add(primes).unwrap();
+
+        let values = args.get_raw_args_as_type::<i32>().unwrap();
+        assert_eq!(values, vec![10, 3, 7, 11]);
+    }
+
+    #[test]
+    fn get_raw_args_as_type_error_test() {
+        let mut args = ArgumentList::new();
+        let mut boolean = Argument::with_name("number");
+        boolean.set_values(&["true"]).unwrap();
+
+        let mut primes = Argument::one_or_more("letters");
+        primes.set_values(&[3, 7, 11]).unwrap();
+
+        args.add(boolean).unwrap();
+        args.add(primes).unwrap();
+
+        let values = args.get_raw_args_as_type::<i32>();
+        assert!(values.is_err());
     }
 }

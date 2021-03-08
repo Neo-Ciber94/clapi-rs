@@ -1,7 +1,6 @@
 use self::utils::*;
 use crate::{Command, Context, OptionList};
 use std::fmt::Write;
-
 // Indentation used to write the help messages
 const INDENT: &str = "   ";
 

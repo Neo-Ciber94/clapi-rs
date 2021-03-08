@@ -2,6 +2,7 @@ use crate::args::ArgumentList;
 use crate::command::Command;
 use crate::option::OptionList;
 use crate::Argument;
+use std::slice::Iter;
 
 /// Represents the result of a parse operation
 /// and provides a set of methods to query over the values.
@@ -65,6 +66,88 @@ impl ParseResult {
     /// Returns the `Argument`s passed to the executing command.
     pub fn args(&self) -> &ArgumentList {
         &self.args
+    }
+
+    pub fn value_of(&self, arg_name: &str) -> Option<&str> {
+        self.args.get(arg_name)
+            .map(|arg| arg.get_values())
+            .filter(|values| values.len() == 1)
+            .map(|values| values[0].as_str())
+    }
+
+    pub fn values_of(&self, arg_name: &str) -> Option<Values<'_>>{
+        if let Some(arg) = self.args.get(arg_name) {
+            Some(Values { values: arg.get_values() })
+        } else {
+            None
+        }
+    }
+
+    pub fn value_of_option(&self, option_name: &str) -> Option<&str> {
+        self.options.get(option_name)
+            .map(|opt| opt.get_arg())
+            .flatten()
+            .map(|arg| arg.get_values())
+            .filter(|values| values.len() == 1)
+            .map(|values| values[0].as_str())
+    }
+
+    pub fn values_of_option(&self, option_name: &str) -> Option<Values<'_>> {
+        if let Some(option) = self.options.get(option_name) {
+            let arg = option.get_arg()?;
+            Some(Values { values: arg.get_values() })
+        } else {
+            None
+        }
+    }
+}
+
+/// An iterator over the values of an argument or option.
+#[derive(Debug, Clone)]
+pub struct Values<'a> {
+    values: &'a [String]
+}
+
+impl<'a> Values<'a> {
+    /// Returns an iterator over the argument valeus.
+    pub fn iter(&self) -> Iter<'_, String> {
+        self.values.iter()
+    }
+
+    /// Returns the number of values.
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    /// Returns `true` if contains the value.
+    #[inline]
+    pub fn contains<S: AsRef<str>>(&self, value: S) -> bool {
+        self.values.iter().any(|s| s == value.as_ref())
+    }
+
+    /// Returns an slice to the inner values.
+    #[inline]
+    pub fn inner(&self) -> &'a [String] {
+        self.values
+    }
+}
+
+impl<'a> IntoIterator for Values<'a> {
+    type Item = &'a String;
+    type IntoIter = Iter<'a, String>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.values.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Values<'a> {
+    type Item = &'a String;
+    type IntoIter = Iter<'a, String>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.values.into_iter()
     }
 }
 

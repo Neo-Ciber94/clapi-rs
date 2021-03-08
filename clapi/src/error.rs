@@ -81,6 +81,7 @@ impl Error {
         } else {
             eprintln!("Error: {}", self);
             std::process::exit(1)
+            // TODO: exit with 0 to cleaner output? this require check for newlines in for example 'suggestions'
         }
     }
 }
