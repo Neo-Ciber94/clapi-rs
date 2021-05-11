@@ -73,16 +73,16 @@ impl Error {
         }
     }
 
-    /// Prints this error in the `stderr` and exit this process with status 1.
+    /// Prints this error in the `stderr` and exit this process with status 0.
     pub fn exit(self) -> ! {
         if matches!(self.kind(), ErrorKind::DisplayHelp(_) | ErrorKind::DisplayVersion(_)) {
             println!("{}", self);
-            std::process::exit(0)
         } else {
-            eprintln!("Error: {}", self);
-            std::process::exit(1)
-            // TODO: exit with 0 to cleaner output? this require check for newlines in for example 'suggestions'
+            // Error already contains a newline
+            eprint!("Error: {}", self);
         }
+
+        std::process::exit(0)
     }
 }
 
