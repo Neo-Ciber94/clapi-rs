@@ -12,3 +12,15 @@ clapi = { path="../clapi", features=["macros"] }
 name = "0_parser"
 path = "0_parser.rs"
 
+[[example]]
+name = "1_commandline"
+path = "1_commandline.rs"
+
+[[example]]
+name = "2_macros"
+path = "2_macros.rs"
+
+[[example]]
+name = "3_attributes"
+path = "3_attributes.rs"
+

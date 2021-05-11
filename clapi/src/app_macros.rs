@@ -499,7 +499,7 @@ macro_rules! app {
     // clapi::app! { (@arg => (type => u64 ) }
     (@arg ($arg_builder:expr) (type => $ty:ty) $($tt:tt)*) => {
         $crate::app!{
-            @arg ($arg_builder.validator($crate::validator::parse_validator::<$ty>())) $($tt)*
+            @arg ($arg_builder.validator($crate::validator::validate_type::<$ty>())) $($tt)*
         }
     };
 

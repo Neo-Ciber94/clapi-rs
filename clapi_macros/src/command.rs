@@ -345,8 +345,12 @@ impl CommandAttrData {
             let attrs = &self.item_fn.as_ref().unwrap().attrs;
             let items = self.get_body_items();
             let error_handling = match ret {
-                ReturnType::Type(_, ty) if is_clapi_result_type(ty) => quote! {},
-                _ => quote! { .map_err(|e| e.exit()).unwrap(); },
+                ReturnType::Type(_, ty) if is_clapi_result_type(ty) => quote! {
+                    .map_err(|e| e.exit())
+                },
+                _ => quote! {
+                    .map_err(|e| e.exit()).unwrap();
+                },
             };
             let use_help = {
                 if self.command_help.is_none() && self.command_usage.is_none() {

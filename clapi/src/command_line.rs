@@ -172,6 +172,7 @@ impl CommandLine {
         if let Some(mut handler) = handler {
             let options = parse_result.options();
             let args = parse_result.args();
+
             // Calls the handler and pass the arguments
             match (*handler)(options, args) {
                 Ok(_) => Ok(()),
