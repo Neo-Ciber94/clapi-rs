@@ -11,14 +11,14 @@ use crate::help::HelpSource;
 /// # Example
 /// ```
 /// use clapi::{Command, Argument, CommandOption, Context, Parser};
-/// use clapi::validator::parse_validator;
+/// use clapi::validator::validate_type;
 ///
 /// let command = Command::new("MyApp")
 ///     .arg(Argument::one_or_more("values"))
 ///     .option(CommandOption::new("enable")
 ///         .alias("e")
 ///         .requires_assign(true)
-///         .arg(Argument::new().validator(parse_validator::<bool>())));
+///         .arg(Argument::new().validator(validate_type::<bool>())));
 ///
 /// let context = Context::builder(command)
 ///     .alias_prefix("/")      // An alias prefix

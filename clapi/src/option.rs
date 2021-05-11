@@ -157,14 +157,14 @@ impl CommandOption {
     /// # Examples
     /// ```
     /// use clapi::{Command, CommandOption, Argument};
-    /// use clapi::validator::parse_validator;
+    /// use clapi::validator::validate_type;
     ///
     /// let result = Command::new("MyApp")
     ///     .option(CommandOption::new("test"))
     ///     .option(CommandOption::new("number")
     ///         .required(true)
     ///         .arg(Argument::new()
-    ///             .validator(parse_validator::<i64>())))
+    ///             .validator(validate_type::<i64>())))
     ///     .parse_from(vec!["--test", "--number", "10"])
     ///     .unwrap();
     ///
@@ -175,14 +175,14 @@ impl CommandOption {
     /// Other example where the option is ommited
     /// ```
     /// use clapi::{Command, CommandOption, Argument};
-    /// use clapi::validator::parse_validator;
+    /// use clapi::validator::validate_type;
     ///
     /// let result = Command::new("MyApp")
     ///     .option(CommandOption::new("test"))
     ///     .option(CommandOption::new("number")
     ///         .required(true)
     ///         .arg(Argument::new()
-    ///             .validator(parse_validator::<i64>())))
+    ///             .validator(validate_type::<i64>())))
     ///     .parse_from(vec!["--test"]);
     ///
     /// assert!(result.is_err());

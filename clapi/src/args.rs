@@ -6,14 +6,17 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Index;
 use std::rc::Rc;
-use std::str::FromStr;
 use std::slice::SliceIndex;
-use validator::Type;
-use validator::Validator;
+use std::str::FromStr;
+
+use crate::validator::Validator;
+
+#[cfg(feature = "valid_type")]
+use crate::ty::Type;
 
 #[doc(hidden)]
 /// Name used for unnamed `Argument`s.
-pub const ARGUMENT_DEFAULT_NAME : &str = "arg";
+pub const ARGUMENT_DEFAULT_NAME: &str = "arg";
 
 /// Represents the arguments of an `option` or `command`.
 #[derive(Clone)]
@@ -119,7 +122,7 @@ impl Argument {
     }
 
     /// Returns the validation error message.
-    pub fn get_validation_error(&self) -> Option<&str>{
+    pub fn get_validation_error(&self) -> Option<&str> {
         self.validation_error.as_deref()
     }
 
@@ -138,7 +141,7 @@ impl Argument {
         // Returns the `default_values` if `values` was not set in `set_values`
         match &self.values {
             Some(n) => n,
-            None => self.default_values.as_slice()
+            None => self.default_values.as_slice(),
         }
     }
 
@@ -169,10 +172,10 @@ impl Argument {
     /// # Example
     /// ```
     /// use clapi::{Command, Argument};
-    /// use clapi::validator::parse_validator;
+    /// use clapi::validator::validate_type;
     ///
     /// let arg = Argument::with_name("number")
-    ///     .validator(parse_validator::<i64>());
+    ///     .validator(validate_type::<i64>());
     ///
     /// assert!(arg.is_valid("25"));        // Valid `i64` value
     /// assert!(arg.is_valid("-20"));       // Valid `i64` value
@@ -230,7 +233,11 @@ impl Argument {
     /// ```
     pub fn values_count<A: Into<ArgCount>>(mut self, value_count: A) -> Self {
         let count = value_count.into();
-        assert!(!count.takes_exactly(0), "`{}` cannot takes 0 values", self.get_name());
+        assert!(
+            !count.takes_exactly(0),
+            "`{}` cannot takes 0 values",
+            self.get_name()
+        );
         self.values_count = Some(count);
         self
     }
@@ -250,12 +257,8 @@ impl Argument {
     /// ```
     pub fn min_values(self, min: usize) -> Self {
         match self.values_count {
-            Some(n) => {
-                self.values_count(n.with_min(min))
-            },
-            None => {
-                self.values_count(ArgCount::new(Some(min), None))
-            },
+            Some(n) => self.values_count(n.with_min(min)),
+            None => self.values_count(ArgCount::new(Some(min), None)),
         }
     }
 
@@ -274,12 +277,8 @@ impl Argument {
     /// ```
     pub fn max_values(self, max: usize) -> Self {
         match self.values_count {
-            Some(n) => {
-                self.values_count(n.with_max(max))
-            },
-            None => {
-                self.values_count(ArgCount::new(None, Some(max)))
-            },
+            Some(n) => self.values_count(n.with_max(max)),
+            None => self.values_count(ArgCount::new(None, Some(max))),
         }
     }
 
@@ -300,11 +299,11 @@ impl Argument {
     /// Using the `parse_validator` to ensure the value is an `i64`.
     /// ```
     /// use clapi::{Command, Argument};
-    /// use clapi::validator::parse_validator;
+    /// use clapi::validator::validate_type;
     ///
     /// let command = Command::new("MyApp")
     ///     .arg(Argument::with_name("numbers")
-    ///         .validator(parse_validator::<i64>()));
+    ///         .validator(validate_type::<i64>()));
     ///
     /// assert!(command.clone().parse_from(vec!["10"]).is_ok());
     /// assert!(command.clone().parse_from(vec!["10", "true"]).is_err());
@@ -349,12 +348,12 @@ impl Argument {
     /// # Example
     /// ```
     /// use clapi::{Command, Argument, Error, ErrorKind};
-    /// use clapi::validator::parse_validator;
+    /// use clapi::validator::validate_type;
     /// use std::num::NonZeroUsize;
     ///
     /// let error = Command::new("MyApp")
     ///     .arg(Argument::with_name("number")
-    ///         .validator(parse_validator::<NonZeroUsize>())
+    ///         .validator(validate_type::<NonZeroUsize>())
     ///         .validation_error("expected a number greater than 0"))
     ///         .parse_from(vec!["0"])
     ///         .err()
@@ -509,10 +508,10 @@ impl Argument {
     /// # Example
     /// ```
     /// use clapi::Argument;
-    /// use clapi::validator::parse_validator;
+    /// use clapi::validator::validate_type;
     ///
     /// let mut arg = Argument::with_name("number")
-    ///     .validator(parse_validator::<i64>())
+    ///     .validator(validate_type::<i64>())
     ///     .default(0);
     ///
     /// assert!(arg.set_values(vec![2]).is_ok());
@@ -529,23 +528,13 @@ impl Argument {
             .collect::<Vec<String>>();
 
         if !self.get_values_count().takes(values.len()) {
-            // return Err(Error::new(
-            //     ErrorKind::InvalidArgumentCount,
-            //     format!(
-            //         "`{}` expected {} but was {}",
-            //         self.get_name(),
-            //         self.get_values_count(),
-            //         values.len()
-            //     ),
-            // ));
             return Err(Error::new(
                 ErrorKind::InvalidArgumentCount,
-                format!(
-                    "expected {} but was {}",
-                    self.get_values_count(),
-                    values.len()
-                ),
-            ));
+                invalid_arg_count_message(
+                    self.get_name(),
+                    values.len(),
+                    self.get_values_count()))
+            );
         }
 
         if let Some(validator) = &self.validator {
@@ -554,8 +543,8 @@ impl Argument {
                 if let Err(error) = validator.validate(value) {
                     return match self.validation_error.clone() {
                         Some(msg) => Err(self.invalid_argument(msg)),
-                        None => Err(self.invalid_argument(error))
-                    }
+                        None => Err(self.invalid_argument(error)),
+                    };
                 }
             }
         }
@@ -563,14 +552,11 @@ impl Argument {
         if !self.valid_values.is_empty() {
             for value in &values {
                 if !self.valid_values.iter().any(|s| s == value) {
-                    return Err(
-                        self.invalid_argument(
-                            format!("expected {} but was {}",
-                                    self.valid_values.join(", "),
-                                    value
-                            )
-                        )
-                    );
+                    return Err(self.invalid_argument(format!(
+                        "expected {} but was {}",
+                        self.valid_values.join(", "),
+                        value
+                    )));
                 }
             }
         }
@@ -591,11 +577,11 @@ impl Argument {
     /// # Example
     /// ```
     /// use clapi::{Command, Argument};
-    /// use clapi::validator::parse_validator;
+    /// use clapi::validator::validate_type;
     ///
     /// let result = Command::new("MyApp")
     ///     .arg(Argument::one_or_more("numbers")
-    ///         .validator(parse_validator::<i64>()))
+    ///         .validator(validate_type::<i64>()))
     ///     .parse_from(vec!["10"])
     ///     .unwrap();
     ///
@@ -607,8 +593,11 @@ impl Argument {
         T: FromStr + 'static,
         <T as FromStr>::Err: Display,
     {
-        // Checks if the type `T` is valid for the validator
-        self.assert_valid_type::<T>()?;
+        #[cfg(feature = "valid_type")]
+        {
+            // Checks if the type `T` is valid for the validator
+            self.assert_valid_type::<T>()?;
+        }
 
         if self.get_values().is_empty() {
             return Err(Error::new(
@@ -638,11 +627,11 @@ impl Argument {
     /// # Example
     /// ```
     /// use clapi::{Command, Argument};
-    /// use clapi::validator::parse_validator;
+    /// use clapi::validator::validate_type;
     ///
     /// let result = Command::new("MyApp")
     ///     .arg(Argument::one_or_more("numbers")
-    ///         .validator(parse_validator::<i64>()))
+    ///         .validator(validate_type::<i64>()))
     ///     .parse_from(vec!["1", "2", "3"])
     ///     .unwrap();
     ///
@@ -654,8 +643,11 @@ impl Argument {
         T: FromStr + 'static,
         <T as FromStr>::Err: Display,
     {
-        // Checks if the type `T` is valid for the validator
-        self.assert_valid_type::<T>()?;
+        #[cfg(feature = "valid_type")]
+        {
+            // Checks if the type `T` is valid for the validator
+            self.assert_valid_type::<T>()?;
+        }
 
         if self.get_values().is_empty() {
             return Err(Error::new(
@@ -672,6 +664,7 @@ impl Argument {
     }
 
     /// Checks if the type `T` is valid for the validator.
+    #[cfg(feature = "valid_type")]
     fn assert_valid_type<T: 'static>(&self) -> Result<()> {
         if let Some(validator) = &self.validator {
             // If the validator returns `None`, we can convert type `T` to any valid type
@@ -702,10 +695,14 @@ impl Argument {
     }
 
     #[inline(always)]
-    pub(crate) fn set_name_and_description_if_none(&mut self, name: &str, description: Option<&str>) {
+    pub(crate) fn set_name_and_description_if_none(
+        &mut self,
+        name: &str,
+        description: Option<&str>,
+    ) {
         // Ignore all if the `Argument` is named,
         // this method is mostly called when using `Argument::new()`
-        if self.name.is_some(){
+        if self.name.is_some() {
             return;
         }
 
@@ -775,7 +772,8 @@ impl<I: SliceIndex<[String]>> Index<I> for Argument {
 pub fn try_parse_str<T: 'static>(value: &str) -> Result<T>
 where
     T: FromStr,
-    <T as FromStr>::Err: Display {
+    <T as FromStr>::Err: Display,
+{
     match T::from_str(value) {
         Ok(n) => Ok(n),
         Err(_) => {
@@ -792,12 +790,27 @@ where
 pub fn try_parse_values<T: 'static>(values: Vec<String>) -> crate::Result<Vec<T>>
 where
     T: FromStr,
-    <T as FromStr>::Err: Display {
+    <T as FromStr>::Err: Display,
+{
     let mut ret = Vec::new();
     for value in values {
         ret.push(crate::try_parse_str(value.borrow())?);
     }
     Ok(ret)
+}
+
+fn invalid_arg_count_message(arg_name: &str, current: usize, expected: ArgCount) -> String {
+    if current == 0 {
+        format!(
+            "'{}' requires {} but none was passed",
+            arg_name, expected
+        )
+    } else {
+        format!(
+            "'{}' requires {} but was {}",
+            arg_name, expected, current
+        )
+    }
 }
 
 #[derive(Default, Debug, Clone, Eq, PartialEq)]
@@ -845,7 +858,9 @@ impl ArgumentList {
 
     /// Returns the `Argument` with the given name or `None` if no found.
     pub fn get<S: AsRef<str>>(&self, arg_name: S) -> Option<&Argument> {
-        self.inner.iter().find(|a| a.get_name() == arg_name.as_ref())
+        self.inner
+            .iter()
+            .find(|a| a.get_name() == arg_name.as_ref())
     }
 
     /// Returns an iterator over the `&str` values of this `ArgumentList`.
@@ -853,7 +868,7 @@ impl ArgumentList {
         RawArgs {
             args: self,
             args_index: 0,
-            index: 0
+            index: 0,
         }
     }
 
@@ -864,7 +879,8 @@ impl ArgumentList {
     pub fn get_raw_args_as_type<T: 'static>(&self) -> Result<Vec<T>>
     where
         T: std::str::FromStr,
-        <T as std::str::FromStr>::Err: std::fmt::Display {
+        <T as std::str::FromStr>::Err: std::fmt::Display,
+    {
         let mut ret = Vec::new();
         for arg in self.inner.iter() {
             if arg.get_values().len() > 0 {
@@ -892,13 +908,14 @@ impl ArgumentList {
     pub fn convert<T>(&self, arg_name: &str) -> Result<T>
     where
         T: FromStr + 'static,
-        <T as FromStr>::Err: Display, {
+        <T as FromStr>::Err: Display,
+    {
         match &self.get(arg_name) {
             Some(arg) => arg.convert(),
             None => Err(Error::new(
                 ErrorKind::Other,
-                format!("cannot find argument named '{}'", arg_name))
-            ),
+                format!("cannot find argument named '{}'", arg_name),
+            )),
         }
     }
 
@@ -945,8 +962,8 @@ impl ArgumentList {
             Some(arg) => arg.convert_all(),
             None => Err(Error::new(
                 ErrorKind::Other,
-                format!("cannot find argument named '{}'", arg_name))
-            ),
+                format!("cannot find argument named '{}'", arg_name),
+            )),
         }
     }
 
@@ -963,7 +980,7 @@ impl ArgumentList {
     }
 
     fn assert_args(&self) {
-        if self.len() == 1{
+        if self.len() == 1 {
             return;
         }
 
@@ -973,7 +990,8 @@ impl ArgumentList {
         // For example: we have 2 argument with default values: `min` (default 0) `max` (default 10)
         // If we pass: `25` is no possible to know if assign the `25` to `min` or `max`.
         if self.inner.iter().filter(|a| a.has_default_values()).count() > 1 {
-            let arg = self.iter()
+            let arg = self
+                .iter()
                 .filter(|a| a.has_default_values())
                 .nth(1)
                 .unwrap();
@@ -989,9 +1007,12 @@ impl ArgumentList {
         // a variable amount of values.
         // If we pass: `Peter Parker` is no possible to know if `Peter` is being passed to `prefix`
         if self.inner.iter().any(|a| a.has_default_values()) {
-            if let Some(arg) = self.inner.iter()
+            if let Some(arg) = self
+                .inner
+                .iter()
                 .filter(|arg| !arg.has_default_values())
-                .find(|arg| !arg.get_values_count().is_exact()) {
+                .find(|arg| !arg.get_values_count().is_exact())
+            {
                 panic!("arguments with variable values is no allowed if there is default values: `{}` contains variable values", arg.get_name())
             }
         }
@@ -1002,8 +1023,15 @@ impl ArgumentList {
         // For example: we have 2 arguments: `numbers` (takes 1 to 3) and `ages` (takes 1 to 10)
         // if we pass: -1 0 2 25 10, is no possible to know to what argument the values are being
         // passed
-        if self.inner.iter().filter(|a| !a.get_values_count().is_exact()).count() > 1 {
-            let arg = self.inner
+        if self
+            .inner
+            .iter()
+            .filter(|a| !a.get_values_count().is_exact())
+            .count()
+            > 1
+        {
+            let arg = self
+                .inner
                 .iter()
                 .filter(|a| !a.get_values_count().is_exact())
                 .nth(1)
@@ -1017,12 +1045,12 @@ impl ArgumentList {
 /// An iterator over the `Argument`s of a argument list.
 #[derive(Debug, Clone)]
 pub struct Iter<'a> {
-    iter: std::slice::Iter<'a, Argument>
+    iter: std::slice::Iter<'a, Argument>,
 }
 
 /// An owning iterator over the `Argument`s of a argument list.
 pub struct IntoIter {
-    iter: std::vec::IntoIter<Argument>
+    iter: std::vec::IntoIter<Argument>,
 }
 
 impl<'a> Iterator for Iter<'a> {
@@ -1149,12 +1177,12 @@ impl<'a> Iterator for RawArgs<'a> {
 
 /// Provides the `Validator` trait used for validate the values of an `Argument`.
 pub mod validator {
-    use std::any::TypeId;
-    use std::cmp::Ordering;
     use std::fmt::Display;
-    use std::hash::{Hash, Hasher};
     use std::marker::PhantomData;
     use std::str::FromStr;
+
+    #[cfg(feature = "valid_type")]
+    use crate::ty::Type;
 
     /// Exposes a method for check if an `str` value is a valid argument value.
     pub trait Validator {
@@ -1169,6 +1197,7 @@ pub mod validator {
         /// to ensure the validator is only valid for `u64` the implementor must return: `Some(Type::of::<u64>())`.
         ///
         /// The returned `Type` is used by `Argument::convert` to ensure if safe to convert a type `T`.
+        #[cfg(feature = "valid_type")]
         fn valid_type(&self) -> Option<Type> {
             None
         }
@@ -1176,14 +1205,14 @@ pub mod validator {
 
     /// A `Validator` where a `str` is considered valid if can be parsed to a type `T`.
     #[derive(Default)]
-    pub struct ParseValidator<T>(PhantomData<T>);
-    impl<T> ParseValidator<T> {
+    pub struct TypeValidator<T>(PhantomData<T>);
+    impl<T> TypeValidator<T> {
         #[inline]
         pub fn new() -> Self {
-            ParseValidator(PhantomData)
+            TypeValidator(PhantomData)
         }
     }
-    impl<T: 'static> Validator for ParseValidator<T>
+    impl<T: 'static> Validator for TypeValidator<T>
     where
         T: FromStr,
     {
@@ -1194,6 +1223,7 @@ pub mod validator {
             }
         }
 
+        #[cfg(feature = "valid_type")]
         fn valid_type(&self) -> Option<Type> {
             Some(Type::of::<T>())
         }
@@ -1229,43 +1259,53 @@ pub mod validator {
             }
         }
 
+        #[cfg(feature = "valid_type")]
         fn valid_type(&self) -> Option<Type> {
             Some(Type::of::<T>())
         }
     }
 
-    // TODO: `validate_type<T>()` and `validate_range<T>(min: T, max: T)`
-
     // This allow to use a closure as a `Validator`
-    impl<F> Validator for F where F: Fn(&str) -> std::result::Result<(), String> {
+    impl<F> Validator for F
+    where
+        F: Fn(&str) -> std::result::Result<(), String>,
+    {
         fn validate(&self, value: &str) -> Result<(), String> {
-            match (self)(value){
+            match (self)(value) {
                 Ok(_) => Ok(()),
-                Err(msg) => Err(msg)
+                Err(msg) => Err(msg),
             }
         }
     }
 
     /// Constructs a `Validator` for the specified type.
     #[inline]
-    pub fn parse_validator<T: 'static + FromStr>() -> ParseValidator<T> {
-        ParseValidator::new()
+    pub fn validate_type<T: 'static + FromStr>() -> TypeValidator<T> {
+        TypeValidator::new()
     }
 
     /// Constructs a `Validator` for the given range.
     #[inline]
-    pub fn range_validator<T: 'static>(min: T, max: T) -> RangeValidator<T>
+    pub fn validate_range<T: 'static>(min: T, max: T) -> RangeValidator<T>
     where
         T: FromStr + PartialOrd + Display,
     {
         RangeValidator::new(min, max)
     }
+}
+
+/// Exposes the `struct Type`.
+#[cfg(feature = "valid_type")]
+pub mod ty {
+    use std::any::TypeId;
+    use std::cmp::Ordering;
+    use std::hash::{Hash, Hasher};
 
     /// Represents a type.
     ///
     /// # Example
     /// ```
-    /// use clapi::validator::Type;
+    /// use clapi::ty::Type;
     /// use std::any::TypeId;
     ///
     /// let r#type = Type::of::<i64>();
@@ -1327,14 +1367,14 @@ pub mod validator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::args::validator::parse_validator;
+    use crate::args::validator::validate_type;
 
     #[test]
     fn arg_test() {
         let arg = Argument::with_name("number")
             .description("the values to use")
             .values_count(1..)
-            .validator(parse_validator::<i64>())
+            .validator(validate_type::<i64>())
             .validation_error("expected integer")
             .default(1);
 
@@ -1348,7 +1388,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected="argument `name` cannot be empty")]
+    #[should_panic(expected = "argument `name` cannot be empty")]
     fn arg_empty_name_test() {
         Argument::with_name("");
     }
@@ -1360,9 +1400,7 @@ mod tests {
 
     #[test]
     fn arg_min_max_values_test() {
-        let arg = Argument::with_name("number")
-            .min_values(5)
-            .max_values(10);
+        let arg = Argument::with_name("number").min_values(5).max_values(10);
 
         assert_eq!(arg.get_values_count().min(), Some(5));
         assert_eq!(arg.get_values_count().max(), Some(10));
@@ -1370,7 +1408,7 @@ mod tests {
 
     #[test]
     fn set_values_test() {
-        let mut number = Argument::one_or_more("number").validator(parse_validator::<f64>());
+        let mut number = Argument::one_or_more("number").validator(validate_type::<f64>());
 
         assert!(!number.is_set());
         assert!(number.set_values(&[1, 2, 3]).is_ok());
@@ -1382,7 +1420,7 @@ mod tests {
 
     #[test]
     fn arg_convert() {
-        let mut number = Argument::with_name("number").validator(parse_validator::<i64>());
+        let mut number = Argument::with_name("number").validator(validate_type::<i64>());
 
         number.set_values(&[42]).unwrap();
 
@@ -1394,7 +1432,7 @@ mod tests {
 
     #[test]
     fn arg_convert_all() {
-        let mut number = Argument::one_or_more("numbers").validator(parse_validator::<i64>());
+        let mut number = Argument::one_or_more("numbers").validator(validate_type::<i64>());
 
         number.set_values(&[1, 2, 3]).unwrap();
 
@@ -1429,7 +1467,7 @@ mod tests {
     }
 
     #[test]
-    fn argument_indexer_test(){
+    fn argument_indexer_test() {
         let mut arg = Argument::one_or_more("numbers");
         arg.set_values(vec![1, 2, 3]).unwrap();
 
@@ -1440,7 +1478,7 @@ mod tests {
     }
 
     #[test]
-    fn argument_list_indexer_test(){
+    fn argument_list_indexer_test() {
         let mut args = ArgumentList::new();
         args.add(Argument::with_name("number")).unwrap();
         args.add(Argument::one_or_more("values")).unwrap();
@@ -1453,34 +1491,54 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected="multiple arguments with default values is not allowed: `max` contains default values")]
-    fn argument_list_with_default_values_test(){
+    #[should_panic(
+        expected = "multiple arguments with default values is not allowed: `max` contains default values"
+    )]
+    fn argument_list_with_default_values_test() {
         let mut args = ArgumentList::new();
         assert!(args.add(Argument::with_name("min").default(0)).is_ok());
-        assert!(args.add(Argument::with_name("max").default(i64::max_value())).is_ok());
+        assert!(args
+            .add(Argument::with_name("max").default(i64::max_value()))
+            .is_ok());
     }
 
     #[test]
-    #[should_panic(expected="arguments with variable values is no allowed if there is default values: `words` contains variable values")]
-    fn argument_list_with_default_values_and_variable_args_test(){
+    #[should_panic(
+        expected = "arguments with variable values is no allowed if there is default values: `words` contains variable values"
+    )]
+    fn argument_list_with_default_values_and_variable_args_test() {
         let mut args = ArgumentList::new();
-        assert!(args.add(Argument::with_name("greeting").default("Hello")).is_ok());
-        assert!(args.add(Argument::with_name("words").values_count(1..)).is_ok());
+        assert!(args
+            .add(Argument::with_name("greeting").default("Hello"))
+            .is_ok());
+        assert!(args
+            .add(Argument::with_name("words").values_count(1..))
+            .is_ok());
     }
 
     #[test]
-    fn argument_list_with_default_values_and_exact_args_test(){
+    fn argument_list_with_default_values_and_exact_args_test() {
         let mut args = ArgumentList::new();
-        assert!(args.add(Argument::with_name("greeting").default("Hello")).is_ok());
-        assert!(args.add(Argument::with_name("words").values_count(3)).is_ok());
+        assert!(args
+            .add(Argument::with_name("greeting").default("Hello"))
+            .is_ok());
+        assert!(args
+            .add(Argument::with_name("words").values_count(3))
+            .is_ok());
     }
 
     #[test]
-    #[should_panic(expected="multiple arguments with variable arguments is not allowed: `characters` contains variable values")]
-    fn argument_list_with_variable_args_test(){
+    #[should_panic(
+        expected = "multiple arguments with variable arguments is not allowed: `characters` contains variable values"
+    )]
+    fn argument_list_with_variable_args_test() {
         let mut args = ArgumentList::new();
-        assert!(args.add(Argument::with_name("numbers").values_count(1..10)).is_ok());
-        assert!(args.add(Argument::with_name("characters").values_count(1..4)).is_ok());
+        assert!(args
+            .add(Argument::with_name("numbers").values_count(1..10))
+            .is_ok());
+        assert!(args
+            .add(Argument::with_name("characters").values_count(1..4))
+            .is_ok());
     }
 
     #[test]
@@ -1489,7 +1547,7 @@ mod tests {
         assert!(args.get_raw_args().into_vec().is_empty());
 
         let mut numbers = Argument::one_or_more("numbers");
-        numbers.set_values(&[1,2]).unwrap();
+        numbers.set_values(&[1, 2]).unwrap();
 
         let mut letter = Argument::with_name("letter");
         letter.set_values(&['a']).unwrap();

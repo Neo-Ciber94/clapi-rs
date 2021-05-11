@@ -16,14 +16,14 @@ use std::cell::Cell;
 /// # Example
 /// ```
 /// use clapi::{Command, CommandOption, Argument, Context, Parser};
-/// use clapi::validator::parse_validator;
+/// use clapi::validator::validate_type;
 ///
 /// let command = Command::new("MyApp")
 ///     .option(CommandOption::new("number")
-///         .arg(Argument::new().validator(parse_validator::<i64>())))
+///         .arg(Argument::new().validator(validate_type::<i64>())))
 ///     .option(CommandOption::new("enable")
 ///         .requires_assign(true)
-///         .arg(Argument::new().validator(parse_validator::<bool>())));
+///         .arg(Argument::new().validator(validate_type::<bool>())));
 ///
 /// let context = Context::new(command);
 /// let result = Parser::new(&context)

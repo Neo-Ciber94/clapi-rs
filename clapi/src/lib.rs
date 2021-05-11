@@ -13,7 +13,7 @@
 //! ## Parsing the arguments
 //! ```no_run
 //! use clapi::{Command, CommandOption, Argument, Parser, Context};
-//! use clapi::validator::parse_validator;
+//! use clapi::validator::validate_type;
 //!
 //! let command = Command::new("MyApp")
 //!     .option(CommandOption::new("version").alias("v"))
@@ -22,7 +22,7 @@
 //!         .option(CommandOption::new("times")
 //!             .alias("t")
 //!             .arg(Argument::with_name("times")
-//!                 .validator(parse_validator::<u64>())
+//!                 .validator(validate_type::<u64>())
 //!                 .default(1))));
 //!
 //! let context = Context::new(command);
@@ -59,7 +59,7 @@
 //!
 //! ## Function handlers
 //! ```no_run
-//! use clapi::validator::parse_validator;
+//! use clapi::validator::validate_type;
 //! use clapi::{Argument, Command, CommandLine, CommandOption};
 //!
 //! fn main() -> clapi::Result<()> {
@@ -70,7 +70,7 @@
 //!                 .option(
 //!                     CommandOption::new("times").alias("t").arg(
 //!                         Argument::with_name("times")
-//!                             .validator(parse_validator::<u64>())
+//!                             .validator(validate_type::<u64>())
 //!                             .default(1),
 //!                     ),
 //!                 )

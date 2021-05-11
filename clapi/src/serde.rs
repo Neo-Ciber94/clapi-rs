@@ -1,4 +1,4 @@
-use crate::serde::internal::{StringOrList, ValidType};
+use crate::serde::internal::StringOrList;
 use crate::{Argument, ArgumentList, Command, CommandOption, OptionList};
 use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::export::{Formatter, Result};
@@ -10,9 +10,11 @@ use std::fmt;
 impl Serialize for Argument {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
-    {
+        S: Serializer {
+        #[cfg(feature = "valid_type")]
         use crate::validator::Validator;
+
+        #[cfg(feature = "valid_type")]
         fn get_valid_type(validator: Option<&dyn Validator>) -> Option<ValidType> {
             match validator {
                 Some(v) => {
@@ -30,7 +32,10 @@ impl Serialize for Argument {
         state.serialize_field("description", &self.get_description())?;
         state.serialize_field("min_values", &self.get_values_count().min())?;
         state.serialize_field("max_values", &self.get_values_count().max())?;
-        state.serialize_field("type", &get_valid_type(self.get_validator()))?;
+        #[cfg(feature = "valid_type")]
+        {
+            state.serialize_field("type", &get_valid_type(self.get_validator()))?;
+        }
         state.serialize_field("error", &self.get_validation_error())?;
         state.serialize_field("valid_values", &self.get_valid_values())?;
         state.serialize_field("default_values", &self.get_default_values())?;
@@ -614,13 +619,8 @@ impl<'de> Deserialize<'de> for Command {
 
 mod internal {
     use serde::de::Visitor;
+    use serde::{de, Deserialize, Deserializer};
     use serde::export::{fmt, Formatter};
-    use serde::{de, Serialize, Deserialize, Deserializer};
-    use crate::args::validator::{Type, parse_validator};
-    use std::any::TypeId;
-    use std::net::{IpAddr, SocketAddr};
-    use crate::Argument;
-    use std::fmt::Display;
 
     macro_rules! visit_to_string {
         ($($method:ident $ty:ty),+ $(,)?) => {
@@ -682,6 +682,15 @@ mod internal {
         String(String),
         List(Vec<String>),
     }
+}
+
+#[cfg(feature = "valid_type")]
+mod valid_type {
+    use crate::args::validator::{Type, validate_type};
+    use std::any::TypeId;
+    use std::net::{IpAddr, SocketAddr};
+    use crate::Argument;
+    use std::fmt::Display;
 
     /// Declares the enum `ValidType` used for serialize the type of an argument.
     macro_rules! declare_impl_valid_type {
@@ -779,19 +788,24 @@ mod argument {
     use serde::{Deserialize, Deserializer, de};
     use serde::de::{Visitor, MapAccess};
     use crate::{Argument, ArgCount};
-    use crate::serde::internal::{ValidType, AnyToString};
+    use crate::serde::internal::AnyToString;
     use std::fmt;
     use std::fmt::Formatter;
+
+    #[cfg(feature = "valid_type")]
+    use crate::serde::valid_type::ValidType;
 
     pub const FIELDS: &'static [&'static str] = &[
         "name",
         "description",
         "min_values",
         "max_values",
-        "type",
         "error",
         "valid_values",
         "default_values",
+
+        #[cfg(feature = "valid_type")]
+        "type",
     ];
 
     pub enum Field {
@@ -799,10 +813,12 @@ mod argument {
         Description,
         MinCount,
         MaxCount,
-        Type,
         Error,
         ValidValues,
         DefaultValues,
+
+        #[cfg(feature = "valid_type")]
+        Type,
     }
 
     impl<'de> Deserialize<'de> for Field {
@@ -815,7 +831,14 @@ mod argument {
                 type Value = Field;
 
                 fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-                    formatter.write_str("`name`, `description`, `min_values`, `max_values`, `type`, `valid_values` or `default_values`")
+                    #[cfg(feature = "valid_type")]
+                    {
+                        formatter.write_str("`name`, `description`, `min_values`, `max_values`, `type`, `valid_values` or `default_values`")
+                    }
+                    #[cfg(not(feature = "valid_type"))]
+                    {
+                        formatter.write_str("`name`, `description`, `min_values`, `max_values`, `valid_values` or `default_values`")
+                    }
                 }
 
                 fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -827,10 +850,12 @@ mod argument {
                         "description" => Ok(Field::Description),
                         "min_values" => Ok(Field::MinCount),
                         "max_values" => Ok(Field::MaxCount),
-                        "type" => Ok(Field::Type),
                         "error" => Ok(Field::Error),
                         "valid_values" => Ok(Field::ValidValues),
                         "default_values" => Ok(Field::DefaultValues),
+
+                        #[cfg(feature = "valid_type")]
+                        "type" => Ok(Field::Type),
                         _ => Err(de::Error::unknown_field(v, FIELDS)),
                     }
                 }
@@ -844,10 +869,12 @@ mod argument {
                         b"description" => Ok(Field::Description),
                         b"min_values" => Ok(Field::MinCount),
                         b"max_values" => Ok(Field::MaxCount),
-                        b"type" => Ok(Field::Type),
                         b"error" => Ok(Field::Error),
                         b"valid_values" => Ok(Field::ValidValues),
                         b"default_values" => Ok(Field::DefaultValues),
+
+                        #[cfg(feature = "valid_type")]
+                        b"type" => Ok(Field::Type),
                         _ => {
                             let value = String::from_utf8_lossy(v);
                             Err(de::Error::unknown_field(&value, FIELDS))
@@ -876,10 +903,12 @@ mod argument {
             let mut description: Option<Option<String>> = None;
             let mut min_values: Option<Option<usize>> = None;
             let mut max_values: Option<Option<usize>> = None;
-            let mut valid_type : Option<Option<ValidType>> = None;
             let mut validation_error: Option<Option<String>> = None;
             let mut valid_values: Option<Vec<String>> = None;
             let mut default_values: Option<Vec<String>> = None;
+
+            #[cfg(feature = "valid_type")]
+            let mut valid_type : Option<Option<ValidType>> = None;
 
             while let Some(key) = map.next_key()? {
                 match key {
@@ -911,6 +940,7 @@ mod argument {
 
                         max_values = Some(map.next_value()?);
                     }
+                    #[cfg(feature = "valid_type")]
                     Field::Type => {
                         if valid_type.is_some() {
                             return Err(de::Error::duplicate_field("type"));
@@ -952,10 +982,6 @@ mod argument {
                 }
             }
 
-            // let mut argument = Argument::with_name(
-            //     name.ok_or_else(|| de::Error::missing_field("name"))?
-            // );
-
             let mut argument = match name {
                 Some(name) => Argument::with_name(name),
                 None => Argument::new()
@@ -972,6 +998,7 @@ mod argument {
                 }
             }
 
+            #[cfg(feature = "valid_type")]
             if let Some(Some(valid_type)) = valid_type {
                 argument = valid_type.set_validator(argument);
             }
@@ -1003,33 +1030,57 @@ mod tests {
     mod args_tests {
         use crate::{Argument, ArgumentList};
         use serde_test::Token;
-        use crate::args::validator::{parse_validator, Type};
         use crate::serde::test_utils::ArgTokens;
-        use crate::serde::internal::ValidType;
+        use crate::args::validator::validate_type;
+
+        #[cfg(feature = "valid_type")]
+        use {
+            crate::args::ty::Type,
+            crate::serde::valid_type::ValidType
+        };
 
         #[test]
         fn argument_test() {
             let arg = Argument::with_name("numbers")
                 .description("A set of numbers")
                 .values_count(1..=10)
-                .validator(parse_validator::<i64>())
+                .validator(validate_type::<i64>())
                 .validation_error("expected integer")
                 .valid_values(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
                 .defaults(&[1, 2, 3]);
 
-            serde_test::assert_tokens(
-                &arg,
-                ArgTokens::new("numbers")
-                    .description("A set of numbers")
-                    .min_values(1)
-                    .max_values(10)
-                    .valid_type(ValidType::I64)
-                    .validation_error("expected integer")
-                    .valid_values(vec!["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"])
-                    .default_values(vec!["1", "2", "3"])
-                    .to_tokens()
-                    .as_slice(),
-            );
+            #[cfg(feature = "valid_type")]
+            {
+                serde_test::assert_tokens(
+                    &arg,
+                    ArgTokens::new("numbers")
+                        .description("A set of numbers")
+                        .min_values(1)
+                        .max_values(10)
+                        .valid_type(ValidType::I64)
+                        .validation_error("expected integer")
+                        .valid_values(vec!["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"])
+                        .default_values(vec!["1", "2", "3"])
+                        .to_tokens()
+                        .as_slice(),
+                );
+            }
+
+            #[cfg(not(feature = "valid_type"))]
+            {
+                serde_test::assert_tokens(
+                    &arg,
+                    ArgTokens::new("numbers")
+                        .description("A set of numbers")
+                        .min_values(1)
+                        .max_values(10)
+                        .validation_error("expected integer")
+                        .valid_values(vec!["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"])
+                        .default_values(vec!["1", "2", "3"])
+                        .to_tokens()
+                        .as_slice(),
+                );
+            }
         }
 
         #[test]
@@ -1077,12 +1128,13 @@ mod tests {
 
             assert_eq!(arg.get_name(), "numbers");
             assert_eq!(
-                arg.get_validator().unwrap().valid_type(),
-                Some(Type::of::<i32>())
-            );
-            assert_eq!(
                 arg.get_valid_values(),
                 &["1".to_owned(), "2".to_owned(), "3".to_owned()]
+            );
+            #[cfg(feature = "valid_type")]
+            assert_eq!(
+                arg.get_validator().unwrap().valid_type(),
+                Some(Type::of::<i32>())
             );
         }
 
@@ -1367,10 +1419,12 @@ mod test_utils {
         description: Option<&'static str>,
         min_values: Option<u64>,
         max_values: Option<u64>,
-        valid_type: Option<ValidType>,
         validation_error: Option<&'static str>,
         valid_values: Vec<&'static str>,
         default_values: Vec<&'static str>,
+
+        #[cfg(feature = "valid_type")]
+        valid_type: Option<ValidType>,
     }
 
     impl ArgTokens {
@@ -1380,10 +1434,12 @@ mod test_utils {
                 description: None,
                 min_values: None,
                 max_values: None,
-                valid_type: None,
                 validation_error: None,
                 valid_values: vec![],
-                default_values: vec![]
+                default_values: vec![],
+
+                #[cfg(feature = "valid_type")]
+                valid_type: None,
             }
         }
 
@@ -1408,6 +1464,7 @@ mod test_utils {
             self
         }
 
+        #[cfg(feature = "valid_type")]
         pub fn valid_type(mut self, valid_type: ValidType) -> Self {
             self.valid_type = Some(valid_type);
             self
@@ -1467,12 +1524,15 @@ mod test_utils {
             }
 
             // Argument valid type
-            tokens.push(Token::Str("type"));
-            if let Some(valid_type) = &self.valid_type {
-                tokens.push(Token::Some);
-                tokens.push(Token::UnitVariant { name: "ValidType", variant: valid_type.as_str() });
-            } else {
-                tokens.push(Token::None);
+            #[cfg(feature = "valid_type")]
+            {
+                tokens.push(Token::Str("type"));
+                if let Some(valid_type) = &self.valid_type {
+                    tokens.push(Token::Some);
+                    tokens.push(Token::UnitVariant { name: "ValidType", variant: valid_type.as_str() });
+                } else {
+                    tokens.push(Token::None);
+                }
             }
 
             // Argument validation error

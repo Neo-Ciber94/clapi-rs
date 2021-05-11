@@ -154,7 +154,7 @@ impl<'a> IntoIterator for &'a Values<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::args::validator::parse_validator;
+    use crate::args::validator::validate_type;
     use crate::{split_into_args, Context, Parser, ErrorKind, CommandOption};
 
     fn parse_with(value: &str, command: Command) -> crate::Result<ParseResult> {
@@ -169,7 +169,7 @@ mod tests {
             .option(
                 CommandOption::new("repeat").alias("r").arg(
                     Argument::with_name("times")
-                        .validator(parse_validator::<u64>())
+                        .validator(validate_type::<u64>())
                         .default(1),
                 ),
             )
@@ -274,7 +274,7 @@ mod tests {
                 CommandOption::new("times")
                     .alias("t")
                     .required(true)
-                    .arg(Argument::with_name("times").validator(parse_validator::<u64>())),
+                    .arg(Argument::with_name("times").validator(validate_type::<u64>())),
             )
             .arg(Argument::zero_or_more("values"));
 
@@ -320,7 +320,7 @@ mod tests {
             .option(
                 CommandOption::new("enable").arg(
                     Argument::with_name("value")
-                        .validator(parse_validator::<bool>())
+                        .validator(validate_type::<bool>())
                         .values_count(0..=1),
                 ),
             );
@@ -341,8 +341,8 @@ mod tests {
     #[test]
     fn parse_result_multiple_args_test() {
         let command = Command::new("MyApp")
-            .arg(Argument::with_name("min").validator(parse_validator::<i64>()))
-            .arg(Argument::with_name("max").validator(parse_validator::<i64>()))
+            .arg(Argument::with_name("min").validator(validate_type::<i64>()))
+            .arg(Argument::with_name("max").validator(validate_type::<i64>()))
             .option(
                 CommandOption::new("replace")
                     .alias("r")
@@ -433,14 +433,14 @@ mod tests {
                 CommandOption::new("letters").arg(
                     Argument::with_name("letters")
                         .values_count(1..)
-                        .validator(parse_validator::<char>()),
+                        .validator(validate_type::<char>()),
                 ),
             )
             .option(
                 CommandOption::new("numbers").arg(
                     Argument::with_name("numbers")
                         .values_count(1..=2)
-                        .validator(parse_validator::<i64>()),
+                        .validator(validate_type::<i64>()),
                 ),
             );
 
@@ -521,8 +521,8 @@ mod tests {
             .option(
                 CommandOption::new("range")
                     .alias("r")
-                    .arg(Argument::with_name("min").validator(parse_validator::<i64>()))
-                    .arg(Argument::with_name("max").validator(parse_validator::<i64>())),
+                    .arg(Argument::with_name("min").validator(validate_type::<i64>()))
+                    .arg(Argument::with_name("max").validator(validate_type::<i64>())),
             )
             .option(CommandOption::new("A").alias("a"))
             .option(CommandOption::new("B").alias("b"))
@@ -569,7 +569,7 @@ mod tests {
             CommandOption::new("enable").arg(
                 Argument::with_name("enable")
                     .values_count(0..=1)
-                    .validator(parse_validator::<bool>()),
+                    .validator(validate_type::<bool>()),
             ),
         );
 

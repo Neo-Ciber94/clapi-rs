@@ -1,4 +1,4 @@
-use clapi::validator::parse_validator;
+use clapi::validator::validate_type;
 use clapi::{Argument, Command, CommandOption};
 use std::num::NonZeroUsize;
 
@@ -13,7 +13,7 @@ fn main() {
                 .description("number of times to repeat")
                 .arg(
                     Argument::new()
-                        .validator(parse_validator::<NonZeroUsize>())
+                        .validator(validate_type::<NonZeroUsize>())
                         .validation_error("expected number greater than 0")
                         .default(NonZeroUsize::new(1).unwrap()),
                 ),

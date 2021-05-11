@@ -223,7 +223,7 @@ impl ArgAttrData {
                 // We set both, the validator and the validation error
                 let arg_type = self.fn_arg.1.get_type();
                 quote! {
-                    .validator(clapi::validator::parse_validator::<#arg_type>())
+                    .validator(clapi::validator::validate_type::<#arg_type>())
                     .validation_error(#s)
                 }
             })

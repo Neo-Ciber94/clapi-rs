@@ -269,13 +269,13 @@ impl Command {
     /// # Example
     /// ```
     /// use clapi::{Command, CommandOption, Argument};
-    /// use clapi::validator::parse_validator;
+    /// use clapi::validator::validate_type;
     ///
     /// let command = Command::new("MyApp")
     ///     .option(CommandOption::new("enable"))
     ///     .option(CommandOption::new("times")
     ///         .arg(Argument::new()
-    ///             .validator(parse_validator::<i64>())));
+    ///             .validator(validate_type::<i64>())));
     ///
     /// assert!(command.get_options().contains("enable"));
     /// assert!(command.get_options().contains("times"));
@@ -290,13 +290,13 @@ impl Command {
     /// # Example
     /// ```
     /// use clapi::{OptionList, CommandOption, Argument, Command};
-    /// use clapi::validator::parse_validator;
+    /// use clapi::validator::validate_type;
     ///
     /// let mut options = OptionList::new();
     /// options.add(CommandOption::new("enable")).unwrap();
     /// options.add(CommandOption::new("times")
     ///     .arg(Argument::new()
-    ///         .validator(parse_validator::<i64>()))).unwrap();
+    ///         .validator(validate_type::<i64>()))).unwrap();
     ///
     /// let command = Command::new("MyApp").options(options);
     /// assert!(command.get_options().contains("enable"));
@@ -447,12 +447,12 @@ impl Command {
     /// # Example:
     /// ```no_run
     /// use clapi::{Command, CommandOption, Argument};
-    /// use clapi::validator::parse_validator;
+    /// use clapi::validator::validate_type;
     ///
     /// let result = Command::root()
     ///     .option(CommandOption::new("negate")
-    ///         .arg(Argument::new().validator(parse_validator::<bool>())))
-    ///     .arg(Argument::one_or_more("values").validator(parse_validator::<i64>()))
+    ///         .arg(Argument::new().validator(validate_type::<bool>())))
+    ///     .arg(Argument::one_or_more("values").validator(validate_type::<i64>()))
     ///     .parse_args()
     ///     .unwrap();
     /// ```
@@ -469,12 +469,12 @@ impl Command {
     /// # Example:
     /// ```
     /// use clapi::{Command, CommandOption, Argument};
-    /// use clapi::validator::parse_validator;
+    /// use clapi::validator::validate_type;
     ///
     /// let result = Command::root()
     ///     .option(CommandOption::new("negate")
-    ///         .arg(Argument::new().validator(parse_validator::<bool>())))
-    ///     .arg(Argument::one_or_more("values").validator(parse_validator::<i64>()))
+    ///         .arg(Argument::new().validator(validate_type::<bool>())))
+    ///     .arg(Argument::one_or_more("values").validator(validate_type::<i64>()))
     ///     .parse_from(vec!["--negate=true", "1", "2", "3"])
     ///     .unwrap();
     ///
