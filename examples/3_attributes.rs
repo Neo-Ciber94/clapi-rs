@@ -9,12 +9,10 @@ use std::num::NonZeroUsize;
     default=1,
     error="expected number greater than 0"
 )]
-fn main(times: NonZeroUsize, values: Vec<String>) -> clapi::Result<()> {
+fn main(times: NonZeroUsize, values: Vec<String>) {
     let values = values.join(" ");
 
     for _ in 0..times.get() {
         println!("{}", values);
     }
-
-    Ok(())
 }

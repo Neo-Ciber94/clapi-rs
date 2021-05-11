@@ -310,7 +310,7 @@ impl CommandAttrData {
             }
         } else {
             /*
-                We omit the handler if don't contains any expressions or locals, for example:
+                We omit the handler if is EMPTY (don't contains any expressions or locals), for example:
 
                 EMPTY:
                     fn test() {}
@@ -379,7 +379,7 @@ impl CommandAttrData {
                 }
             };
 
-            // Emit the tokens to create the function with the `RootCommand`
+            // Emit the tokens to create the function with the `Command`
             quote! {
                 #(#attrs)*
                 fn #name() #ret {
@@ -598,6 +598,8 @@ pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {
     item_fn
 }
 
+// TODO: Requires an explicit 'flag=true' to enable boolean flags because the actual method is not explicit?
+
 /// Checks if a function argument can be considered an option bool flag like: `--enable`
 ///
 /// In the next example, `enable` is considered an option bool flag when passing: `--enable`
@@ -623,7 +625,7 @@ pub fn is_option_bool_flag(fn_arg: &FnArgData) -> bool {
             .get(crate::consts::MIN)
             .map(|v| {
                 v.to_integer_literal::<usize>()
-                    .expect("`min` must be a integer literal")
+                    .expect("`min` must be an integer literal")
             })
             .unwrap_or(0);
 
@@ -643,7 +645,7 @@ pub fn is_option_bool_flag(fn_arg: &FnArgData) -> bool {
             })
             .unwrap_or(false);
 
-        // Is an option bool flag is is boolean type and: min = 0, max = 1, default = false
+        // Is an option bool flag if: is boolean type and: min = 0, max = 1, default = false
         min == 0 && max == 1 && default == false
     } else {
         true
@@ -1300,6 +1302,7 @@ mod imp {
         })
     }
 
+    // Checks whether an items is a free function declared outside a ``mod { }``
     fn assert_is_top_free_function(file: &File, item_fn: &ItemFn) {
         fn eq_item_fn(left: &ItemFn, right: &ItemFn) -> bool {
             left.block == right.block && left.sig == right.sig && left.vis == right.vis
