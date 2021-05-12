@@ -1,5 +1,4 @@
 use std::num::NonZeroUsize;
-use clapi::help::command_help;
 
 fn main() -> clapi::Result<()> {
     let cli = clapi::app!{ echo =>

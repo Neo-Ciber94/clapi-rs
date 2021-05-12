@@ -78,8 +78,8 @@ impl Error {
         if matches!(self.kind(), ErrorKind::DisplayHelp(_) | ErrorKind::DisplayVersion(_)) {
             println!("{}", self);
         } else {
-            // Error already contains a newline
-            eprint!("Error: {}", self);
+            // FIXME: Error already contains a newline
+            eprintln!("Error: {}", self);
         }
 
         std::process::exit(0)

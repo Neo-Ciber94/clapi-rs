@@ -138,7 +138,10 @@ impl OptionAttrData {
                         Value::Array(array) => arg.set_valid_values(array.clone()),
                     },
                     consts::FLAG => {
-                        // Nothing, flag is checked in `command#is_option_bool_flag`
+                        // Just type checking
+                        // This is used by `command.rs#is_option_bool_flag`
+                        value.to_bool_literal()
+                             .expect("option `flag` must be a bool literal");
                     },
                     _ => panic!("invalid `option` key `{}`", key),
                 }

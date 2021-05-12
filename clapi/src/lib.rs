@@ -174,7 +174,12 @@ pub mod token;
 /// Converts the command-line arguments into tokens.
 pub mod tokenizer;
 
+/// Provides the `Validator` trait used for validate the values of an `Argument`.
 pub mod validator;
+
+/// Exposes the `struct Type` for arguments type checking.
+#[cfg(feature = "valid_type")]
+pub mod typing;
 
 // Re-exports
 pub use self::arg_count::*;

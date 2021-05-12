@@ -1,10 +1,13 @@
-use crate::serde::internal::StringOrList;
-use crate::{Argument, ArgumentList, Command, CommandOption, OptionList};
-use serde::de::{MapAccess, SeqAccess, Visitor};
-use serde::ser::{SerializeSeq, SerializeStruct};
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::fmt::Formatter;
+
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::de::{MapAccess, SeqAccess, Visitor};
+use serde::ser::{SerializeSeq, SerializeStruct};
+
+use crate::{Argument, ArgumentList, Command, CommandOption, OptionList};
+use crate::serde::internal::StringOrList;
+use crate::serde::valid_type::ValidType;
 
 //  Argument
 impl Serialize for Argument {
@@ -618,10 +621,11 @@ impl<'de> Deserialize<'de> for Command {
 }
 
 mod internal {
-    use serde::de::Visitor;
-    use serde::{de, Deserialize, Deserializer};
     use std::fmt;
     use std::fmt::Formatter;
+
+    use serde::{de, Deserialize, Deserializer};
+    use serde::de::Visitor;
 
     macro_rules! visit_to_string {
         ($($method:ident $ty:ty),+ $(,)?) => {
@@ -687,19 +691,21 @@ mod internal {
 
 #[cfg(feature = "valid_type")]
 mod valid_type {
-    use crate::args::validator::{Type, validate_type};
     use std::any::TypeId;
+    use std::fmt::{Display, Formatter};
     use std::net::{IpAddr, SocketAddr};
+    use serde::{Deserialize, Serialize};
     use crate::Argument;
-    use std::fmt::Display;
+    use crate::typing::Type;
+    use crate::validator::validate_type;
 
     /// Declares the enum `ValidType` used for serialize the type of an argument.
     macro_rules! declare_impl_valid_type {
         ('primitives: $($ty:ty => $variant:ident),+
             'other: $($ty2:ty => $variant2:ident $name:literal),* $(,)?) => {
 
-            #[serde(rename_all="lowercase")]
             #[derive(Debug, Clone, Serialize, Deserialize)]
+            #[serde(rename_all="lowercase")]
             pub enum ValidType {
                 $(
                     $variant
@@ -731,10 +737,10 @@ mod valid_type {
                 pub fn set_validator(&self, arg: Argument) -> Argument {
                     match self {
                         $(
-                            ValidType::$variant => arg.validator(parse_validator::<$ty>())
+                            ValidType::$variant => arg.validator(validate_type::<$ty>())
                         ),+,
                         $(
-                            ValidType::$variant2 => arg.validator(parse_validator::<$ty2>())
+                            ValidType::$variant2 => arg.validator(validate_type::<$ty2>())
                         ),*
                     }
                 }
@@ -786,13 +792,14 @@ mod valid_type {
 }
 
 mod argument {
-    use serde::{Deserialize, Deserializer, de};
-    use serde::de::{Visitor, MapAccess};
-    use crate::{Argument, ArgCount};
-    use crate::serde::internal::AnyToString;
     use std::fmt;
     use std::fmt::Formatter;
 
+    use serde::{de, Deserialize, Deserializer};
+    use serde::de::{MapAccess, Visitor};
+
+    use crate::{ArgCount, Argument};
+    use crate::serde::internal::AnyToString;
     #[cfg(feature = "valid_type")]
     use crate::serde::valid_type::ValidType;
 
@@ -1029,16 +1036,17 @@ mod argument {
 mod tests {
     #[cfg(test)]
     mod args_tests {
-        use crate::{Argument, ArgumentList};
         use serde_test::Token;
-        use crate::serde::test_utils::ArgTokens;
-        use crate::args::validator::validate_type;
 
         #[cfg(feature = "valid_type")]
         use {
-            crate::args::ty::Type,
-            crate::serde::valid_type::ValidType
+            crate::serde::valid_type::ValidType,
+            crate::typing::Type
         };
+
+        use crate::{Argument, ArgumentList};
+        use crate::serde::test_utils::ArgTokens;
+        use crate::validator::validate_type;
 
         #[test]
         fn argument_test() {
@@ -1178,9 +1186,10 @@ mod tests {
 
     #[cfg(test)]
     mod options_tests {
-        use crate::{ArgCount, Argument, CommandOption, OptionList};
         use serde_test::Token;
-        use crate::serde::test_utils::{OptionTokens, ArgTokens};
+
+        use crate::{ArgCount, Argument, CommandOption, OptionList};
+        use crate::serde::test_utils::{ArgTokens, OptionTokens};
 
         #[test]
         fn option_test() {
@@ -1291,7 +1300,7 @@ mod tests {
     #[cfg(test)]
     mod command_tests {
         use crate::{ArgCount, Argument, Command, CommandOption};
-        use crate::serde::test_utils::{CommandTokens, OptionTokens, ArgTokens};
+        use crate::serde::test_utils::{ArgTokens, CommandTokens, OptionTokens};
 
         #[test]
         fn command_test() {
@@ -1412,7 +1421,8 @@ mod tests {
 #[cfg(test)]
 mod test_utils {
     use serde_test::Token;
-    use crate::serde::internal::ValidType;
+
+    use crate::serde::valid_type::ValidType;
 
     #[derive(Debug, Clone)]
     pub struct ArgTokens {

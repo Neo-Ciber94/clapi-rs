@@ -154,7 +154,7 @@ impl<'a> IntoIterator for &'a Values<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::args::validator::validate_type;
+    use crate::validator::validate_type;
     use crate::{split_into_args, Context, Parser, ErrorKind, CommandOption};
 
     fn parse_with(value: &str, command: Command) -> crate::Result<ParseResult> {
