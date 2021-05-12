@@ -2,7 +2,7 @@ use std::fmt::Display;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
-#[cfg(feature = "valid_type")]
+#[cfg(feature = "typing")]
 use crate::typing::Type;
 
 /// Exposes a method for check if an `str` value is a valid argument value.
@@ -18,7 +18,7 @@ pub trait Validator {
     /// to ensure the validator is only valid for `u64` the implementor must return: `Some(Type::of::<u64>())`.
     ///
     /// The returned `Type` is used by `Argument::convert` to ensure if safe to convert a type `T`.
-    #[cfg(feature = "valid_type")]
+    #[cfg(feature = "typing")]
     fn valid_type(&self) -> Option<Type> {
         None
     }
@@ -44,7 +44,7 @@ impl<T: 'static> Validator for TypeValidator<T>
         }
     }
 
-    #[cfg(feature = "valid_type")]
+    #[cfg(feature = "typing")]
     fn valid_type(&self) -> Option<Type> {
         Some(Type::of::<T>())
     }
@@ -80,7 +80,7 @@ impl<T: 'static> Validator for RangeValidator<T>
         }
     }
 
-    #[cfg(feature = "valid_type")]
+    #[cfg(feature = "typing")]
     fn valid_type(&self) -> Option<Type> {
         Some(Type::of::<T>())
     }

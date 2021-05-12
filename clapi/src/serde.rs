@@ -14,10 +14,10 @@ impl Serialize for Argument {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer {
-        #[cfg(feature = "valid_type")]
+        #[cfg(feature = "typing")]
         use crate::validator::Validator;
 
-        #[cfg(feature = "valid_type")]
+        #[cfg(feature = "typing")]
         fn get_valid_type(validator: Option<&dyn Validator>) -> Option<ValidType> {
             match validator {
                 Some(v) => {
@@ -35,7 +35,7 @@ impl Serialize for Argument {
         state.serialize_field("description", &self.get_description())?;
         state.serialize_field("min_values", &self.get_values_count().min())?;
         state.serialize_field("max_values", &self.get_values_count().max())?;
-        #[cfg(feature = "valid_type")]
+        #[cfg(feature = "typing")]
         {
             state.serialize_field("type", &get_valid_type(self.get_validator()))?;
         }
@@ -689,7 +689,7 @@ mod internal {
     }
 }
 
-#[cfg(feature = "valid_type")]
+#[cfg(feature = "typing")]
 mod valid_type {
     use std::any::TypeId;
     use std::fmt::{Display, Formatter};
@@ -800,7 +800,7 @@ mod argument {
 
     use crate::{ArgCount, Argument};
     use crate::serde::internal::AnyToString;
-    #[cfg(feature = "valid_type")]
+    #[cfg(feature = "typing")]
     use crate::serde::valid_type::ValidType;
 
     pub const FIELDS: &'static [&'static str] = &[
@@ -812,7 +812,7 @@ mod argument {
         "valid_values",
         "default_values",
 
-        #[cfg(feature = "valid_type")]
+        #[cfg(feature = "typing")]
         "type",
     ];
 
@@ -825,7 +825,7 @@ mod argument {
         ValidValues,
         DefaultValues,
 
-        #[cfg(feature = "valid_type")]
+        #[cfg(feature = "typing")]
         Type,
     }
 
@@ -839,11 +839,11 @@ mod argument {
                 type Value = Field;
 
                 fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-                    #[cfg(feature = "valid_type")]
+                    #[cfg(feature = "typing")]
                     {
                         formatter.write_str("`name`, `description`, `min_values`, `max_values`, `type`, `valid_values` or `default_values`")
                     }
-                    #[cfg(not(feature = "valid_type"))]
+                    #[cfg(not(feature = "typing"))]
                     {
                         formatter.write_str("`name`, `description`, `min_values`, `max_values`, `valid_values` or `default_values`")
                     }
@@ -862,7 +862,7 @@ mod argument {
                         "valid_values" => Ok(Field::ValidValues),
                         "default_values" => Ok(Field::DefaultValues),
 
-                        #[cfg(feature = "valid_type")]
+                        #[cfg(feature = "typing")]
                         "type" => Ok(Field::Type),
                         _ => Err(de::Error::unknown_field(v, FIELDS)),
                     }
@@ -881,7 +881,7 @@ mod argument {
                         b"valid_values" => Ok(Field::ValidValues),
                         b"default_values" => Ok(Field::DefaultValues),
 
-                        #[cfg(feature = "valid_type")]
+                        #[cfg(feature = "typing")]
                         b"type" => Ok(Field::Type),
                         _ => {
                             let value = String::from_utf8_lossy(v);
@@ -915,7 +915,7 @@ mod argument {
             let mut valid_values: Option<Vec<String>> = None;
             let mut default_values: Option<Vec<String>> = None;
 
-            #[cfg(feature = "valid_type")]
+            #[cfg(feature = "typing")]
             let mut valid_type : Option<Option<ValidType>> = None;
 
             while let Some(key) = map.next_key()? {
@@ -948,7 +948,7 @@ mod argument {
 
                         max_values = Some(map.next_value()?);
                     }
-                    #[cfg(feature = "valid_type")]
+                    #[cfg(feature = "typing")]
                     Field::Type => {
                         if valid_type.is_some() {
                             return Err(de::Error::duplicate_field("type"));
@@ -1006,7 +1006,7 @@ mod argument {
                 }
             }
 
-            #[cfg(feature = "valid_type")]
+            #[cfg(feature = "typing")]
             if let Some(Some(valid_type)) = valid_type {
                 argument = valid_type.set_validator(argument);
             }
@@ -1038,7 +1038,7 @@ mod tests {
     mod args_tests {
         use serde_test::Token;
 
-        #[cfg(feature = "valid_type")]
+        #[cfg(feature = "typing")]
         use {
             crate::serde::valid_type::ValidType,
             crate::typing::Type
@@ -1058,7 +1058,7 @@ mod tests {
                 .valid_values(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
                 .defaults(&[1, 2, 3]);
 
-            #[cfg(feature = "valid_type")]
+            #[cfg(feature = "typing")]
             {
                 serde_test::assert_tokens(
                     &arg,
@@ -1075,7 +1075,7 @@ mod tests {
                 );
             }
 
-            #[cfg(not(feature = "valid_type"))]
+            #[cfg(not(feature = "typing"))]
             {
                 serde_test::assert_tokens(
                     &arg,
@@ -1140,7 +1140,7 @@ mod tests {
                 arg.get_valid_values(),
                 &["1".to_owned(), "2".to_owned(), "3".to_owned()]
             );
-            #[cfg(feature = "valid_type")]
+            #[cfg(feature = "typing")]
             assert_eq!(
                 arg.get_validator().unwrap().valid_type(),
                 Some(Type::of::<i32>())
@@ -1434,7 +1434,7 @@ mod test_utils {
         valid_values: Vec<&'static str>,
         default_values: Vec<&'static str>,
 
-        #[cfg(feature = "valid_type")]
+        #[cfg(feature = "typing")]
         valid_type: Option<ValidType>,
     }
 
@@ -1449,7 +1449,7 @@ mod test_utils {
                 valid_values: vec![],
                 default_values: vec![],
 
-                #[cfg(feature = "valid_type")]
+                #[cfg(feature = "typing")]
                 valid_type: None,
             }
         }
@@ -1475,7 +1475,7 @@ mod test_utils {
             self
         }
 
-        #[cfg(feature = "valid_type")]
+        #[cfg(feature = "typing")]
         pub fn valid_type(mut self, valid_type: ValidType) -> Self {
             self.valid_type = Some(valid_type);
             self
@@ -1535,7 +1535,7 @@ mod test_utils {
             }
 
             // Argument valid type
-            #[cfg(feature = "valid_type")]
+            #[cfg(feature = "typing")]
             {
                 tokens.push(Token::Str("type"));
                 if let Some(valid_type) = &self.valid_type {

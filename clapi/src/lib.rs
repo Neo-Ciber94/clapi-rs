@@ -178,7 +178,7 @@ pub mod tokenizer;
 pub mod validator;
 
 /// Exposes the `struct Type` for arguments type checking.
-#[cfg(feature = "valid_type")]
+#[cfg(feature = "typing")]
 pub mod typing;
 
 // Re-exports

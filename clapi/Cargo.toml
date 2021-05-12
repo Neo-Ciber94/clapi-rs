@@ -8,7 +8,7 @@ edition = "2018"
 
 [features]
 macros = ["clapi_macros"]
-valid_type = []
+typing = []
 
 [dependencies]
 clapi_macros = { optional=true, path="../clapi_macros" }

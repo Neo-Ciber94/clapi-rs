@@ -11,7 +11,7 @@ use std::str::FromStr;
 
 use crate::validator::Validator;
 
-#[cfg(feature = "valid_type")]
+#[cfg(feature = "typing")]
 use crate::typing::Type;
 
 #[doc(hidden)]
@@ -593,7 +593,7 @@ impl Argument {
         T: FromStr + 'static,
         <T as FromStr>::Err: Display,
     {
-        #[cfg(feature = "valid_type")]
+        #[cfg(feature = "typing")]
         {
             // Checks if the type `T` is valid for the validator
             self.assert_valid_type::<T>()?;
@@ -643,7 +643,7 @@ impl Argument {
         T: FromStr + 'static,
         <T as FromStr>::Err: Display,
     {
-        #[cfg(feature = "valid_type")]
+        #[cfg(feature = "typing")]
         {
             // Checks if the type `T` is valid for the validator
             self.assert_valid_type::<T>()?;
@@ -664,7 +664,7 @@ impl Argument {
     }
 
     /// Checks if the type `T` is valid for the validator.
-    #[cfg(feature = "valid_type")]
+    #[cfg(feature = "typing")]
     fn assert_valid_type<T: 'static>(&self) -> Result<()> {
         if let Some(validator) = &self.validator {
             // If the validator returns `None`, we can convert type `T` to any valid type
@@ -672,14 +672,10 @@ impl Argument {
             if let Some(expected) = validator.valid_type() {
                 let current = Type::of::<T>();
                 if expected != current {
-                    return Err(Error::new(
-                        ErrorKind::Other,
-                        format!(
-                            "invalid argument type for `{}`, `{}` was expected but was `{}`",
-                            self.get_name(),
-                            expected.name(),
-                            current.name()
-                        ),
+                    return Err(self.invalid_argument(
+                        format!("type `{}` was expected but was `{}`",
+                                expected.name(),
+                                current.name())
                     ));
                 }
             }
@@ -1309,7 +1305,7 @@ mod tests {
         let mut args = ArgumentList::new();
         assert!(args.add(Argument::with_name("min").default(0)).is_ok());
         assert!(args
-            .add(Argument::with_name("max").default(i64::max_value()))
+            .add(Argument::with_name("max").default(i64::MAX))
             .is_ok());
     }
 
