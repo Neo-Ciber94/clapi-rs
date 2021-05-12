@@ -55,10 +55,10 @@ impl ArgLocalVar {
                         None => false,
                         Some(option) => {
                             let arg = option.get_arg().unwrap();
-                            if arg.is_set() {
-                                arg.convert::<bool>()?
-                            } else {
-                                true
+                            match arg.convert::<bool>() {
+                                Ok(v) => v,
+                                Err(e) if e.kind() == &clapi::ErrorKind::InvalidArgumentCount => true,
+                                Err(e) => return Err(e)
                             }
                         },
                     }

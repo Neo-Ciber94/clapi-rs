@@ -2,7 +2,7 @@ use crate::arg::ArgAttrData;
 use crate::consts;
 use crate::command::{is_option_bool_flag, FnArgData};
 use crate::macro_attribute::{Value, MacroAttribute};
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::TokenStream;
 use quote::*;
 
 /// Tokens for an `option` attribute.
@@ -31,6 +31,7 @@ pub struct OptionAttrData {
     is_hidden: Option<bool>,
     allow_multiple: Option<bool>,
     requires_assign: Option<bool>,
+    is_flag: bool
 }
 
 impl OptionAttrData {
@@ -46,7 +47,8 @@ impl OptionAttrData {
             arg: None,
             is_hidden: None,
             allow_multiple: None,
-            requires_assign: None
+            requires_assign: None,
+            is_flag: false
         }
     }
 
@@ -135,6 +137,9 @@ impl OptionAttrData {
                         Value::Literal(lit) => arg.set_valid_values(vec![lit.clone()]),
                         Value::Array(array) => arg.set_valid_values(array.clone()),
                     },
+                    consts::FLAG => {
+                        // Nothing, flag is checked in `command#is_option_bool_flag`
+                    },
                     _ => panic!("invalid `option` key `{}`", key),
                 }
             }
@@ -150,13 +155,7 @@ impl OptionAttrData {
             // --flag           (true)
             // [no option]      (false)
 
-            // Is needed to set `false` as default value
-            // to allow the option to be marked as no `required`
-            let lit = syn::LitBool {
-                value: false,
-                span: Span::call_site(),
-            };
-            arg.set_default_values(vec![syn::Lit::Bool(lit)]);
+            option.is_flag = true;
             arg.set_min(0);
             arg.set_max(1); //#[option]
         }
@@ -213,9 +212,9 @@ impl OptionAttrData {
             .as_ref()
             .map(|s| quote! { .description(#s) });
 
-        // Option is required if `args` have default values
+        // Option is required if `args` don't have default values and is not a bool flag
         let required = match &self.arg {
-            Some(args) if !args.has_default_values() => {
+            Some(args) if !args.has_default_values() && !self.is_flag => {
                 quote! { .required(true) }
             }
             _ => quote! {},

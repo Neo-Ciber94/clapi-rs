@@ -161,6 +161,7 @@ mod option;
 mod parse_result;
 mod parser;
 
+
 /// Utilities for provide suggestions.
 pub mod suggestion;
 
@@ -172,6 +173,8 @@ pub mod token;
 
 /// Converts the command-line arguments into tokens.
 pub mod tokenizer;
+
+pub mod validator;
 
 // Re-exports
 pub use self::arg_count::*;

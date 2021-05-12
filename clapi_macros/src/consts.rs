@@ -20,12 +20,13 @@ pub const VALUES: &str = "values";
 pub const HIDDEN: &str = "hidden";
 pub const MULTIPLE: &str = "multiple";
 pub const REQUIRES_ASSIGN : &str = "requires_assign";
+pub const FLAG : &str = "flag";
 pub const ERROR : &str = "error";
 pub const COMMAND_HELP : &str = "command_help";
 pub const COMMAND_USAGE: &str = "command_usage";
 
 pub fn is_clapi_attribute(path: &str) -> bool {
-    is_command(path) || is_subcommand(path) || is_option(path) || is_arg(path) || is_help(path)
+    is_command(path) || is_subcommand(path) || is_option(path) || is_arg(path)
 }
 
 pub fn is_command(path: &str) -> bool {
@@ -48,8 +49,4 @@ pub fn is_option(path: &str) -> bool {
 
 pub fn is_arg(path: &str) -> bool {
     matches!(path, "arg" | "clapi::arg" | "clapi::macros::arg" | "clapi_macros::arg")
-}
-
-pub fn is_help(path: &str) -> bool {
-    matches!(path, "help" | "clapi::help" | "clapi::macros::help" | "clapi_macros::help")
 }

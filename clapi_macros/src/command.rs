@@ -598,8 +598,6 @@ pub fn drop_command_attributes(mut item_fn: ItemFn) -> ItemFn {
     item_fn
 }
 
-// TODO: Requires an explicit 'flag=true' to enable boolean flags because the actual method is not explicit?
-
 /// Checks if a function argument can be considered an option bool flag like: `--enable`
 ///
 /// In the next example, `enable` is considered an option bool flag when passing: `--enable`
@@ -621,6 +619,13 @@ pub fn is_option_bool_flag(fn_arg: &FnArgData) -> bool {
     }
 
     if let Some(attribute) = &fn_arg.name_value {
+        // #[option(flag=false)]
+        if let Some(flag_value) = attribute.get(crate::consts::FLAG) {
+           if !flag_value.to_bool_literal().expect("`flag` must be a bool literal") {
+               return false;
+           }
+        }
+
         let min = attribute
             .get(crate::consts::MIN)
             .map(|v| {

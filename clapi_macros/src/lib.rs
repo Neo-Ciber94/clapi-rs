@@ -148,6 +148,9 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
 /// - `values`: Valid values of the option.
 /// - `hidden`: If the option is hidden for the help.
 /// - `multiple`: If the option allow multiple declarations.
+/// - `flag`: If the option is a bool flag, by default is `true`
+/// - `error`: Error show when the value is invalid.
+/// - `require_assign`: If the option requires to use `=` to assign the value, by default false,
 ///
 /// Function arguments can be declared as the following types:
 /// - Any type that implement `FromStr`.
@@ -189,6 +192,7 @@ pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
 /// - `max`: Max number of values the argument takes.
 /// - `default`: Default value(s) of the argument.
 /// - `values`: Valid values of the argument.
+/// - `error`: Error show when the value is invalid.
 ///
 /// Function arguments can be declared as the following types:
 /// - Any type that implement `FromStr`.

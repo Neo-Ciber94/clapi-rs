@@ -1,10 +1,10 @@
 use crate::serde::internal::StringOrList;
 use crate::{Argument, ArgumentList, Command, CommandOption, OptionList};
 use serde::de::{MapAccess, SeqAccess, Visitor};
-use serde::export::{Formatter, Result};
 use serde::ser::{SerializeSeq, SerializeStruct};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
+use std::fmt::Formatter;
 
 //  Argument
 impl Serialize for Argument {
@@ -620,7 +620,8 @@ impl<'de> Deserialize<'de> for Command {
 mod internal {
     use serde::de::Visitor;
     use serde::{de, Deserialize, Deserializer};
-    use serde::export::{fmt, Formatter};
+    use std::fmt;
+    use std::fmt::Formatter;
 
     macro_rules! visit_to_string {
         ($($method:ident $ty:ty),+ $(,)?) => {
