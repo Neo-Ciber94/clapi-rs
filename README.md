@@ -8,192 +8,155 @@
 [license]: https://github.com/Neo-Ciber94/clapi-rs/blob/master/LICENSE
 
 Currently clapi provides several methods for create command line applications:
-
 - Parsing the arguments
 - Function handlers
 - Macros
 - Macros attributes
 
-> Minimum rust version: 1.48
-
-## Features
-- `macros` : Enable the used of macro attributes.
-- `serde` : Enable Serialize and Deserialize using the `serde` crate.
-
-## Examples
-
 See the examples below creating the same app using the 4 methods.
 
-<details>
-<summary><strong>Parsing the arguments</strong></summary>
-
+### Parsing the arguments
 ```rust
-use clapi::{Command, CommandOption, Argument, Parser, Context};
-use clapi::help::{DefaultHelp, HelpKind, Help, Buffer};
-use clapi::validator::parse_validator;
+use clapi::{Command, CommandOption, Argument, CommandLine};
+use clapi::validator::validate_type;
+use std::num::NonZeroUsize;
 
-let command = Command::root()
-    .option(CommandOption::new("version").alias("v"))
-    .subcommand(Command::new("repeat")
+fn main() -> clapi::Result<()> {
+    let command = Command::new("echo")
+        .version("1.0")
+        .description("outputs the given values on the console")
         .arg(Argument::one_or_more("values"))
-        .option(CommandOption::new("times").alias("t")
-            .arg(Argument::new("times")
-                .validator(parse_validator::<u64>())
-                .default(1))));
+        .option(
+            CommandOption::new("times")
+                .alias("t")
+                .description("number of times to repeat")
+                .arg(
+                    Argument::new()
+                        .validator(validate_type::<NonZeroUsize>())
+                        .validation_error("expected number greater than 0")
+                        .default(NonZeroUsize::new(1).unwrap()),
+                ),
+        ).handler(|opts, args| {
+        let times = opts.convert::<usize>("times").unwrap();
+        let values = args.get_raw_args()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>()
+            .join(" ") as String;
 
-let context = Context::new(command);
-let result = Parser::new(&context)
-                .parse(std::env::args().skip(1))
-                .expect("unexpected error");
+        for _ in 0..times {
+            println!("{}", values);
+        }
 
-if result.contains_option("version") {
-    println!("MyApp 1.0");
-    return;
-}
+        Ok(())
+    });
 
-if result.command().get_name() == "repeat" {
-    let times = result.get_option_arg("times")
-        .unwrap()
-        .convert::<u64>()
-        .unwrap();
-
-    let values = result.arg().unwrap()
-        .convert_all::<String>()
-        .expect("error")
-        .join(" ");
-
-    for _ in 0..times {
-        println!("{}", values);
-    }
-} else {
-    // Fallthrough
-    static HELP : DefaultHelp = DefaultHelp(HelpKind::Any);
-
-    let mut buffer = Buffer::new();
-    HELP.help(&mut buffer, &context, result.command()).unwrap();
-    println!("{}", buffer);
+    CommandLine::new(command)
+        .use_default_help()
+        .use_default_suggestions()
+        .run()
+        .map_err(|e| e.exit())
 }
 ```
-</details>
 
-
-<details>
-    <summary>
-        <strong>Function handlers</strong>
-    </summary>
-
+### Function handlers
 ```rust
-use clapi::validator::parse_validator;
+use clapi::validator::validate_type;
 use clapi::{Argument, Command, CommandLine, CommandOption};
 
 fn main() -> clapi::Result<()> {
-    let command = Command::root()
-        .option(CommandOption::new("version").alias("v"))
-        .handler(|opts, _args| {
-            if opts.contains("version") {
-                println!("MyApp 1.0");
-            }
-            Ok(())
-     })
-     .subcommand(
-         Command::new("repeat")
-            .arg(Argument::one_or_more("values"))
-            .option(
-                CommandOption::new("times").alias("t").arg(
-                    Argument::new("times")
-                        .validator(parse_validator::<u64>())
-                        .default(1),
-                ),
-            )
-            .handler(|opts, args| {
-                let times = opts.get_arg("times").unwrap().convert::<u64>()?;
-                let values = args
-                    .get("values")
-                    .unwrap()
-                    .convert_all::<String>()?
-                    .join(" ");
+    let command = Command::new("MyApp")
+        .subcommand(
+            Command::new("repeat")
+                .arg(Argument::one_or_more("values"))
+                .option(
+                    CommandOption::new("times").alias("t").arg(
+                        Argument::with_name("times")
+                            .validator(validate_type::<u64>())
+                            .default(1),
+                    ),
+                )
+                .handler(|opts, args| {
+                    let times = opts.get_arg("times").unwrap().convert::<u64>()?;
+                    let values = args
+                        .get("values")
+                        .unwrap()
+                        .convert_all::<String>()?
+                        .join(" ");
+                    for _ in 0..times {
+                        println!("{}", values);
+                    }
+                    Ok(())
+                }),
+        );
 
-                for _ in 0..times {
-                    println!("{}", values);
-                }
-                Ok(())
-            }),
-    );
-
- CommandLine::new(command)
-    .use_default_suggestions()
-    .use_default_help()
-    .run()
+    CommandLine::new(command)
+        .use_default_suggestions()
+        .use_default_help()
+        .run()
 }
 ```
-</details>
-
-<details>
-    <summary>
-        <strong>Macros</strong>
-    </summary>
-
+### Macro
 ```rust
+use std::num::NonZeroUsize;
+
 fn main() -> clapi::Result<()> {
-    let cli = clapi::app!{ =>
-        (@option version => (alias => "v"))
-        (handler () => println!("MyApp 1.0"))
-        (@subcommand repeat =>
-            (@arg values => (count => 1..))
-            (@option times =>
-                (alias => "t")
-                (@arg times =>
-                    (type => u64)
-                    (default => 1)
-                    (count => 1)
-                )
+    let cli = clapi::app!{ echo =>
+        (version => "1.0")
+        (description => "outputs the given values on the console")
+        (@option times =>
+            (alias => "t")
+            (description => "number of times to repeat")
+            (@arg =>
+                (type => NonZeroUsize)
+                (default => NonZeroUsize::new(1).unwrap())
+                (error => "expected number greater than 0")
             )
-            (handler (times: u64, ...values: Vec<String>) => {
-                let values = values.join(" ");
-                for _ in 0..times {
-                    println!("{}", values);
-                }
-            })
         )
+        (@arg values => (count => 1..))
+        (handler (times: usize, ...args: Vec<String>) => {
+            let values = args.join(" ");
+            for _ in 0..times {
+                println!("{}", values);
+            }
+        })
     };
 
-    cli.use_default_help()
-       .use_default_suggestions()
-       .run()
+    cli.use_default_suggestions()
+        .use_default_help()
+        .run()
+        .map_err(|e| e.exit())
 }
 ```
-</details>
 
-<details>
-    <summary>
-        <strong>Macro attributes</strong>
-    </summary>
-
+### Macro attributes
 Requires `macros` feature enable.
 
 ```rust
 use clapi::macros::*;
+use std::num::NonZeroUsize;
 
-#[command(version=1.0)]
-fn main(){ }
-
-#[subcommand]
-#[option(times, alias="t", default=1)]
+#[command(name="echo", description="outputs the given values on the console", version="1.0")]
 #[arg(values, min=1)]
-fn repeat(times: u32, values: Vec<String>){
+#[option(times,
+    alias="t",
+    description="number of times to repeat",
+    default=1,
+    error="expected number greater than 0"
+)]
+fn main(times: NonZeroUsize, values: Vec<String>) {
     let values = values.join(" ");
-    for _ in 0..times {
+
+    for _ in 0..times.get() {
         println!("{}", values);
     }
 }
 ```
-</details>
 
 ## Serde
 
 Any `Command`, `CommandOption` and `Argument` can be serialize/deserialize using the `serde` feature.
 
-This allow you to read or write your command line apps to files.
+This allows you to read or write your command line apps to files.
 
 ```rust
 use clapi::Command;

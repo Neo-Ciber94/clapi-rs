@@ -1,3 +1,6 @@
+#![cfg_attr(doc_cfg, feature(doc_cfg))]
+// #![feature(doc_cfg)]
+
 //! # Clapi
 //!
 //! Clapi (Command-Line API) is a framework for create command line applications.
@@ -12,48 +15,44 @@
 //!
 //! ## Parsing the arguments
 //! ```no_run
-//! use clapi::{Command, CommandOption, Argument, Parser, Context};
+//! use clapi::{Command, CommandOption, Argument, CommandLine};
 //! use clapi::validator::validate_type;
+//! use std::num::NonZeroUsize;
 //!
-//! let command = Command::new("MyApp")
-//!     .option(CommandOption::new("version").alias("v"))
-//!     .subcommand(Command::new("repeat")
+//! fn main() -> clapi::Result<()> {
+//!     let command = Command::new("echo")
+//!         .version("1.0")
+//!         .description("outputs the given values on the console")
 //!         .arg(Argument::one_or_more("values"))
-//!         .option(CommandOption::new("times")
-//!             .alias("t")
-//!             .arg(Argument::with_name("times")
-//!                 .validator(validate_type::<u64>())
-//!                 .default(1))));
+//!         .option(
+//!             CommandOption::new("times")
+//!                 .alias("t")
+//!                 .description("number of times to repeat")
+//!                 .arg(
+//!                     Argument::new()
+//!                         .validator(validate_type::<NonZeroUsize>())
+//!                         .validation_error("expected number greater than 0")
+//!                         .default(NonZeroUsize::new(1).unwrap()),
+//!                 ),
+//!         ).handler(|opts, args| {
+//!         let times = opts.convert::<usize>("times").unwrap();
+//!         let values = args.get_raw_args()
+//!             .map(|s| s.to_string())
+//!             .collect::<Vec<String>>()
+//!             .join(" ") as String;
 //!
-//! let context = Context::new(command);
-//! let result = Parser::new(&context)
-//!                 .parse(std::env::args().skip(1))
-//!                 .expect("unexpected error");
+//!         for _ in 0..times {
+//!             println!("{}", values);
+//!         }
 //!
-//! if result.options().contains("version") {
-//!     println!("MyApp 1.0");
-//!     return;
-//! }
+//!         Ok(())
+//!     });
 //!
-//! if result.command_name() == "repeat" {
-//!     let times = result.options().get_arg("times")
-//!         .unwrap()
-//!         .convert::<u64>()
-//!         .unwrap();
-//!
-//!     let values = result.arg().unwrap()
-//!         .convert_all::<String>()
-//!         .expect("error")
-//!         .join(" ");
-//!
-//!     for _ in 0..times {
-//!         println!("{}", values);
-//!     }
-//! } else {
-//!     // Fallthrough
-//!     let mut buf = String::new();
-//!     clapi::help::command_help(&mut buf, &context, result.executing_command(), true);
-//!     println!("{}", buf);
+//!     CommandLine::new(command)
+//!         .use_default_help()
+//!         .use_default_suggestions()
+//!         .run()
+//!         .map_err(|e| e.exit())
 //! }
 //! ```
 //!
@@ -95,50 +94,57 @@
 //! }
 //! ```
 //! ## Macro
-//!```
+//!```no_run
+//! use std::num::NonZeroUsize;
+//!
 //! fn main() -> clapi::Result<()> {
-//!     let cli = clapi::app!{ MyApp =>
+//!     let cli = clapi::app!{ echo =>
 //!         (version => "1.0")
-//!         (@subcommand repeat =>
-//!             (@arg values => (count => 1..))
-//!             (@option times =>
-//!                 (alias => "t")
-//!                 (@arg times =>
-//!                     (type => u64)
-//!                     (default => 1)
-//!                     (count => 1)
-//!                 )
+//!         (description => "outputs the given values on the console")
+//!         (@option times =>
+//!             (alias => "t")
+//!             (description => "number of times to repeat")
+//!             (@arg =>
+//!                 (type => NonZeroUsize)
+//!                 (default => NonZeroUsize::new(1).unwrap())
+//!                 (error => "expected number greater than 0")
 //!             )
-//!             (handler (times: u64, ...values: Vec<String>) => {
-//!                 let values = values.join(" ");
-//!                 for _ in 0..times {
-//!                     println!("{}", values);
-//!                 }
-//!             })
 //!         )
+//!         (@arg values => (count => 1..))
+//!         (handler (times: usize, ...args: Vec<String>) => {
+//!             let values = args.join(" ");
+//!             for _ in 0..times {
+//!                 println!("{}", values);
+//!             }
+//!         })
 //!     };
 //!
-//!      cli.use_default_help()
-//!         .use_default_suggestions()
+//!     cli.use_default_suggestions()
+//!         .use_default_help()
 //!         .run()
+//!         .map_err(|e| e.exit())
 //! }
 //!```
 //!
 //! ## Macro attributes
 //! Requires `macros` feature enable.
 //!
-//! ```compile_fail
+//! ```no_run
 //! use clapi::macros::*;
+//! use std::num::NonZeroUsize;
 //!
-//! #[command(version=1.0)]
-//! fn main(){ }
-//!
-//! #[subcommand]
-//! #[option(times, alias="t", default=1)]
+//! #[command(name="echo", description="outputs the given values on the console", version="1.0")]
 //! #[arg(values, min=1)]
-//! fn repeat(times: u32, values: Vec<String>){
+//! #[option(times,
+//!     alias="t",
+//!     description="number of times to repeat",
+//!     default=1,
+//!     error="expected number greater than 0"
+//! )]
+//! fn main(times: NonZeroUsize, values: Vec<String>) {
 //!     let values = values.join(" ");
-//!     for _ in 0..times {
+//!
+//!     for _ in 0..times.get() {
 //!         println!("{}", values);
 //!     }
 //! }
@@ -160,7 +166,6 @@ mod error;
 mod option;
 mod parse_result;
 mod parser;
-
 
 /// Utilities for provide suggestions.
 pub mod suggestion;
@@ -198,6 +203,8 @@ mod app_macros;
 
 /// Macro attributes for create command-line apps. Require `macros` feature enable.
 #[cfg(feature = "macros")]
+// #[doc(cfg(feature = "macros"))]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
 pub mod macros {
     extern crate clapi_macros;
     pub use clapi_macros::*;

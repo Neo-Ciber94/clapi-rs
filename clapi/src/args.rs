@@ -809,6 +809,7 @@ fn invalid_arg_count_message(arg_name: &str, current: usize, expected: ArgCount)
     }
 }
 
+/// List of arguments of an `option` or `command`.
 #[derive(Default, Debug, Clone, Eq, PartialEq)]
 pub struct ArgumentList {
     inner: Vec<Argument>,

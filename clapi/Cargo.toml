@@ -18,3 +18,7 @@ serde = { version="1.0.118", features=["derive"], optional=true }
 [dev-dependencies]
 serde_test = "1.0.118"
 serde_json = "1.0.60"
+
+[package.metadata.docs.rs]
+all-features = true
+rustflags = ["--cfg", "doc_cfg"]

@@ -404,6 +404,7 @@ impl ContextBuilder {
 }
 
 #[inline]
+#[doc(hidden)]
 pub fn default_version_option() -> CommandOption {
     CommandOption::new("version")
         .alias("v")
@@ -411,12 +412,14 @@ pub fn default_version_option() -> CommandOption {
 }
 
 #[inline]
+#[doc(hidden)]
 pub fn default_version_command() -> Command {
     Command::new("version")
         .description("Shows the version of the command")
 }
 
 #[inline]
+#[doc(hidden)]
 pub fn default_help_option() -> CommandOption {
     CommandOption::new("help")
         .alias("h")
@@ -426,6 +429,7 @@ pub fn default_help_option() -> CommandOption {
 }
 
 #[inline]
+#[doc(hidden)]
 pub fn default_help_command() -> Command {
     Command::new("help")
         .description("Shows help information about a command")
