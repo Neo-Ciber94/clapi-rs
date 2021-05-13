@@ -128,6 +128,10 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
         .into()
 }
 
+// Change `require_assign` to?
+// TODO: #[option(name, assignable=true)]
+// TODO: #[option(name, assign=true)]
+
 /// Declares a command option.
 ///
 /// Any option declaration must contains the name of the argument for example:

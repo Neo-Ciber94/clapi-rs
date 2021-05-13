@@ -68,6 +68,8 @@ impl ParseResult {
         &self.args
     }
 
+    // TODO: Add docs
+
     pub fn value_of(&self, arg_name: &str) -> Option<&str> {
         self.args.get(arg_name)
             .map(|arg| arg.get_values())
@@ -118,6 +120,11 @@ impl<'a> Values<'a> {
     #[inline]
     pub fn len(&self) -> usize {
         self.values.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
     }
 
     /// Returns `true` if contains the value.
@@ -680,5 +687,43 @@ mod tests {
         assert!(result2.options().get_arg("values").unwrap().contains("2"));
         assert!(result2.options().get_arg("values").unwrap().contains("3"));
         assert!(result2.options().get_arg("values").unwrap().contains("4"));
+    }
+
+    #[test]
+    fn parse_global_option_test() {
+        let command = Command::new("MyApp")
+            .option(CommandOption::new("color")
+                .global(true)
+                .arg(Argument::new()
+                    .valid_values(vec!["red", "green", "blue"])))
+            .subcommand(Command::new("echo")
+                .arg(Argument::one_or_more("values")));
+
+        let result = parse_with("echo --color red -- hello world", command.clone()).unwrap();
+        assert_eq!(result.command_name(), "echo");
+        assert!(result.options().get_arg("color").unwrap().contains("red"));
+        assert!(result.args().get("values").unwrap().contains("hello"));
+        assert!(result.args().get("values").unwrap().contains("world"));
+    }
+
+    #[test]
+    fn parse_required_global_option_test() {
+        let command = Command::new("MyApp")
+            .option(CommandOption::new("flag")
+                .required(true)
+                .global(true))
+            .subcommand(Command::new("echo")
+                .arg(Argument::one_or_more("values")));
+
+        let result = parse_with("echo hello world", command.clone());
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), &ErrorKind::MissingOption("flag".to_owned()));
+
+        assert!(parse_with("echo --flag hello world", command.clone()).is_ok())
+    }
+
+    #[test]
+    fn value_of_test() {
+
     }
 }

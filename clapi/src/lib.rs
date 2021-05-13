@@ -129,7 +129,7 @@
 //! ## Macro attributes
 //! Requires `macros` feature enable.
 //!
-//! ```no_run
+//! ```no_run compile_fail
 //! use clapi::macros::*;
 //! use std::num::NonZeroUsize;
 //!

@@ -10,6 +10,7 @@ use crate::tokenizer::Tokenizer;
 use crate::token::Token;
 use crate::Argument;
 use std::cell::Cell;
+use std::collections::HashSet;
 
 /// A command-line argument parser.
 ///
@@ -174,7 +175,11 @@ impl<'a> Parser<'a> {
         let cursor = self.cursor.as_ref().unwrap();
         let mut command = self.context.root();
 
-        // If the next is `help [subcommand`
+        // Store the global options of the commands,
+        // We use a `HashSet` so each children can override the parent options
+        let mut global_options = HashSet::new();
+
+        // If the next is `help [subcommand]`
         if let Some(Token::Cmd(name)) = cursor.peek() {
             if crate::context::is_help_command(&self.context, name) {
                 return self.parse_help_command();
@@ -183,7 +188,14 @@ impl<'a> Parser<'a> {
 
         while let Some(Token::Cmd(name)) = cursor.peek() {
             command = match command.find_subcommand(name.as_str()) {
-                Some(x) => x,
+                Some(subcommand) => {
+                    // Stores the global options of the parent command
+                    for opt in get_global_options(command) {
+                        global_options.replace(opt);
+                    }
+
+                    subcommand
+                }
                 None => {
                     self.command = Some(command.clone());
                     return Err(Error::from(ErrorKind::UnexpectedCommand(name.clone())))
@@ -193,7 +205,20 @@ impl<'a> Parser<'a> {
             cursor.next();
         }
 
-        self.command = Some(command.clone());
+        let mut result_command = command.clone();
+
+        if !global_options.is_empty() {
+            // Pass the global options to the child
+            for opt in global_options {
+                // We don't override children command options
+                if !result_command.get_options().contains(opt.get_name()) {
+                    result_command.add_option(opt.clone());
+                }
+            }
+        }
+
+        // Sets the executing command
+        self.command = Some(result_command);
         Ok(())
     }
 
@@ -667,4 +692,8 @@ fn add_argument(arguments: &mut ArgumentList, new_arg: Argument){
     arguments.add(new_arg).unwrap_or_else(|e| {
         panic!("duplicated argument: `{}`", e.get_name())
     });
+}
+
+fn get_global_options(command: &Command) -> impl Iterator<Item=&CommandOption> {
+    command.get_options().iter().filter(|opt| opt.is_global())
 }

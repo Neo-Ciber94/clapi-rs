@@ -586,6 +586,9 @@ impl Argument {
     ///     .unwrap();
     ///
     /// assert_eq!(result.args().get("numbers").unwrap().convert::<i64>().ok(), Some(10));
+    ///
+    /// // This only fails if feature `typing` is enable, otherwise the value will be converted
+    /// #[cfg(feature = "typing")]
     /// assert!(result.args().get("numbers").unwrap().convert::<f32>().is_err());
     /// ```
     pub fn convert<T>(&self) -> Result<T>
@@ -636,6 +639,9 @@ impl Argument {
     ///     .unwrap();
     ///
     /// assert_eq!(result.args().get("numbers").unwrap().convert_all::<i64>().ok(), Some(vec![1, 2, 3]));
+    ///
+    /// // This only fails if feature `typing` is enable, otherwise the values will be converted
+    /// #[cfg(feature = "typing")]
     /// assert!(result.args().get("numbers").unwrap().convert_all::<f32>().is_err());
     /// ```
     pub fn convert_all<T>(&self) -> Result<Vec<T>>
@@ -1227,27 +1233,35 @@ mod tests {
     }
 
     #[test]
-    fn arg_convert() {
+    fn arg_convert_test() {
         let mut number = Argument::with_name("number").validator(validate_type::<i64>());
 
         number.set_values(&[42]).unwrap();
 
         assert!(number.convert::<i64>().is_ok());
-        assert!(number.convert::<i128>().is_err());
         assert!(number.convert::<bool>().is_err());
         assert_eq!(number.convert::<i64>().ok(), Some(42));
+
+        #[cfg(feature="typing")]
+        {
+            assert!(number.convert::<i128>().is_err());
+        }
     }
 
     #[test]
-    fn arg_convert_all() {
+    fn arg_convert_all_test() {
         let mut number = Argument::one_or_more("numbers").validator(validate_type::<i64>());
 
         number.set_values(&[1, 2, 3]).unwrap();
 
         assert!(number.convert_all::<i64>().is_ok());
-        assert!(number.convert::<i8>().is_err());
         assert!(number.convert_all::<bool>().is_err());
         assert_eq!(number.convert_all::<i64>().ok(), Some(vec![1, 2, 3]));
+
+        #[cfg(feature="typing")]
+        {
+            assert!(number.convert::<i8>().is_err());
+        }
     }
 
     #[test]

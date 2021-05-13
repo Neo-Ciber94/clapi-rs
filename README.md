@@ -7,7 +7,7 @@
 [Apache-2.0]: https://img.shields.io/badge/LICENSE-Apache--2.0-blue
 [license]: https://github.com/Neo-Ciber94/clapi-rs/blob/master/LICENSE
 
-Currently clapi provides several methods for create command line applications:
+Currently, clapi provides several methods for create command line applications:
 - Parsing the arguments
 - Function handlers
 - Macros

@@ -15,6 +15,7 @@ pub struct CommandOption {
     args: ArgumentList,
     is_required: bool,
     is_hidden: bool,
+    is_global: bool,
     allow_multiple: bool,
     requires_assign: bool,
 }
@@ -47,6 +48,7 @@ impl CommandOption {
             args: ArgumentList::new(),
             is_required: false,
             is_hidden: false,
+            is_global: false,
             allow_multiple: false,
             requires_assign: false,
         }
@@ -77,6 +79,11 @@ impl CommandOption {
     /// Returns `true` if this option is no visible for `help`.
     pub fn is_hidden(&self) -> bool {
         self.is_hidden
+    }
+
+    /// Returns `true` if this is an global option.
+    pub fn is_global(&self) -> bool {
+        self.is_global
     }
 
     /// Returns `true` if this option is allowed to appear multiple times.
@@ -225,6 +232,12 @@ impl CommandOption {
     /// ```
     pub fn multiple(mut self, allow_multiple: bool) -> Self {
         self.allow_multiple = allow_multiple;
+        self
+    }
+
+    /// Specify if this is a global option.
+    pub fn global(mut self, is_global: bool) -> Self {
+        self.is_global = is_global;
         self
     }
 
@@ -647,6 +660,15 @@ mod tests {
 
         let opt2 = CommandOption::new("values").requires_assign(true);
         assert!(opt2.is_assign_required());
+    }
+
+    #[test]
+    fn global_option_test() {
+        let opt1 = CommandOption::new("values");
+        assert!(!opt1.is_global());
+
+        let opt2 = CommandOption::new("values").global(true);
+        assert!(opt2.is_global());
     }
 
     #[test]
