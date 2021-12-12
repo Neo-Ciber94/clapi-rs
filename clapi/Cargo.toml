@@ -2,11 +2,12 @@
 name = "clapi"
 description="A framework for create command-line applications"
 keywords=["command-line", "command", "api", "parser", "macros" ]
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Freddy L"]
 license="Apache-2.0"
 edition = "2018"
 repository= "https://github.com/Neo-Ciber94/clapi-rs"
+readme = "../README.md"
 
 [features]
 macros = ["clapi_macros"]
