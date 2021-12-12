@@ -6,14 +6,15 @@ version = "0.1.0"
 authors = ["Freddy L"]
 license="Apache-2.0"
 edition = "2018"
+repository= "https://github.com/Neo-Ciber94/clapi-rs"
 
 [features]
 macros = ["clapi_macros"]
 typing = []
 
 [dependencies]
-clapi_macros = { optional=true, path="../clapi_macros", version="0.1.0" }
-clapi_internal = { path= "../clapi_internal", version="0.1.0" }
+clapi_macros = { optional=true, version="0.1.0" }
+clapi_internal = { version="0.1.0" }
 serde = { version="1.0.118", features=["derive"], optional=true }
 
 [dev-dependencies]
