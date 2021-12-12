@@ -11,8 +11,8 @@ macros = ["clapi_macros"]
 typing = []
 
 [dependencies]
-clapi_macros = { optional=true, path="../clapi_macros" }
-clapi_internal = { path= "../clapi_internal" }
+clapi_macros = { optional=true, path="../clapi_macros", version="0.1.0" }
+clapi_internal = { path= "../clapi_internal", version="0.1.0" }
 serde = { version="1.0.118", features=["derive"], optional=true }
 
 [dev-dependencies]

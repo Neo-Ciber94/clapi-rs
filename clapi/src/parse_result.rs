@@ -68,25 +68,30 @@ impl ParseResult {
         &self.args
     }
 
-    // TODO: Add docs
-
+    /// Gets the value of the argument with the given name.
     pub fn value_of(&self, arg_name: &str) -> Option<&str> {
-        self.args.get(arg_name)
+        self.args
+            .get(arg_name)
             .map(|arg| arg.get_values())
             .filter(|values| values.len() == 1)
             .map(|values| values[0].as_str())
     }
 
-    pub fn values_of(&self, arg_name: &str) -> Option<Values<'_>>{
+    /// Gets an iterator over the values of the argument with the given name.
+    pub fn values_of(&self, arg_name: &str) -> Option<Values<'_>> {
         if let Some(arg) = self.args.get(arg_name) {
-            Some(Values { values: arg.get_values() })
+            Some(Values {
+                values: arg.get_values(),
+            })
         } else {
             None
         }
     }
 
+    /// Gets the value of the argument of the given option.
     pub fn value_of_option(&self, option_name: &str) -> Option<&str> {
-        self.options.get(option_name)
+        self.options
+            .get(option_name)
             .map(|opt| opt.get_arg())
             .flatten()
             .map(|arg| arg.get_values())
@@ -94,10 +99,13 @@ impl ParseResult {
             .map(|values| values[0].as_str())
     }
 
+    /// Gets an iterator over the values of the arguments of the given option.
     pub fn values_of_option(&self, option_name: &str) -> Option<Values<'_>> {
         if let Some(option) = self.options.get(option_name) {
             let arg = option.get_arg()?;
-            Some(Values { values: arg.get_values() })
+            Some(Values {
+                values: arg.get_values(),
+            })
         } else {
             None
         }
@@ -107,7 +115,7 @@ impl ParseResult {
 /// An iterator over the values of an argument or option.
 #[derive(Debug, Clone)]
 pub struct Values<'a> {
-    values: &'a [String]
+    values: &'a [String],
 }
 
 impl<'a> Values<'a> {
@@ -162,7 +170,7 @@ impl<'a> IntoIterator for &'a Values<'a> {
 mod tests {
     use super::*;
     use crate::validator::validate_type;
-    use crate::{split_into_args, Context, Parser, ErrorKind, CommandOption};
+    use crate::{split_into_args, CommandOption, Context, ErrorKind, Parser};
 
     fn parse_with(value: &str, command: Command) -> crate::Result<ParseResult> {
         let context = Context::new(command);
@@ -193,7 +201,8 @@ mod tests {
         assert!(result.options().contains("c"));
         assert_eq!(
             result
-                .options().get("repeat")
+                .options()
+                .get("repeat")
                 .unwrap()
                 .get_arg()
                 .unwrap()
@@ -202,7 +211,8 @@ mod tests {
             Some(2)
         );
         assert!(result
-            .options().get("color")
+            .options()
+            .get("color")
             .unwrap()
             .get_arg()
             .unwrap()
@@ -245,7 +255,8 @@ mod tests {
         let result = parse_with("set --repeat 1 1 2 3 4", command.clone()).unwrap();
         assert_eq!(result.executing_command().get_name(), "set");
         assert!(result
-            .options().get("repeat")
+            .options()
+            .get("repeat")
             .unwrap()
             .get_arg()
             .unwrap()
@@ -288,7 +299,8 @@ mod tests {
         let result = parse_with("--times 1 -- one two three", command.clone()).unwrap();
         assert!(result.options().contains("times"));
         assert!(result
-            .options().get("times")
+            .options()
+            .get("times")
             .unwrap()
             .get_arg()
             .unwrap()
@@ -338,7 +350,8 @@ mod tests {
         assert!(result.options().contains("minute"));
         assert!(result.options().contains("second"));
         assert!(result
-            .options().get("enable")
+            .options()
+            .get("enable")
             .unwrap()
             .get_arg()
             .unwrap()
@@ -359,14 +372,16 @@ mod tests {
 
         let result = parse_with("--replace a A -- 2 10", command.clone()).unwrap();
         assert!(result
-            .options().get("replace")
+            .options()
+            .get("replace")
             .unwrap()
             .get_args()
             .get("from")
             .unwrap()
             .contains("a"));
         assert!(result
-            .options().get("replace")
+            .options()
+            .get("replace")
             .unwrap()
             .get_args()
             .get("to")
@@ -396,7 +411,11 @@ mod tests {
             .option(CommandOption::new("A").alias("a"))
             .option(CommandOption::new("B").alias("b"))
             .option(CommandOption::new("C").alias("c"))
-            .option(CommandOption::new("D").alias("d").arg(Argument::one_or_more("d")));
+            .option(
+                CommandOption::new("D")
+                    .alias("d")
+                    .arg(Argument::one_or_more("d")),
+            );
 
         let result1 = parse_with("--A --B -- --C", command.clone()).unwrap();
         assert_eq!(result1.options().len(), 2);
@@ -459,7 +478,8 @@ mod tests {
 
         assert_eq!(
             result
-                .options().get("letters")
+                .options()
+                .get("letters")
                 .unwrap()
                 .get_arg()
                 .unwrap()
@@ -468,37 +488,43 @@ mod tests {
             5
         );
         assert!(result
-            .options().get("letters")
+            .options()
+            .get("letters")
             .unwrap()
             .get_arg()
             .unwrap()
             .contains("a"));
         assert!(result
-            .options().get("letters")
+            .options()
+            .get("letters")
             .unwrap()
             .get_arg()
             .unwrap()
             .contains("b"));
         assert!(result
-            .options().get("letters")
+            .options()
+            .get("letters")
             .unwrap()
             .get_arg()
             .unwrap()
             .contains("c"));
         assert!(result
-            .options().get("letters")
+            .options()
+            .get("letters")
             .unwrap()
             .get_arg()
             .unwrap()
             .contains("d"));
         assert!(result
-            .options().get("letters")
+            .options()
+            .get("letters")
             .unwrap()
             .get_arg()
             .unwrap()
             .contains("e"));
         assert!(result
-            .options().get("numbers")
+            .options()
+            .get("numbers")
             .unwrap()
             .get_arg()
             .unwrap()
@@ -554,20 +580,45 @@ mod tests {
                 .clone()
         };
 
-        assert!(matches!(err_kind("version 1 2 3"), ErrorKind::InvalidArgumentCount));
-        assert!(matches!(err_kind("-- 1 2 3 4 5"), ErrorKind::InvalidArgumentCount));
-        assert!(matches!(err_kind("--range 0"), ErrorKind::InvalidArgumentCount));
-        assert!(matches!(err_kind("--range 1 2 3 -- "),ErrorKind::InvalidArgumentCount));
+        assert!(matches!(
+            err_kind("version 1 2 3"),
+            ErrorKind::InvalidArgumentCount
+        ));
+        assert!(matches!(
+            err_kind("-- 1 2 3 4 5"),
+            ErrorKind::InvalidArgumentCount
+        ));
+        assert!(matches!(
+            err_kind("--range 0"),
+            ErrorKind::InvalidArgumentCount
+        ));
+        assert!(matches!(
+            err_kind("--range 1 2 3 -- "),
+            ErrorKind::InvalidArgumentCount
+        ));
         assert!(matches!(err_kind("-r=0=1"), ErrorKind::InvalidExpression));
-        assert!(matches!(err_kind("--range 10 b"), ErrorKind::InvalidArgument(arg) if arg == "max"));
+        assert!(
+            matches!(err_kind("--range 10 b"), ErrorKind::InvalidArgument(arg) if arg == "max")
+        );
         assert!(matches!(err_kind("--C"), ErrorKind::UnexpectedOption(o) if o == "--C"));
         assert!(matches!(err_kind("data write"), ErrorKind::UnexpectedCommand(x) if x == "write"));
         assert!(matches!(err_kind("read"), ErrorKind::MissingOption(x) if x == "mode"));
-        assert!(matches!(err_kind("read --mode lo"), ErrorKind::InvalidArgument(arg) if arg == "mode"));
-        assert!(matches!(err_kind("read --mode low mid"),ErrorKind::InvalidArgumentCount));
+        assert!(
+            matches!(err_kind("read --mode lo"), ErrorKind::InvalidArgument(arg) if arg == "mode")
+        );
+        assert!(matches!(
+            err_kind("read --mode low mid"),
+            ErrorKind::InvalidArgumentCount
+        ));
         assert!(matches!(err_kind("data clear"), ErrorKind::UnexpectedCommand(x) if x == "clear"));
-        assert!(matches!(err_kind("data get 0"), ErrorKind::InvalidArgumentCount));
-        assert!(matches!(err_kind("data set \"Hello World\" Bye"),ErrorKind::InvalidArgumentCount));
+        assert!(matches!(
+            err_kind("data get 0"),
+            ErrorKind::InvalidArgumentCount
+        ));
+        assert!(matches!(
+            err_kind("data set \"Hello World\" Bye"),
+            ErrorKind::InvalidArgumentCount
+        ));
     }
 
     #[test]
@@ -582,7 +633,8 @@ mod tests {
 
         let res1 = parse_with("--enable true", command.clone()).unwrap();
         assert_eq!(
-            res1.options().get("enable")
+            res1.options()
+                .get("enable")
                 .unwrap()
                 .get_arg()
                 .unwrap()
@@ -592,7 +644,8 @@ mod tests {
 
         let res2 = parse_with("--enable false", command.clone()).unwrap();
         assert_eq!(
-            res2.options().get("enable")
+            res2.options()
+                .get("enable")
                 .unwrap()
                 .get_arg()
                 .unwrap()
@@ -608,7 +661,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_result_arg_default_values_test1(){
+    fn parse_result_arg_default_values_test1() {
         let command = Command::new("MyApp")
             .arg(Argument::with_name("min").default(1))
             .arg(Argument::with_name("max"));
@@ -624,38 +677,47 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn parse_result_arg_default_values_test2(){
+    fn parse_result_arg_default_values_test2() {
         let _command = Command::new("MyApp")
             .arg(Argument::with_name("min").default(1))
             .arg(Argument::with_name("max").default(10));
     }
 
     #[test]
-    fn parse_result_option_default_values_test1(){
-        let command = Command::new("MyApp")
-            .option(CommandOption::new("range")
+    fn parse_result_option_default_values_test1() {
+        let command = Command::new("MyApp").option(
+            CommandOption::new("range")
                 .arg(Argument::with_name("start").default(1))
-                .arg(Argument::with_name("end")));
+                .arg(Argument::with_name("end")),
+        );
 
         let result1 = parse_with("--range 22", command.clone()).unwrap();
-        assert!(result1.options().get_args("range")
+        assert!(result1
+            .options()
+            .get_args("range")
             .unwrap()
             .get("start")
             .unwrap()
             .contains("1"));
-        assert!(result1.options().get_args("range")
+        assert!(result1
+            .options()
+            .get_args("range")
             .unwrap()
             .get("end")
             .unwrap()
             .contains("22"));
 
         let result2 = parse_with("--range 10 25", command.clone()).unwrap();
-        assert!(result2.options().get_args("range")
+        assert!(result2
+            .options()
+            .get_args("range")
             .unwrap()
             .get("start")
             .unwrap()
             .contains("10"));
-        assert!(result2.options().get_args("range")
+        assert!(result2
+            .options()
+            .get_args("range")
             .unwrap()
             .get("end")
             .unwrap()
@@ -664,19 +726,21 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn parse_result_option_default_values_test2(){
-        let _command = Command::new("MyApp")
-            .option(CommandOption::new("range")
+    fn parse_result_option_default_values_test2() {
+        let _command = Command::new("MyApp").option(
+            CommandOption::new("range")
                 .arg(Argument::with_name("start").default(1))
-                .arg(Argument::with_name("end").default(20)));
+                .arg(Argument::with_name("end").default(20)),
+        );
     }
 
     #[test]
-    fn parse_result_allow_multiple_test(){
-        let command = Command::new("MyApp")
-            .option(CommandOption::new("values")
+    fn parse_result_allow_multiple_test() {
+        let command = Command::new("MyApp").option(
+            CommandOption::new("values")
                 .multiple(true)
-                .arg(Argument::one_or_more("values")));
+                .arg(Argument::one_or_more("values")),
+        );
 
         let result1 = parse_with("--values 5 6", command.clone()).unwrap();
         assert!(result1.options().get_arg("values").unwrap().contains("5"));
@@ -692,12 +756,12 @@ mod tests {
     #[test]
     fn parse_global_option_test() {
         let command = Command::new("MyApp")
-            .option(CommandOption::new("color")
-                .global(true)
-                .arg(Argument::new()
-                    .valid_values(vec!["red", "green", "blue"])))
-            .subcommand(Command::new("echo")
-                .arg(Argument::one_or_more("values")));
+            .option(
+                CommandOption::new("color")
+                    .global(true)
+                    .arg(Argument::new().valid_values(vec!["red", "green", "blue"])),
+            )
+            .subcommand(Command::new("echo").arg(Argument::one_or_more("values")));
 
         let result = parse_with("echo --color red -- hello world", command.clone()).unwrap();
         assert_eq!(result.command_name(), "echo");
@@ -709,21 +773,66 @@ mod tests {
     #[test]
     fn parse_required_global_option_test() {
         let command = Command::new("MyApp")
-            .option(CommandOption::new("flag")
-                .required(true)
-                .global(true))
-            .subcommand(Command::new("echo")
-                .arg(Argument::one_or_more("values")));
+            .option(CommandOption::new("flag").required(true).global(true))
+            .subcommand(Command::new("echo").arg(Argument::one_or_more("values")));
 
         let result = parse_with("echo hello world", command.clone());
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().kind(), &ErrorKind::MissingOption("flag".to_owned()));
+        assert_eq!(
+            result.unwrap_err().kind(),
+            &ErrorKind::MissingOption("flag".to_owned())
+        );
 
         assert!(parse_with("echo --flag hello world", command.clone()).is_ok())
     }
 
     #[test]
     fn value_of_test() {
+        let command = Command::new("MyApp").arg(Argument::with_name("color"));
 
+        let result = parse_with("red", command.clone()).unwrap();
+        assert_eq!("red", result.value_of("color").unwrap());
+    }
+
+    #[test]
+    fn values_of_test() {
+        let command = Command::new("MyApp").arg(Argument::one_or_more("colors"));
+
+        let result = parse_with("red blue green", command.clone()).unwrap();
+        assert_eq!(
+            vec!["red".to_owned(), "blue".to_owned(), "green".to_owned()],
+            result
+                .values_of("colors")
+                .unwrap()
+                .iter()
+                .cloned()
+                .collect::<Vec<String>>()
+        );
+    }
+
+    #[test]
+    fn value_of_option_test() {
+        let command = Command::new("MyApp")
+            .option(CommandOption::new("size").arg(Argument::with_name("size")));
+
+        let result = parse_with("--size sm", command.clone()).unwrap();
+        assert_eq!("sm", result.value_of_option("size").unwrap());
+    }
+
+    #[test]
+    fn values_of_option_test() {
+        let command = Command::new("MyApp")
+            .option(CommandOption::new("sizes").arg(Argument::one_or_more("sizes")));
+
+        let result = parse_with("--sizes sm md lg", command.clone()).unwrap();
+        assert_eq!(
+            vec!["sm".to_owned(), "md".to_owned(), "lg".to_owned()],
+            result
+                .values_of_option("sizes")
+                .unwrap()
+                .iter()
+                .cloned()
+                .collect::<Vec<String>>()
+        );
     }
 }

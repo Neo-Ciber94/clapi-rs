@@ -43,6 +43,8 @@ impl Default for HelpSource {
     }
 }
 
+// TODO: Add help and usage for global options
+
 // Provides a help message for the command
 #[doc(hidden)]
 pub fn command_help(
