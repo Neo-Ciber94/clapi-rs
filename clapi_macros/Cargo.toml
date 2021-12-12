@@ -3,7 +3,7 @@ name = "clapi_macros"
 description = "Macros for clapi"
 version = "0.1.0"
 authors = ["Freddy L"]
-license = "MIT"
+license = "Apache-2.0"
 edition = "2018"
 
 [lib]

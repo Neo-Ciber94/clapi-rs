@@ -3,7 +3,7 @@ name = "clapi_internal"
 description = "Internal utilities for clapi"
 version = "0.1.0"
 authors = ["Freddy L"]
-license ="Apache-2.0 License"
+license ="Apache-2.0"
 edition = "2018"
 
 [lib]
