@@ -51,11 +51,8 @@ impl CommandAttrData {
     pub fn from_fn(args: AttributeArgs, func: ItemFn) -> Self {
         let name = func.sig.ident.to_string();
         let attr_data =
-            NameValueAttribute::from_attribute_args(
-                name.as_str(),
-                args,
-                AttrStyle::Outer
-        ).expect("failed to parse `command` attribute");
+            NameValueAttribute::from_attribute_args(name.as_str(), args, AttrStyle::Outer)
+                .expect("failed to parse `command` attribute");
 
         CommandAttrData::new_from_fn(attr_data, func, false, true, true)
     }
@@ -621,9 +618,12 @@ pub fn is_option_bool_flag(fn_arg: &FnArgData) -> bool {
     if let Some(attribute) = &fn_arg.name_value {
         // #[option(flag=false)]
         if let Some(flag_value) = attribute.get(crate::consts::FLAG) {
-           if !flag_value.to_bool_literal().expect("`flag` must be a bool literal") {
-               return false;
-           }
+            if !flag_value
+                .to_bool_literal()
+                .expect("`flag` must be a bool literal")
+            {
+                return false;
+            }
         }
 
         let min = attribute
@@ -668,10 +668,10 @@ mod imp {
     use crate::utils::{path_to_string, NamePath};
     use crate::var::{ArgLocalVar, VarSource};
     use crate::{consts, AttrQuery};
+    use quote::ToTokens;
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, Ordering};
     use syn::{AttrStyle, Attribute, AttributeArgs, File, FnArg, Item, ItemFn, PatType, Stmt};
-    use quote::ToTokens;
 
     // Constructs a new `CommandAttrData` from a `ItemFn`
     pub fn command_from_fn_with_name(
@@ -895,7 +895,11 @@ mod imp {
             // Finds the `command_help` if any in the body of the function
             if let Some(command_help) = find_inner_decorate_item_fn(&item_fn, consts::COMMAND_HELP)
             {
-                assert!(command.command_help.is_none(), "multiple #[{}] defined", consts::COMMAND_HELP);
+                assert!(
+                    command.command_help.is_none(),
+                    "multiple #[{}] defined",
+                    consts::COMMAND_HELP
+                );
                 command.set_command_help(NamePath::new(command_help.sig.ident.to_string()));
             }
 
@@ -903,7 +907,11 @@ mod imp {
             if let Some(command_usage) =
                 find_inner_decorate_item_fn(&item_fn, consts::COMMAND_USAGE)
             {
-                assert!(command.command_usage.is_none(), "multiple #[{}] defined", consts::COMMAND_USAGE);
+                assert!(
+                    command.command_usage.is_none(),
+                    "multiple #[{}] defined",
+                    consts::COMMAND_USAGE
+                );
                 command.set_command_usage(NamePath::new(command_usage.sig.ident.to_string()));
             }
         }
@@ -999,7 +1007,7 @@ mod imp {
             let (name, attribute, _) = &attributes[index];
             if attributes[(index + 1)..]
                 .iter()
-                .any(|(arg, ..)| arg == name)
+                .any(|(arg, ..)| arg.trim_start_matches("r#") == name.trim_start_matches("r#"))
             {
                 panic!(
                     "function argument `{}` is already used in `{}`",
@@ -1010,7 +1018,9 @@ mod imp {
 
         // Check the argument declared in the `option` or `arg` exists in the function
         for (path, _, _) in &attributes {
-            if !fn_args.iter().any(|(arg_name, _)| arg_name == path) {
+            if !fn_args.iter().any(|(arg_name, _)| {
+                arg_name.trim_start_matches("r#") == path.trim_start_matches("r#")
+            }) {
                 panic!(
                     "argument `{}` is no defined in `fn {}`",
                     path, item_fn.sig.ident

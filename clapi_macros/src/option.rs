@@ -271,7 +271,7 @@ impl OptionAttrData {
             .as_ref()
             .map(|value| quote! { .global(#value) });
 
-        let name = quote_expr!(self.name);
+        let name = quote_expr!(self.name.as_str().trim_start_matches("r#"));
 
         quote! {
             clapi::CommandOption::new(#name)

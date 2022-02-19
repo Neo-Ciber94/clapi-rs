@@ -1,9 +1,9 @@
 use crate::TypeExt;
 use proc_macro2::TokenStream;
 use quote::*;
-use syn::spanned::Spanned;
-use syn::{GenericArgument, Pat, PatType, Type, Expr};
 use std::fmt::{Display, Formatter};
+use syn::spanned::Spanned;
+use syn::{Expr, GenericArgument, Pat, PatType, Type};
 
 #[derive(Debug, Clone)]
 pub struct ArgLocalVar {
@@ -28,6 +28,12 @@ impl ArgLocalVar {
 
     pub fn expand(&self) -> TokenStream {
         let var_name = self.var_name.parse::<TokenStream>().unwrap();
+        let normalized_var_name = self
+            .var_name
+            .trim_start_matches("r#")
+            .parse::<TokenStream>()
+            .unwrap();
+
         let is_mut = if self.is_mut {
             quote! { mut }
         } else {
@@ -49,7 +55,7 @@ impl ArgLocalVar {
                 // - `true` : If passing `--enable=true`
                 // - `false`: If passing `--enable=false`
                 // - `false`: If passing nothing
-                let option_name = quote_expr!(self.var_name);
+                let option_name = quote_expr!(normalized_var_name);
                 quote! {
                     match opts.get(#option_name) {
                         None => false,
@@ -68,7 +74,7 @@ impl ArgLocalVar {
 
         match self.ty {
             ArgumentType::Slice(_) => {
-                let concat = format!("tmp_{}", var_name);
+                let concat = format!("tmp_{}", normalized_var_name);
                 let temp = syn::Ident::new(&concat, var_name.span());
                 let as_slice = match &self.ty {
                     ArgumentType::Slice(slice) => {
@@ -95,8 +101,8 @@ impl ArgLocalVar {
     }
 
     fn get_opts_source(&self, arg_name: &str) -> TokenStream {
-        let option_name = quote_expr!(self.var_name);
-        let arg_name = quote_expr!(arg_name);
+        let option_name = quote_expr!(self.var_name.trim_start_matches("r#"));
+        let arg_name = quote_expr!(arg_name.trim_start_matches("r#"));
 
         match &self.ty {
             ArgumentType::Type(ty) => {
@@ -141,26 +147,28 @@ impl ArgLocalVar {
     }
 
     fn get_args_source(&self, arg_name: &str) -> TokenStream {
+        let normalized_name = arg_name.trim_start_matches("r#");
+
         match &self.ty {
             ArgumentType::Type(ty) => {
                 if let VarSource::Args(_) = &self.source {
-                    quote! { args.get(#arg_name).unwrap().convert::<#ty>()? }
+                    quote! { args.get(#normalized_name).unwrap().convert::<#ty>()? }
                 } else {
                     unreachable!()
                 }
             }
             ArgumentType::Vec(ty) => {
-                quote! { args.get(#arg_name).unwrap().convert_all::<#ty>()? }
+                quote! { args.get(#normalized_name).unwrap().convert_all::<#ty>()? }
             }
             ArgumentType::Slice(slice) => {
                 let ty = &slice.ty;
-                quote! { args.get(#arg_name).unwrap().convert_all::<#ty>()? }
+                quote! { args.get(#normalized_name).unwrap().convert_all::<#ty>()? }
             }
             ArgumentType::Option(ty) => {
                 let arg_temp = format_ident!("{}_temp", self.var_name);
                 quote! {
                     {
-                        let #arg_temp = args.get(#arg_name).unwrap();
+                        let #arg_temp = args.get(#normalized_name).unwrap();
                         match #arg_temp.get_values().len(){
                             0 => None,
                             _ => Some(#arg_temp.convert::<#ty>()?)
@@ -173,7 +181,7 @@ impl ArgLocalVar {
                 let len = &array.len;
                 quote! {
                     {
-                        let temp = args.get(#arg_name).unwrap().convert_all::<#ty>()?;
+                        let temp = args.get(#normalized_name).unwrap().convert_all::<#ty>()?;
                         std::convert::TryInto::<[#ty; #len]>::try_into(temp).unwrap()
                     }
                 }
@@ -218,13 +226,13 @@ pub enum ArgumentType {
 #[derive(Debug, Clone)]
 pub struct SliceType {
     pub ty: Box<Type>,
-    pub mutability: bool
+    pub mutability: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct ArrayType {
     pub ty: Box<Type>,
-    pub len: usize
+    pub len: usize,
 }
 
 impl ArgumentType {
@@ -257,7 +265,7 @@ impl ArgumentType {
     pub fn is_mut_slice(&self) -> bool {
         match self {
             ArgumentType::Slice(slice) => slice.mutability,
-            _ => false
+            _ => false,
         }
     }
 
@@ -307,7 +315,7 @@ fn get_argument_type(pat_type: &PatType) -> ArgumentType {
             if let Type::Slice(array) = type_ref.elem.as_ref() {
                 ArgumentType::Slice(SliceType {
                     ty: array.elem.clone(),
-                    mutability: type_ref.mutability.is_some()
+                    mutability: type_ref.mutability.is_some(),
                 })
             } else {
                 panic!(
@@ -315,23 +323,27 @@ fn get_argument_type(pat_type: &PatType) -> ArgumentType {
                     pat_type.to_token_stream().to_string()
                 );
             }
-        },
-        Type::Array(type_array) => {
-            ArgumentType::Array(ArrayType{
-                ty: type_array.elem.clone(),
-                len: {
-                    if let Expr::Lit(expr) = &type_array.len {
-                        if let syn::Lit::Int(int) = &expr.lit {
-                            int.base10_parse::<usize>().unwrap()
-                        } else {
-                            panic!("array len must be a literal: `{}`", pat_type.to_token_stream().to_string())
-                        }
+        }
+        Type::Array(type_array) => ArgumentType::Array(ArrayType {
+            ty: type_array.elem.clone(),
+            len: {
+                if let Expr::Lit(expr) = &type_array.len {
+                    if let syn::Lit::Int(int) = &expr.lit {
+                        int.base10_parse::<usize>().unwrap()
                     } else {
-                        panic!("array len must be a literal: `{}`", pat_type.to_token_stream().to_string())
+                        panic!(
+                            "array len must be a literal: `{}`",
+                            pat_type.to_token_stream().to_string()
+                        )
                     }
+                } else {
+                    panic!(
+                        "array len must be a literal: `{}`",
+                        pat_type.to_token_stream().to_string()
+                    )
                 }
-            })
-        },
+            },
+        }),
         _ => panic_invalid_argument_type(pat_type),
     }
 }
