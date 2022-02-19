@@ -18,9 +18,9 @@ dependencies = [
 
 [[package]]
 name = "clapi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
- "clapi_internal",
+ "clapi_internal 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "clapi_macros",
  "serde",
  "serde_json",
@@ -37,6 +37,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "clapi_internal"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c74bf5ea00ee637751307cd5ca11feb24f5aa4d00e279d85ae793dc13d35ed2"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "clapi_macros"
 version = "0.1.0"
 dependencies = [
@@ -44,6 +55,13 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "count"
+version = "0.1.0"
+dependencies = [
+ "clapi",
 ]
 
 [[package]]
@@ -97,9 +115,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.7.2"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af8b08b04175473088b46763e51ee54da5f9a164bc162f615b91bc179dbf15a3"
+checksum = "692fcb63b64b1758029e0a96ee63e049ce8c5948587f2f7208df04625e5f6b56"
 
 [[package]]
 name = "proc-macro2"
@@ -167,9 +185,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.60"
+version = "1.0.67"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c700597eca8a5a762beb35753ef6b94df201c81cca676604f547495a0d7f0081"
+checksum = "6498a9efc342871f91cc2d0d694c674368b4ceb40f62b65a7a08c3792935e702"
 dependencies = [
  "proc-macro2",
  "quote",

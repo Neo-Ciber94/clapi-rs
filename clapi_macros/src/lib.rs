@@ -13,12 +13,12 @@ pub(crate) use ext::*;
 
 #[macro_use]
 mod utils;
-mod query;
 mod arg;
-mod consts;
 mod command;
+mod consts;
 mod macro_attribute;
 mod option;
+mod query;
 mod var;
 
 /// Marks a function as a `command`.
@@ -191,7 +191,7 @@ pub fn option(_: TokenStream, _: TokenStream) -> TokenStream {
 /// `#[arg(name)]`.
 ///
 /// # Options
-/// - `name`: Name of the argument, by default if the function argument name.
+/// - `name`: Name of the argument, by default is the function argument name.
 /// - `min`: Min number of values the argument takes.
 /// - `max`: Max number of values the argument takes.
 /// - `default`: Default value(s) of the argument.

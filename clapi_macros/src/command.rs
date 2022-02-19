@@ -1007,7 +1007,7 @@ mod imp {
             let (name, attribute, _) = &attributes[index];
             if attributes[(index + 1)..]
                 .iter()
-                .any(|(arg, ..)| arg.trim_start_matches("r#") == name.trim_start_matches("r#"))
+                .any(|(arg_name, ..)| arg_name == name)
             {
                 panic!(
                     "function argument `{}` is already used in `{}`",
@@ -1018,9 +1018,7 @@ mod imp {
 
         // Check the argument declared in the `option` or `arg` exists in the function
         for (path, _, _) in &attributes {
-            if !fn_args.iter().any(|(arg_name, _)| {
-                arg_name.trim_start_matches("r#") == path.trim_start_matches("r#")
-            }) {
+            if !fn_args.iter().any(|(arg_name, _)| arg_name == path) {
                 panic!(
                     "argument `{}` is no defined in `fn {}`",
                     path, item_fn.sig.ident
@@ -1029,15 +1027,10 @@ mod imp {
         }
 
         for (arg_name, pat_type) in fn_args {
-            let (attribute, name_value) = if let Some(data) =
-                attributes.iter().find_map(|(path, attribute, name_value)| {
-                    if path == &arg_name {
-                        Some((attribute.clone(), name_value.clone()))
-                    } else {
-                        None
-                    }
-                }) {
-                (Some(data.0), Some(data.1))
+            let (attribute, name_value) = if let Some((macro_attr, name_value_attr)) =
+                find_attribute_by_arg_name(&attributes, &arg_name)
+            {
+                (Some(macro_attr), Some(name_value_attr))
             } else {
                 (None, None)
             };
@@ -1057,6 +1050,20 @@ mod imp {
         }
 
         ret
+    }
+
+    // Returns the attribute that match the argument name
+    fn find_attribute_by_arg_name(
+        attributes: &[(String, MacroAttribute, NameValueAttribute)],
+        arg_name: &str,
+    ) -> Option<(MacroAttribute, NameValueAttribute)> {
+        attributes.iter().find_map(|(path, attribute, name_value)| {
+            if path == arg_name {
+                Some((attribute.clone(), name_value.clone()))
+            } else {
+                None
+            }
+        })
     }
 
     // Takes a `MacroAttribute` and returns its path, self and this name values

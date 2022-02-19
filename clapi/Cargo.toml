@@ -5,7 +5,7 @@ keywords=["command-line", "command", "api", "parser", "macros" ]
 version = "0.1.1"
 authors = ["Freddy L"]
 license="Apache-2.0"
-edition = "2018"
+edition = "2021"
 repository= "https://github.com/Neo-Ciber94/clapi-rs"
 readme = "../README.md"
 
@@ -14,7 +14,8 @@ macros = ["clapi_macros"]
 typing = []
 
 [dependencies]
-clapi_macros = { optional=true, version="0.1.0" }
+#clapi_macros = { optional=true, version="0.1.0" }
+clapi_macros = { path="../clapi_macros", optional=true }
 clapi_internal = { version="0.1.0" }
 serde = { version="1.0.118", features=["derive"], optional=true }
 

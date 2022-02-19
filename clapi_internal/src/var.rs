@@ -139,6 +139,7 @@ impl DeclareVar {
 /// Represents the declaration of a variable in `clapi::app!` macro like:
 /// `(source, mut? name : i64)`
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct VarInput {
     source: Ident,
     comma: syn::Token![,],

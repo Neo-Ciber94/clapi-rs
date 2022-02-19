@@ -4,4 +4,4 @@ error[E0425]: cannot find function `some_fn` in this scope
 3 | #[command(with_help="some_fn")]
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ not found in this scope
   |
-  = note: this error originates in an attribute macro (in Nightly builds, run with -Z macro-backtrace for more info)
+  = note: this error originates in the attribute macro `command` (in Nightly builds, run with -Z macro-backtrace for more info)

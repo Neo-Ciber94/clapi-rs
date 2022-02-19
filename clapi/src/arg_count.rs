@@ -1,7 +1,9 @@
 #![allow(clippy::manual_unwrap_or)]
-use std::fmt::{Display, Formatter};
-use std::ops::{Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive, Sub, RangeBounds};
 use std::collections::Bound;
+use std::fmt::{Display, Formatter};
+use std::ops::{
+    Range, RangeBounds, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive, Sub,
+};
 
 /**
 Represents the number of values an argument takes.
@@ -112,7 +114,7 @@ impl ArgCount {
     pub const fn min_or_default(&self) -> usize {
         match self.min {
             Some(n) => n,
-            None => usize::MIN
+            None => usize::MIN,
         }
     }
 
@@ -121,7 +123,7 @@ impl ArgCount {
     pub const fn max_or_default(&self) -> usize {
         match self.max {
             Some(n) => n,
-            None => usize::MAX
+            None => usize::MAX,
         }
     }
 
@@ -132,7 +134,6 @@ impl ArgCount {
     }
 
     /// Returns the `max` number of values of `None` if unbounded.
-    #[inline]
     #[inline]
     pub const fn max(&self) -> Option<usize> {
         self.max
@@ -178,9 +179,9 @@ impl ArgCount {
 impl Display for ArgCount {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.is_exact() {
-            return if self.takes_exactly(0){
+            return if self.takes_exactly(0) {
                 write!(f, "no values")
-            } else if self.takes_exactly(1){
+            } else if self.takes_exactly(1) {
                 write!(f, "1 value")
             } else {
                 write!(f, "{} values", self.min_or_default())
@@ -191,7 +192,7 @@ impl Display for ArgCount {
             (Some(min), Some(max)) => write!(f, "{} to {} values", min, max),
             (Some(min), None) => write!(f, "{} or more values", min),
             (None, Some(max)) => write!(f, "{} or less values", max),
-            (None, None) => write!(f, "any number of values")
+            (None, None) => write!(f, "any number of values"),
         }
     }
 }
@@ -212,14 +213,14 @@ impl RangeBounds<usize> for ArgCount {
     fn start_bound(&self) -> Bound<&usize> {
         match self.min {
             Some(ref n) => Bound::Included(n),
-            None => Bound::Unbounded
+            None => Bound::Unbounded,
         }
     }
 
     fn end_bound(&self) -> Bound<&usize> {
         match self.max {
             Some(ref n) => Bound::Included(n),
-            None => Bound::Unbounded
+            None => Bound::Unbounded,
         }
     }
 }

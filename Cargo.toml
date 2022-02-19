@@ -7,5 +7,6 @@ members=[
     # Internal
     "test_suite",
     "benches",
-    "examples"
+    "examples",
+    "samples/*"
 ]
