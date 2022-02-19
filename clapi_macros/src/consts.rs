@@ -18,11 +18,12 @@ pub const MAX: &str = "max";
 pub const DEFAULT: &str = "default";
 pub const VALUES: &str = "values";
 pub const HIDDEN: &str = "hidden";
+pub const GLOBAL: &str = "global";
 pub const MULTIPLE: &str = "multiple";
-pub const REQUIRES_ASSIGN : &str = "requires_assign";
-pub const FLAG : &str = "flag";
-pub const ERROR : &str = "error";
-pub const COMMAND_HELP : &str = "command_help";
+pub const REQUIRES_ASSIGN: &str = "requires_assign";
+pub const FLAG: &str = "flag";
+pub const ERROR: &str = "error";
+pub const COMMAND_HELP: &str = "command_help";
 pub const COMMAND_USAGE: &str = "command_usage";
 
 pub fn is_clapi_attribute(path: &str) -> bool {
@@ -30,23 +31,32 @@ pub fn is_clapi_attribute(path: &str) -> bool {
 }
 
 pub fn is_command(path: &str) -> bool {
-    matches!(path, "command"
-        | "clapi::command"
-        | "clapi::macros::command"
-        | "clapi_macros::command")
+    matches!(
+        path,
+        "command" | "clapi::command" | "clapi::macros::command" | "clapi_macros::command"
+    )
 }
 
 pub fn is_subcommand(path: &str) -> bool {
-    matches!(path, "subcommand"
-        | "clapi::subcommand"
-        | "clapi::macros::subcommand"
-        | "clapi_macros::subcommand")
+    matches!(
+        path,
+        "subcommand"
+            | "clapi::subcommand"
+            | "clapi::macros::subcommand"
+            | "clapi_macros::subcommand"
+    )
 }
 
 pub fn is_option(path: &str) -> bool {
-    matches!(path, "option" | "clapi::option" | "clapi::macros::option" | "clapi_macros::option")
+    matches!(
+        path,
+        "option" | "clapi::option" | "clapi::macros::option" | "clapi_macros::option"
+    )
 }
 
 pub fn is_arg(path: &str) -> bool {
-    matches!(path, "arg" | "clapi::arg" | "clapi::macros::arg" | "clapi_macros::arg")
+    matches!(
+        path,
+        "arg" | "clapi::arg" | "clapi::macros::arg" | "clapi_macros::arg"
+    )
 }

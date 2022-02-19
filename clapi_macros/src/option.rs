@@ -1,9 +1,10 @@
 use crate::arg::ArgAttrData;
-use crate::consts;
 use crate::command::{is_option_bool_flag, FnArgData};
-use crate::macro_attribute::{Value, MacroAttribute};
+use crate::consts;
+use crate::macro_attribute::{MacroAttribute, Value};
 use proc_macro2::TokenStream;
 use quote::*;
+use syn::Lit;
 
 /// Tokens for an `option` attribute.
 ///
@@ -14,6 +15,8 @@ use quote::*;
 ///     description="Average",
 ///     hidden = false,
 ///     multiple = false,
+///     global = false,
+///     flag=false,
 ///     min=1,
 ///     max=100,
 ///     default=0)]
@@ -29,15 +32,19 @@ pub struct OptionAttrData {
     description: Option<String>,
     arg: Option<ArgAttrData>,
     is_hidden: Option<bool>,
+    is_global: Option<bool>,
     allow_multiple: Option<bool>,
     requires_assign: Option<bool>,
-    is_flag: bool
+    is_flag: bool,
 }
 
 impl OptionAttrData {
     pub fn new(name: String) -> Self {
         assert!(!name.trim().is_empty(), "option `name` cannot be empty");
-        assert!(name.trim().chars().all(|c| !c.is_whitespace()), "option `name` cannot contains whitespaces");
+        assert!(
+            name.trim().chars().all(|c| !c.is_whitespace()),
+            "option `name` cannot contains whitespaces"
+        );
 
         OptionAttrData {
             name,
@@ -48,7 +55,8 @@ impl OptionAttrData {
             is_hidden: None,
             allow_multiple: None,
             requires_assign: None,
-            is_flag: false
+            is_global: None,
+            is_flag: false,
         }
     }
 
@@ -65,84 +73,92 @@ impl OptionAttrData {
                             .expect("option `name` must be a string literal");
 
                         option.set_name(name);
-                    },
+                    }
                     consts::ARG => {
                         let arg_name = value
                             .to_string_literal()
                             .expect("option `arg` must be a string literal");
 
                         arg.set_name(arg_name);
-                    },
+                    }
                     consts::ALIAS => {
                         let alias = value
                             .to_string_literal()
                             .expect("option `alias` must be a string literal");
 
                         option.set_alias(alias);
-                    },
+                    }
                     consts::DESCRIPTION => {
                         let description = value
                             .to_string_literal()
                             .expect("option `description` must be a string literal");
 
                         option.set_description(description);
-                    },
+                    }
                     consts::MIN => {
                         let min = value
                             .to_integer_literal::<usize>()
                             .expect("option `min` must be an integer literal");
 
                         arg.set_min(min);
-                    },
+                    }
                     consts::MAX => {
                         let max = value
                             .to_integer_literal::<usize>()
                             .expect("option `max` must be an integer literal");
 
                         arg.set_max(max);
-                    },
+                    }
                     consts::HIDDEN => {
                         let is_hidden = value
                             .to_bool_literal()
                             .expect("option `hidden` must be a bool literal");
 
                         option.set_hidden(is_hidden);
-                    },
+                    }
                     consts::MULTIPLE => {
                         let allow_multiple = value
                             .to_bool_literal()
                             .expect("option `multiple` must be a bool literal");
 
                         option.set_multiple(allow_multiple);
-                    },
+                    }
                     consts::REQUIRES_ASSIGN => {
                         let requires_assign = value
                             .to_bool_literal()
                             .expect("option `requires_assign` must be a bool literal");
 
                         option.set_requires_assign(requires_assign);
-                    },
+                    }
                     consts::ERROR => {
                         let error = value
                             .to_string_literal()
                             .expect("option `error` must be a string literal");
 
                         arg.set_validation_error(error);
-                    },
+                    }
                     consts::DEFAULT => match value {
                         Value::Literal(lit) => arg.set_default_values(vec![lit.clone()]),
-                        Value::Array(array) => arg.set_default_values(array.clone()),
+                        Value::Array(array) => arg.set_default_values(array.clone() as Vec<Lit>),
                     },
                     consts::VALUES => match value {
                         Value::Literal(lit) => arg.set_valid_values(vec![lit.clone()]),
-                        Value::Array(array) => arg.set_valid_values(array.clone()),
+                        Value::Array(array) => arg.set_valid_values(array.clone() as Vec<Lit>),
                     },
                     consts::FLAG => {
                         // Just type checking
                         // This is used by `command.rs#is_option_bool_flag`
-                        value.to_bool_literal()
-                             .expect("option `flag` must be a bool literal");
-                    },
+                        value
+                            .to_bool_literal()
+                            .expect("option `flag` must be a bool literal");
+                    }
+                    consts::GLOBAL => {
+                        let global = value
+                            .to_bool_literal()
+                            .expect("option `global` must be a bool literal");
+
+                        option.set_global(global);
+                    }
                     _ => panic!("invalid `option` key `{}`", key),
                 }
             }
@@ -175,7 +191,10 @@ impl OptionAttrData {
 
     pub fn set_name(&mut self, name: String) {
         assert!(!name.trim().is_empty(), "option `name` cannot be empty");
-        assert!(name.trim().chars().all(|c| !c.is_whitespace()), "option `name` cannot contains whitespaces");
+        assert!(
+            name.trim().chars().all(|c| !c.is_whitespace()),
+            "option `name` cannot contains whitespaces"
+        );
 
         self.name = name;
     }
@@ -196,22 +215,25 @@ impl OptionAttrData {
         self.is_hidden = Some(is_hidden);
     }
 
-    pub fn set_multiple(&mut self, allow_multiple: bool){
+    pub fn set_multiple(&mut self, allow_multiple: bool) {
         self.allow_multiple = Some(allow_multiple);
     }
 
-    pub fn set_requires_assign(&mut self, requires_assign: bool){
+    pub fn set_requires_assign(&mut self, requires_assign: bool) {
         self.requires_assign = Some(requires_assign);
+    }
+
+    pub fn set_global(&mut self, global: bool) {
+        self.is_global = Some(global);
     }
 
     pub fn expand(&self) -> TokenStream {
         // Option alias
-        let alias = self.alias
-            .as_ref()
-            .map(|s| quote! { .alias(#s) });
+        let alias = self.alias.as_ref().map(|s| quote! { .alias(#s) });
 
         // Option description
-        let description = self.description
+        let description = self
+            .description
             .as_ref()
             .map(|s| quote! { .description(#s) });
 
@@ -224,24 +246,30 @@ impl OptionAttrData {
         };
 
         // Option argument
-        let arg = self.arg
-            .as_ref()
-            .map(|arg| quote! { .arg(#arg) });
+        let arg = self.arg.as_ref().map(|arg| quote! { .arg(#arg) });
 
         // Option is hidden
-        let is_hidden = self.is_hidden
+        let is_hidden = self
+            .is_hidden
             .as_ref()
-            .map(|value| quote! { .hidden(#value) } );
+            .map(|value| quote! { .hidden(#value) });
 
         // Option allow multiple
-        let allow_multiple = self.allow_multiple
+        let allow_multiple = self
+            .allow_multiple
             .as_ref()
-            .map(|value| quote! { .multiple(#value) } );
+            .map(|value| quote! { .multiple(#value) });
 
         // Option requires assign
-        let requires_assign = self.requires_assign
+        let requires_assign = self
+            .requires_assign
             .as_ref()
-            .map(|value| quote! { .requires_assign(#value) } );
+            .map(|value| quote! { .requires_assign(#value) });
+
+        let is_global = self
+            .is_global
+            .as_ref()
+            .map(|value| quote! { .global(#value) });
 
         let name = quote_expr!(self.name);
 
@@ -253,6 +281,7 @@ impl OptionAttrData {
             #is_hidden
             #allow_multiple
             #requires_assign
+            #is_global
             #arg
         }
     }
@@ -264,7 +293,7 @@ impl ToTokens for OptionAttrData {
     }
 }
 
-impl Eq for OptionAttrData{}
+impl Eq for OptionAttrData {}
 
 impl PartialEq for OptionAttrData {
     fn eq(&self, other: &Self) -> bool {
