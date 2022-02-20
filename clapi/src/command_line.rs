@@ -2,12 +2,12 @@
 use crate::command::Command;
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, Result};
+use crate::help::HelpSource;
 use crate::parser::Parser;
 use crate::suggestion::SuggestionSource;
-use crate::{Argument, ParseResult, CommandOption, OptionList};
+use crate::{Argument, CommandOption, OptionList, ParseResult};
 use std::borrow::Borrow;
 use std::fmt::Debug;
-use crate::help::HelpSource;
 
 /// Represents a command-line app.
 #[derive(Debug)]
@@ -49,8 +49,10 @@ impl CommandLine {
 
     /// Sets the default `Help`.
     pub fn use_default_help(mut self) -> Self {
-        self.context.set_help_option(crate::context::default_help_option());
-        self.context.set_help_command(crate::context::default_help_command());
+        self.context
+            .set_help_option(crate::context::default_help_option());
+        self.context
+            .set_help_command(crate::context::default_help_command());
         self
     }
 
@@ -105,16 +107,15 @@ impl CommandLine {
     /// Parse given arguments get the `ParseResult`
     /// after handling any help, version or suggestion messages.
     pub fn parse_from<S, I>(&mut self, args: I) -> Result<ParseResult>
-        where
-            S: Borrow<str>,
-            I: IntoIterator<Item = S> {
+    where
+        S: Borrow<str>,
+        I: IntoIterator<Item = S>,
+    {
         let mut parser = Parser::new(&self.context);
         let result = parser.parse(args);
         let parse_result = match result {
             Ok(r) => r,
-            Err(error) => {
-                return Err(self.handle_error(&parser, error).unwrap_err())
-            },
+            Err(error) => return Err(self.handle_error(&parser, error).unwrap_err()),
         };
 
         // Checks if the command requires to display help
@@ -124,8 +125,7 @@ impl CommandLine {
         // Checks if the command requires to display the version
         else if self.requires_version(&parse_result) {
             Err(self.show_version(&parse_result).unwrap_err())
-        }
-        else {
+        } else {
             Ok(parse_result)
         }
     }
@@ -141,29 +141,33 @@ impl CommandLine {
 
     /// Parses the given arguments and runs the app.
     pub fn run_from<S, I>(&mut self, args: I) -> Result<()>
-        where
-            S: Borrow<str>,
-            I: IntoIterator<Item = S> {
+    where
+        S: Borrow<str>,
+        I: IntoIterator<Item = S>,
+    {
         fn print_help_or_version(error: Error) -> Result<()> {
             match error.kind() {
                 ErrorKind::DisplayHelp(s) | ErrorKind::DisplayVersion(s) => {
                     println!("{}", s);
                     Ok(())
-                },
-                _ => unreachable!()
+                }
+                _ => unreachable!(),
             }
         }
 
         // Parse the arguments and get the result
         let parse_result = match self.parse_from(args) {
             Err(err) => {
-                return if matches!(err.kind(), ErrorKind::DisplayHelp(_) | ErrorKind::DisplayVersion(_)) {
+                return if matches!(
+                    err.kind(),
+                    ErrorKind::DisplayHelp(_) | ErrorKind::DisplayVersion(_)
+                ) {
                     print_help_or_version(err)
                 } else {
                     Err(err)
                 }
-            },
-            Ok(x) => x
+            }
+            Ok(x) => x,
         };
 
         // We borrow the value from the Option to avoid create a temporary
@@ -196,18 +200,18 @@ impl CommandLine {
         // `Err` was decided initially due using an invalid `command` or `argument` is an error
         match error.kind() {
             ErrorKind::InvalidArgumentCount | ErrorKind::InvalidArgument(_)
-            if self.context.help_option().is_some() || self.context.help_command().is_some() => {
+                if self.context.help_option().is_some()
+                    || self.context.help_command().is_some() =>
+            {
                 Err(error.with_message(self.get_help_message(None, MessageKind::Usage)?))
-            },
+            }
             ErrorKind::UnexpectedOption(_) if self.suggestions().is_some() => {
                 self.display_option_suggestions(parser, error)
-            },
+            }
             ErrorKind::UnexpectedCommand(_) if self.suggestions().is_some() => {
                 self.display_command_suggestions(parser, error)
-            },
-            _ => {
-                Err(error)
             }
+            _ => Err(error),
         }
     }
 
@@ -227,13 +231,16 @@ impl CommandLine {
         false
     }
 
-    fn show_version(&self, result: &ParseResult) -> Result<()>{
+    fn show_version(&self, result: &ParseResult) -> Result<()> {
         match result.executing_command().get_version() {
             Some(version) => {
                 let name = result.command_name();
-                Err(Error::from(ErrorKind::DisplayVersion(format!("{} {}", name, version))))
-            },
-            None => unreachable!()
+                Err(Error::from(ErrorKind::DisplayVersion(format!(
+                    "{} {}",
+                    name, version
+                ))))
+            }
+            None => unreachable!(),
         }
     }
 
@@ -264,7 +271,9 @@ impl CommandLine {
         // * [subcommand] --help
         if let Some(help_option) = self.context.help_option() {
             if parse_result.options().contains(help_option.get_name()) {
-                let arg = parse_result.options().get(help_option.get_name())
+                let arg = parse_result
+                    .options()
+                    .get(help_option.get_name())
                     .unwrap()
                     .get_arg();
 
@@ -320,13 +329,13 @@ impl CommandLine {
         let context = &self.context;
         let command = match values {
             None => context.root(),
-            Some(values) => find_command(&context.root(), values)?
+            Some(values) => find_command(&context.root(), values)?,
         };
 
         let mut buf = String::new();
         match kind {
             MessageKind::Help => (context.help().help)(&mut buf, &context, command, true),
-            MessageKind::Usage => (context.help().usage)(&mut buf, &context, command, true)
+            MessageKind::Usage => (context.help().usage)(&mut buf, &context, command, true),
         }
 
         Ok(buf)
@@ -335,13 +344,14 @@ impl CommandLine {
     fn display_option_suggestions(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
         let unprefixed_option = match error.kind() {
             ErrorKind::UnexpectedOption(s) => self.context.trim_prefix(s),
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         // SAFETY: We ensure `suggestions` is some before calling this method
         // check `CommandLine::handle_error`
         let suggestion_source = self.suggestions().unwrap();
-        let command_options = parser.command()
+        let command_options = parser
+            .command()
             .unwrap()
             .get_options()
             .iter()
@@ -349,7 +359,8 @@ impl CommandLine {
             .collect::<Vec<String>>();
 
         // Options suggestions
-        let mut suggestions = suggestion_source.suggestions_for(unprefixed_option, &command_options);
+        let mut suggestions =
+            suggestion_source.suggestions_for(unprefixed_option, &command_options);
 
         // Prefix all the suggested options
         let context = self.context();
@@ -371,13 +382,14 @@ impl CommandLine {
     fn display_command_suggestions(&self, parser: &Parser<'_>, error: Error) -> Result<()> {
         let command_name = match error.kind() {
             ErrorKind::UnexpectedCommand(s) => s,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         // SAFETY: We ensure `suggestions` is some before calling this method
         // check `CommandLine::handle_error`
         let suggestion_source = self.suggestions().unwrap();
-        let subcommands = parser.command()
+        let subcommands = parser
+            .command()
             .unwrap()
             .get_subcommands()
             .map(|c| c.get_name().to_string())
@@ -397,7 +409,7 @@ impl CommandLine {
     fn display_suggestions(&self, error: Error, message: Option<String>) -> Result<()> {
         match message {
             Some(msg) => Err(error.with_message(msg)),
-            None => Err(error)
+            None => Err(error),
         }
     }
 }
@@ -487,47 +499,75 @@ pub fn split_into_platform_args(value: &str) -> Vec<String> {
 /// using the specified `quote_escape`.
 #[doc(hidden)]
 pub fn split_into_args_with_quote_escape(value: &str, quote_escape: char) -> Vec<String> {
-    const DOUBLE_QUOTE : char = '"';
+    ArgSplitter::new().quote_escape(quote_escape).split(value)
+}
 
-    let mut result = Vec::new();
-    let mut buffer = String::new();
-    let mut chars = value.chars().peekable();
-    let mut in_quote = false;
+#[doc(hidden)]
+pub struct ArgSplitter {
+    quote_escape: char,
+    delimiter: char,
+}
 
-    while let Some(next_char) = chars.next() {
-        match next_char {
-            _ if next_char.is_whitespace() && in_quote => {
-                buffer.push(next_char)
-            },
-            _ if next_char.is_whitespace() => {
-                if buffer.len() > 0 {
-                    result.push(buffer.clone());
-                    buffer.clear();
-                }
-            },
-            DOUBLE_QUOTE if in_quote => {
-                in_quote = false;
-                result.push(buffer.clone());
-                buffer.clear();
-            },
-            DOUBLE_QUOTE => {
-                in_quote = true;
-            },
-            _ if next_char == quote_escape && chars.peek() == Some(&DOUBLE_QUOTE) => {
-                buffer.push(chars.next().unwrap());
-            },
-            _ => {
-                buffer.push(next_char);
-            }
+impl ArgSplitter {
+    pub fn new() -> Self {
+        ArgSplitter {
+            quote_escape: '\\',
+            delimiter: ',',
         }
     }
 
-    // Add the rest
-    if buffer.len() > 0 {
-        result.push(buffer);
+    pub fn quote_escape(mut self, quote_escape: char) -> Self {
+        self.quote_escape = quote_escape;
+        self
     }
 
-    result
+    pub fn delimiter(mut self, delimiter: char) -> Self {
+        self.delimiter = delimiter;
+        self
+    }
+
+    pub fn split(&self, value: &str) -> Vec<String> {
+        const DOUBLE_QUOTE: char = '"';
+
+        let mut result = Vec::new();
+        let mut temp = String::new();
+        let mut chars = value.chars().peekable();
+        let mut in_quote = false;
+
+        while let Some(c) = chars.next() {
+            match c {
+                _ if c == self.quote_escape && chars.peek() == Some(&DOUBLE_QUOTE) => {
+                    temp.push(chars.next().unwrap());
+                }
+                _ if c == DOUBLE_QUOTE => {
+                    if in_quote && chars.peek() != Some(&self.delimiter) {
+                        result.push(temp.drain(..).collect());
+                    }
+
+                    in_quote = !in_quote;
+                }
+                _ if c.is_whitespace() => {
+                    if in_quote {
+                        temp.push(c);
+                    } else {
+                        if temp.len() > 0 {
+                            result.push(temp.drain(..).collect());
+                        }
+                    }
+                }
+                _ => {
+                    temp.push(c);
+                }
+            }
+        }
+
+        if temp.len() > 0 {
+            result.push(temp);
+        }
+
+        dbg!(&result);
+        result
+    }
 }
 
 #[cfg(test)]

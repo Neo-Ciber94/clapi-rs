@@ -114,6 +114,10 @@ impl ArgAttrData {
         self.name.as_str()
     }
 
+    pub fn arg_type(&self) -> &ArgumentType {
+        &self.fn_arg.1
+    }
+
     pub fn has_default_values(&self) -> bool {
         !self.default_values.is_empty()
     }

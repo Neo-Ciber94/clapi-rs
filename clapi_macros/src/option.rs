@@ -237,9 +237,15 @@ impl OptionAttrData {
             .as_ref()
             .map(|s| quote! { .description(#s) });
 
-        // Option is required if `args` don't have default values and is not a bool flag
+        // Option is required if is an `Option` or `args` don't have default values and is not a bool flag
+        let is_option_type = self
+            .arg
+            .as_ref()
+            .map(|arg| arg.arg_type().is_option())
+            .unwrap_or(false);
+
         let required = match &self.arg {
-            Some(args) if !args.has_default_values() && !self.is_flag => {
+            Some(args) if !is_option_type && (!args.has_default_values() && !self.is_flag) => {
                 quote! { .required(true) }
             }
             _ => quote! {},

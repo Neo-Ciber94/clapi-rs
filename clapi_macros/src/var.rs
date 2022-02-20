@@ -116,13 +116,17 @@ impl ArgLocalVar {
                 quote! { opts.get(#option_name).unwrap().get_args().get(#arg_name).unwrap().convert_all::<#ty>()? }
             }
             ArgumentType::Option(ty) => {
-                let option_arg = format_ident!("{}_arg", self.var_name);
                 quote! {
                     {
-                        let #option_arg = opts.get_args(#option_name).unwrap().get(#arg_name).unwrap();
-                        match #option_arg.get_values().len(){
-                            0 => None,
-                            _ => Some(#option_arg.convert::<#ty>()?)
+                        match opts.get_args(#option_name)
+                            .map(|args| args.get(#arg_name)).flatten() {
+                            Some(arg) => {
+                                match arg.get_values().len() {
+                                    0 => None,
+                                    _ => Some(arg.convert::<#ty>()?)
+                                }
+                            },
+                            _ => None
                         }
                     }
                 }

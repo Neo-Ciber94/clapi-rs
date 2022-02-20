@@ -1,7 +1,7 @@
-use std::borrow::Borrow;
 use crate::context::Context;
 use crate::error::{Error, ErrorKind, Result};
 use crate::token::{Token, END_OF_OPTIONS};
+use std::borrow::Borrow;
 
 /// A converts a collection of `String`s to `Token`s.
 #[derive(Debug)]
@@ -9,8 +9,10 @@ pub struct Tokenizer;
 
 impl Tokenizer {
     pub fn tokenize<S, I>(&self, context: &Context, args: I) -> Result<Vec<Token>>
-        where S: Borrow<str>,
-              I: IntoIterator<Item = S> {
+    where
+        S: Borrow<str>,
+        I: IntoIterator<Item = S>,
+    {
         let mut iterator = args
             .into_iter()
             .filter(|s| !s.borrow().is_empty())
@@ -26,7 +28,10 @@ impl Tokenizer {
         let mut has_end_of_options = false;
 
         // Finds the executing command
-        if iterator.peek().map_or(false, |s| crate::is_help_command(context, s.borrow())) {
+        if iterator
+            .peek()
+            .map_or(false, |s| crate::is_help_command(context, s.borrow()))
+        {
             let s = iterator.next().unwrap().borrow().to_string();
             tokens.push(Token::Cmd(s))
         } else {
@@ -85,8 +90,8 @@ impl Tokenizer {
                     tokens.extend(args.into_iter().map(Token::Arg));
                 } else if let Some(opt) = current_command
                     .get_options()
-                    .get(context.trim_prefix(&prefixed_option)) {
-
+                    .get(context.trim_prefix(&prefixed_option))
+                {
                     for arg in opt.get_args() {
                         let max_arg_count = arg.get_values_count().max_or_default();
                         let mut count = 0;
@@ -141,7 +146,11 @@ struct OptionAndArgs {
 // Given an option returns the option and its args (if any)
 fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAndArgs> {
     // Check if the value contains an assign operator like: --times=1
-    if let Some(assign_op) = context.assign_operators().cloned().find(|d| value.contains(*d)) {
+    if let Some(assign_op) = context
+        .assign_operators()
+        .cloned()
+        .find(|d| value.contains(*d))
+    {
         let option_and_args = value
             .split(assign_op)
             .map(|s| s.to_string())
@@ -155,11 +164,8 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
             // We use the unprefixed option to do checks
             let unprefixed_option = context.trim_prefix(&option_and_args[0]);
 
-            let args = option_and_args[1]
-                .split(context.delimiter())
-                .map(|s| s.trim_matches('"'))
-                .map(|s| s.to_string())
-                .collect::<Vec<String>>();
+            // --values=" hello world","good day","bye, amigo"
+            let args = split_option_args(&option_and_args[1], context);
 
             // Error when: `=1,2,3`
             if unprefixed_option.is_empty() {
@@ -179,16 +185,13 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
 
             // Error when: `--option=1,,,3`
             if args.iter().any(|s| s.is_empty()) {
-                return Err(Error::new(
-                    ErrorKind::InvalidExpression,
-                    value,
-                ));
+                return Err(Error::new(ErrorKind::InvalidExpression, value));
             }
 
             Ok(OptionAndArgs {
                 prefixed_option: option_and_args[0].clone(),
                 args: Some(args),
-                assign_op: Some(assign_op)
+                assign_op: Some(assign_op),
             })
         };
     } else {
@@ -207,16 +210,57 @@ fn try_split_option_and_args(context: &Context, value: &str) -> Result<OptionAnd
     }
 }
 
+fn split_option_args(args: &str, context: &Context) -> Vec<String> {
+    const QUOTE_ESCAPE: char = '\\';
+
+    let mut result = Vec::new();
+    let delimiter = context.delimiter();
+    let mut chars = args.chars().peekable();
+    let mut temp = String::new();
+    let mut in_quote = false;
+
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => {
+                if in_quote {
+                    result.push(temp.drain(..).collect());
+                }
+
+                in_quote = !in_quote;
+            }
+            QUOTE_ESCAPE if chars.peek() == Some(&'"') => {
+                temp.push(chars.next().unwrap());
+            }
+            _ if c == delimiter => {
+                if in_quote {
+                    temp.push(c);
+                } else {
+                    result.push(temp.drain(..).collect());
+                }
+            }
+            _ => {
+                temp.push(c);
+            }
+        }
+    }
+
+    // Add the last value
+    result.push(temp);
+
+    result
+}
+
 // Returns `true` if the specified value starts with an option prefix.
 fn is_prefixed_option(context: &Context, value: &str) -> bool {
-    context.name_prefixes()
+    context
+        .name_prefixes()
         .chain(context.alias_prefixes())
         .any(|prefix| value.starts_with(prefix))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Argument, Command, CommandOption, split_into_args};
+    use crate::{split_into_args, Argument, Command, CommandOption, ContextBuilder};
 
     use super::*;
 
@@ -225,12 +269,23 @@ mod tests {
         Tokenizer.tokenize(&context, split_into_args(value))
     }
 
+    fn tokenize_with_delimiter(
+        command: Command,
+        value: &str,
+        delimiter: char,
+    ) -> crate::Result<Vec<Token>> {
+        let context = ContextBuilder::new(command).delimiter(delimiter).build();
+        Tokenizer.tokenize(&context, split_into_args(value))
+    }
+
     #[test]
     fn tokenize_test() {
         let command = Command::new("MyApp")
             .arg(Argument::one_or_more("args"))
             .option(CommandOption::new("enable").alias("e"))
-            .option(CommandOption::new("range").arg(Argument::with_name("range").values_count(1..=2)))
+            .option(
+                CommandOption::new("range").arg(Argument::with_name("range").values_count(1..=2)),
+            )
             .subcommand(Command::new("version"));
 
         assert_eq!(tokenize(command.clone(), "").unwrap(), Vec::new());
@@ -306,5 +361,25 @@ mod tests {
         assert!(tokenize(command.clone(), "--numbers=1,,,2").is_err());
         assert!(tokenize(command.clone(), "--numbers=1,2,3,").is_err());
         assert!(tokenize(command.clone(), "--numbers=,1,2,3").is_err());
+    }
+
+    #[test]
+    fn split_with_spaces_test() {
+        let command = Command::new("MyApp")
+            .option(CommandOption::new("words").arg(Argument::one_or_more("words")));
+
+        let tokens = tokenize_with_delimiter(
+            command.clone(),
+            "--words=\"hello world\"|\"good night\"|\"right, bye\"",
+            '|',
+        )
+        .unwrap();
+
+        assert_eq!(tokens.len(), 5);
+        assert_eq!(tokens[0], Token::Opt("--words".to_owned()));
+        assert_eq!(tokens[1], Token::AssignOp('='));
+        assert_eq!(tokens[2], Token::Arg("hello world".to_owned()));
+        assert_eq!(tokens[3], Token::Arg("good night".to_owned()));
+        assert_eq!(tokens[4], Token::Arg("right, bye".to_owned()));
     }
 }
