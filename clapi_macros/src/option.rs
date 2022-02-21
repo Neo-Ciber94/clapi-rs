@@ -198,6 +198,10 @@ impl OptionAttrData {
         self.name.as_str()
     }
 
+    pub fn is_global(&self) -> bool {
+        self.is_global.unwrap_or(false)
+    }
+
     pub fn is_from_global(&self) -> bool {
         self.from_global.unwrap_or(false)
     }

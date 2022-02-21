@@ -235,6 +235,8 @@ impl CommandAttrData {
             self.fn_name
         );
 
+        self.assert_global_options();
+
         // Command args
         let args = self
             .args
@@ -390,6 +392,31 @@ impl CommandAttrData {
                         .use_default_suggestions()
                         .run()
                         #error_handling
+                }
+            }
+        }
+    }
+
+    fn assert_global_options(&self) {
+        if self.is_child {
+            return;
+        }
+
+        let mut global_options = Vec::from_iter(self.options.iter().filter(|o| o.is_global()));
+
+        for child in &self.children {
+            for option in &child.options {
+                if option.is_from_global() {
+                    if !global_options.iter().any(|o| o.name() == option.name()) {
+                        panic!(
+                            "There is no global option named `{}` in a parent command",
+                            option.name()
+                        );
+                    }
+                }
+
+                if option.is_global() {
+                    global_options.push(option);
                 }
             }
         }

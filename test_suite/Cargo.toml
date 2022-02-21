@@ -2,7 +2,7 @@
 name = "test_suite"
 version = "0.1.0"
 authors = ["Freddy L"]
-edition = "2021"
+edition = "2018" # Is required to be "2018"
 publish = false
 
 [[test]]
@@ -10,7 +10,7 @@ name = "compile_test"
 path = "tests/compile_test.rs"
 
 [dependencies]
-clapi = { path= "../clapi",  features=["macros"] }
+clapi = { path= "../clapi", features=["macros"] }
 
 [dev-dependencies]
 trybuild = { version="1.0.35", features = ["diff"] }

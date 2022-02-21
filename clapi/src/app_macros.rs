@@ -1,4 +1,3 @@
-
 /// Returns this `crate` name.
 ///
 /// # Panics
@@ -427,6 +426,15 @@ macro_rules! app {
         $crate::app!{
             @option
             ($option_builder$(.alias($alias))+) $($tt)*
+        }
+    };
+
+    // Option global
+    // clapi::app! { (@option => (global => true/false ) ) }
+    (@option ($option_builder:expr) (alias => $($literal:expr),+) $($tt:tt)*) => {
+        $crate::app!{
+            @option
+            ($option_builder$(.global($literal))+) $($tt)*
         }
     };
 

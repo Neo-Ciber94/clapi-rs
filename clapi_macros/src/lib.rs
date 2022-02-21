@@ -155,6 +155,8 @@ pub fn subcommand(_: TokenStream, item: TokenStream) -> TokenStream {
 /// - `flag`: If the option is a bool flag, by default is `true`
 /// - `error`: Error show when the value is invalid.
 /// - `require_assign`: If the option requires to use `=` to assign the value, by default false,
+/// - `global`: If the option is global, by default false.
+/// - `from_global`: If the option is declared as global in a parent, by default false.
 ///
 /// Function arguments can be declared as the following types:
 /// - Any type that implement `FromStr`.

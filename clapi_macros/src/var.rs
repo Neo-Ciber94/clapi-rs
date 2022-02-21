@@ -27,12 +27,8 @@ impl ArgLocalVar {
     }
 
     pub fn expand(&self) -> TokenStream {
-        let var_name = self.var_name.parse::<TokenStream>().unwrap();
-        let normalized_var_name = self
-            .var_name
-            .trim_start_matches("r#")
-            .parse::<TokenStream>()
-            .unwrap();
+        let var_name = self.var_name.as_str().parse::<TokenStream>().unwrap();
+        let normalized_var_name = self.var_name.as_str().trim_start_matches("r#");
 
         let is_mut = if self.is_mut {
             quote! { mut }
@@ -101,7 +97,7 @@ impl ArgLocalVar {
     }
 
     fn get_opts_source(&self, arg_name: &str) -> TokenStream {
-        let option_name = quote_expr!(self.var_name.trim_start_matches("r#"));
+        let option_name = quote_expr!(self.var_name.as_str().trim_start_matches("r#"));
         let arg_name = quote_expr!(arg_name.trim_start_matches("r#"));
 
         match &self.ty {
@@ -118,7 +114,7 @@ impl ArgLocalVar {
             ArgumentType::Option(ty) => {
                 quote! {
                     {
-                        match opts.get_args(#option_name)
+                        match opts.get_args(#arg_name)
                             .map(|args| args.get(#arg_name)).flatten() {
                             Some(arg) => {
                                 match arg.get_values().len() {

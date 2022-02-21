@@ -1,6 +1,6 @@
 use clapi::macros::*;
 
 #[command]
-#[option(type)]
-#[args(values)]
+#[option(r#type)]
+#[arg(r#values)]
 fn main(r#type: Option<String>, r#values: Vec<String>) {}
