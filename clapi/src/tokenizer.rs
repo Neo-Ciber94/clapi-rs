@@ -260,7 +260,7 @@ fn is_prefixed_option(context: &Context, value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{split_into_args, Argument, Command, CommandOption, ContextBuilder};
+    use crate::{split_into_args, ArgSplitter, Argument, Command, CommandOption, ContextBuilder};
 
     use super::*;
 
@@ -275,7 +275,8 @@ mod tests {
         delimiter: char,
     ) -> crate::Result<Vec<Token>> {
         let context = ContextBuilder::new(command).delimiter(delimiter).build();
-        Tokenizer.tokenize(&context, split_into_args(value))
+        let args = ArgSplitter::new().delimiter(delimiter).split(value);
+        Tokenizer.tokenize(&context, args)
     }
 
     #[test]

@@ -33,6 +33,7 @@ pub struct OptionAttrData {
     arg: Option<ArgAttrData>,
     is_hidden: Option<bool>,
     is_global: Option<bool>,
+    from_global: Option<bool>,
     allow_multiple: Option<bool>,
     requires_assign: Option<bool>,
     is_flag: bool,
@@ -56,6 +57,7 @@ impl OptionAttrData {
             allow_multiple: None,
             requires_assign: None,
             is_global: None,
+            from_global: None,
             is_flag: false,
         }
     }
@@ -159,6 +161,13 @@ impl OptionAttrData {
 
                         option.set_global(global);
                     }
+                    consts::FROM_GLOBAL => {
+                        let from_global = value
+                            .to_bool_literal()
+                            .expect("option `from_global` must be a bool literal");
+
+                        option.set_from_global(from_global);
+                    }
                     _ => panic!("invalid `option` key `{}`", key),
                 }
             }
@@ -187,6 +196,10 @@ impl OptionAttrData {
 
     pub fn name(&self) -> &str {
         self.name.as_str()
+    }
+
+    pub fn is_from_global(&self) -> bool {
+        self.from_global.unwrap_or(false)
     }
 
     pub fn set_name(&mut self, name: String) {
@@ -227,7 +240,16 @@ impl OptionAttrData {
         self.is_global = Some(global);
     }
 
+    pub fn set_from_global(&mut self, from_global: bool) {
+        self.from_global = Some(from_global);
+    }
+
     pub fn expand(&self) -> TokenStream {
+        // If the option comes from a global, does not need to be declared
+        if self.from_global == Some(true) {
+            return quote! {};
+        }
+
         // Option alias
         let alias = self.alias.as_ref().map(|s| quote! { .alias(#s) });
 

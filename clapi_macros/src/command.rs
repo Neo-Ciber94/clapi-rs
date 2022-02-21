@@ -1,4 +1,5 @@
 #![allow(clippy::len_zero, clippy::redundant_closure, clippy::bool_comparison)]
+
 use crate::arg::ArgAttrData;
 use crate::macro_attribute::{MacroAttribute, NameValueAttribute};
 use crate::option::OptionAttrData;
@@ -245,6 +246,7 @@ impl CommandAttrData {
         let options = self
             .options
             .iter()
+            .filter(|x| !x.is_from_global())
             .map(|x| quote! { .option(#x)})
             .collect::<Vec<TokenStream>>();
 

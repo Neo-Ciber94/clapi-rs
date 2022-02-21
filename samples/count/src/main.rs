@@ -1,8 +1,15 @@
 use clapi::macros::*;
 
 #[command]
-fn main(value: Option<i64>) {
-    println!("{:?}", value);
+#[option(val, global = true, description = "The value to display")]
+fn main(val: Option<i64>) {
+    println!("{:?}", val);
+}
+
+#[subcommand]
+#[option(other, from_global = true)]
+fn twice(other: Option<i64>) {
+    println!("{:?} - {:?}", other, other);
 }
 
 //#[command]

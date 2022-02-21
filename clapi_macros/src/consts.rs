@@ -19,6 +19,7 @@ pub const DEFAULT: &str = "default";
 pub const VALUES: &str = "values";
 pub const HIDDEN: &str = "hidden";
 pub const GLOBAL: &str = "global";
+pub const FROM_GLOBAL: &str = "from_global";
 pub const MULTIPLE: &str = "multiple";
 pub const REQUIRES_ASSIGN: &str = "requires_assign";
 pub const FLAG: &str = "flag";
