@@ -2,7 +2,9 @@ use crate::args::ArgumentList;
 use crate::command::Command;
 use crate::option::OptionList;
 use crate::Argument;
+use std::fmt::Display;
 use std::slice::Iter;
+use std::str::FromStr;
 
 /// Represents the result of a parse operation
 /// and provides a set of methods to query over the values.
@@ -109,6 +111,42 @@ impl ParseResult {
         } else {
             None
         }
+    }
+
+    /// Gets the value of the argument with the given name as a type `T`.
+    pub fn value_of_as<T>(&self, arg_name: &str) -> Option<T>
+    where
+        T: FromStr + 'static,
+        <T as FromStr>::Err: Display,
+    {
+        self.args().convert::<T>(arg_name).ok()
+    }
+
+    /// Gets the values of the argument as a `Vec<T>`.
+    pub fn values_of_as<T>(&self, arg_name: &str) -> Option<Vec<T>>
+    where
+        T: FromStr + 'static,
+        <T as FromStr>::Err: Display,
+    {
+        self.args().convert_all(arg_name).ok()
+    }
+
+    /// Gets the value of the argument of the given option as a type `T`.
+    pub fn value_of_option_as<T>(&self, option_name: &str) -> Option<T>
+    where
+        T: FromStr + 'static,
+        <T as FromStr>::Err: Display,
+    {
+        self.options().convert::<T>(option_name).ok()
+    }
+
+    /// Gets the values of the given option as a type `T`.
+    pub fn values_of_option_as<T>(&self, option_name: &str) -> Option<Vec<T>>
+    where
+        T: FromStr + 'static,
+        <T as FromStr>::Err: Display,
+    {
+        self.options().convert_all(option_name).ok()
     }
 }
 
@@ -833,6 +871,56 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect::<Vec<String>>()
+        );
+    }
+
+    #[test]
+    fn value_of_as_test() {
+        let command = Command::new("MyApp").arg(Argument::with_name("numbers"));
+        let result = parse_with("65", command.clone()).unwrap();
+
+        assert_eq!(65, result.value_of_as::<i32>("numbers").unwrap());
+    }
+
+    #[test]
+    fn values_of_as_test() {
+        let command = Command::new("MyApp").arg(Argument::one_or_more("numbers"));
+        let result = parse_with("2 4 6", command.clone()).unwrap();
+
+        assert_eq!(
+            vec![2_i32, 4_i32, 6_i32],
+            result
+                .values_of_as::<i32>("numbers")
+                .unwrap()
+                .iter()
+                .cloned()
+                .collect::<Vec<i32>>()
+        );
+    }
+
+    #[test]
+    fn value_of_option_as_test() {
+        let command = Command::new("MyApp")
+            .option(CommandOption::new("size").arg(Argument::with_name("size")));
+        let result = parse_with("--size 202", command.clone()).unwrap();
+
+        assert_eq!(202_i64, result.value_of_option_as::<i64>("size").unwrap());
+    }
+
+    #[test]
+    fn values_of_option_as_test() {
+        let command = Command::new("MyApp")
+            .option(CommandOption::new("sizes").arg(Argument::one_or_more("sizes")));
+        let result = parse_with("--sizes 202 304", command.clone()).unwrap();
+
+        assert_eq!(
+            vec![202_i64, 304_i64],
+            result
+                .values_of_option_as::<i64>("sizes")
+                .unwrap()
+                .iter()
+                .cloned()
+                .collect::<Vec<i64>>()
         );
     }
 }
