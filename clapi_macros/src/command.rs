@@ -152,6 +152,8 @@ impl CommandAttrData {
             )
         }
 
+        // Infer the global options
+
         self.children.push(command);
     }
 
@@ -195,7 +197,7 @@ impl CommandAttrData {
         if self.vars.contains(&var) {
             panic!(
                 "duplicated variable: `{}` in `{}`",
-                var.name(),
+                var.var_name(),
                 self.fn_name.name()
             )
         }
@@ -236,6 +238,11 @@ impl CommandAttrData {
         );
 
         self.assert_global_options();
+
+        // Apply only to root
+        if !self.is_child {
+            self.infer_global_options();
+        }
 
         // Command args
         let args = self
@@ -397,6 +404,37 @@ impl CommandAttrData {
         }
     }
 
+    fn infer_global_options(&self) {
+        let global_options = self
+            .options
+            .iter()
+            .filter(|o| o.is_global())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        global_options.iter().for_each(|o| {
+            self.set_global_options(o);
+        });
+
+        for child in self.children.iter() {
+            child.infer_global_options();
+        }
+    }
+
+    fn set_global_options(&self, option: &OptionAttrData) {
+        assert!(option.is_global());
+
+        for opt in self.options.iter() {
+            if opt.from_global.get().is_none() && opt.name() == option.name() {
+                opt.set_from_global(true);
+            }
+        }
+
+        for child in self.children.iter() {
+            child.set_global_options(option);
+        }
+    }
+
     fn assert_global_options(&self) {
         if self.is_child {
             return;
@@ -433,7 +471,7 @@ impl CommandAttrData {
         if self.is_child {
             let fn_name = self.fn_name.to_string().parse::<TokenStream>().unwrap();
             let inputs = self.vars.iter().map(|var| {
-                let var_name = var.name().parse::<TokenStream>().unwrap();
+                let var_name = var.var_name().parse::<TokenStream>().unwrap();
                 let is_ref = match var.arg_type() {
                     ArgumentType::Slice(ty) => {
                         if ty.mutability {
@@ -530,6 +568,8 @@ impl PartialEq for CommandAttrData {
 pub struct FnArgData {
     // Name of the function argument
     pub arg_name: String,
+    // Name specified with `name="value"`, if any
+    pub name: Option<String>,
     // The function argument `PatType` like: `x : i64`
     pub pat_type: PatType,
     // The macro attribute if any, this is solely used for debugging,
@@ -806,11 +846,16 @@ mod imp {
                 } else {
                     VarSource::Opts(fn_arg.arg_name.clone())
                 };
-                command.set_var(ArgLocalVar::new(fn_arg.pat_type.clone(), source));
+                command.set_var(ArgLocalVar::new(
+                    fn_arg.pat_type.clone(),
+                    source,
+                    fn_arg.name.clone(),
+                ));
             } else {
                 command.set_var(ArgLocalVar::new(
                     fn_arg.pat_type.clone(),
                     VarSource::Args(fn_arg.arg_name.clone()),
+                    fn_arg.name.clone(),
                 ));
             }
         }
@@ -1064,13 +1109,23 @@ mod imp {
                 (None, None)
             };
 
+            // Whether if this argument should be considered an option
             let is_option = attribute
                 .as_ref()
                 .map(|attribute| crate::consts::is_option(attribute.path()))
                 .unwrap_or(true);
 
+            // Get the name defined by `name="value"`
+            let name = name_value
+                .as_ref()
+                .map(|name_value| name_value.get(consts::NAME))
+                .flatten()
+                .map(|x| x.to_string_literal())
+                .flatten();
+
             ret.push(FnArgData {
                 arg_name,
+                name,
                 pat_type,
                 attribute,
                 name_value,

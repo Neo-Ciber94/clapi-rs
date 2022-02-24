@@ -35,6 +35,7 @@ impl ArgAttrData {
         // Deconstruct the `FnArgData`
         let FnArgData {
             arg_name,
+            name,
             pat_type,
             attribute,
             name_value,
@@ -42,7 +43,7 @@ impl ArgAttrData {
         } = arg_data.clone();
 
         let mut arg = ArgAttrData {
-            name: arg_name,
+            name: name.unwrap_or(arg_name),
             min: None,
             max: None,
             description: None,

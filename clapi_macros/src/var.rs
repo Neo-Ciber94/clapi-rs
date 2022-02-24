@@ -8,17 +8,18 @@ use syn::{Expr, GenericArgument, Pat, PatType, Type};
 #[derive(Debug, Clone)]
 pub struct ArgLocalVar {
     var_name: String,
+    name: Option<String>,
     is_mut: bool,
     source: VarSource,
     ty: ArgumentType,
 }
 
 impl ArgLocalVar {
-    pub fn new(pat_type: PatType, source: VarSource) -> Self {
-        new_arg_local_var(pat_type, source)
+    pub fn new(pat_type: PatType, source: VarSource, name: Option<String>) -> Self {
+        new_arg_local_var(pat_type, source, name)
     }
 
-    pub fn name(&self) -> &str {
+    pub fn var_name(&self) -> &str {
         self.var_name.as_str()
     }
 
@@ -28,7 +29,11 @@ impl ArgLocalVar {
 
     pub fn expand(&self) -> TokenStream {
         let var_name = self.var_name.as_str().parse::<TokenStream>().unwrap();
-        let normalized_var_name = self.var_name.as_str().trim_start_matches("r#");
+        let normalized_var_name = self
+            .name
+            .as_deref()
+            .unwrap_or(&self.var_name)
+            .trim_start_matches("r#");
 
         let is_mut = if self.is_mut {
             quote! { mut }
@@ -36,8 +41,12 @@ impl ArgLocalVar {
             quote! {}
         };
         let source = match &self.source {
-            VarSource::Args(arg_name) => self.get_args_source(arg_name),
-            VarSource::Opts(arg_name) => self.get_opts_source(arg_name),
+            VarSource::Args(arg_name) => {
+                self.get_args_source(self.name.as_deref().unwrap_or(arg_name))
+            }
+            VarSource::Opts(arg_name) => {
+                self.get_opts_source(self.name.as_deref().unwrap_or(arg_name))
+            }
             VarSource::OptBool => {
                 // Handles an option `bool` flag, which returns `true`
                 // if the option exists or if the passed value is `true` otherwise `false`.
@@ -284,8 +293,8 @@ impl Display for ArgumentType {
     }
 }
 
-fn new_arg_local_var(pat_type: PatType, source: VarSource) -> ArgLocalVar {
-    let name = pat_type.pat.to_token_stream().to_string();
+fn new_arg_local_var(pat_type: PatType, source: VarSource, name: Option<String>) -> ArgLocalVar {
+    let var_name = pat_type.pat.to_token_stream().to_string();
     let ty = get_argument_type(&pat_type);
     let is_mut = match pat_type.pat.as_ref() {
         Pat::Ident(ident) => ident.mutability.is_some(),
@@ -293,7 +302,8 @@ fn new_arg_local_var(pat_type: PatType, source: VarSource) -> ArgLocalVar {
     };
 
     ArgLocalVar {
-        var_name: name,
+        var_name,
+        name,
         is_mut,
         source,
         ty,

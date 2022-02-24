@@ -1,0 +1,9 @@
+[package]
+name = "datetime"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clapi = { path="../../clapi", features=["macros"] }
+chrono = "0.4.19"
+termcolor = "1.1.2"

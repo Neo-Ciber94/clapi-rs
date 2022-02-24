@@ -4,6 +4,7 @@ use crate::consts;
 use crate::macro_attribute::{MacroAttribute, Value};
 use proc_macro2::TokenStream;
 use quote::*;
+use std::cell::Cell;
 use syn::Lit;
 
 /// Tokens for an `option` attribute.
@@ -33,7 +34,7 @@ pub struct OptionAttrData {
     arg: Option<ArgAttrData>,
     is_hidden: Option<bool>,
     is_global: Option<bool>,
-    from_global: Option<bool>,
+    pub(crate) from_global: Cell<Option<bool>>,
     allow_multiple: Option<bool>,
     requires_assign: Option<bool>,
     is_flag: bool,
@@ -57,7 +58,7 @@ impl OptionAttrData {
             allow_multiple: None,
             requires_assign: None,
             is_global: None,
-            from_global: None,
+            from_global: Cell::new(None),
             is_flag: false,
         }
     }
@@ -203,7 +204,7 @@ impl OptionAttrData {
     }
 
     pub fn is_from_global(&self) -> bool {
-        self.from_global.unwrap_or(false)
+        self.from_global.get().unwrap_or(false)
     }
 
     pub fn set_name(&mut self, name: String) {
@@ -244,13 +245,13 @@ impl OptionAttrData {
         self.is_global = Some(global);
     }
 
-    pub fn set_from_global(&mut self, from_global: bool) {
-        self.from_global = Some(from_global);
+    pub fn set_from_global(&self, from_global: bool) {
+        self.from_global.set(Some(from_global));
     }
 
     pub fn expand(&self) -> TokenStream {
         // If the option comes from a global, does not need to be declared
-        if self.from_global == Some(true) {
+        if self.from_global.get() == Some(true) {
             return quote! {};
         }
 
