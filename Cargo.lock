@@ -77,15 +77,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "datetime"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clapi",
- "termcolor",
-]
-
-[[package]]
 name = "dissimilar"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -99,6 +90,15 @@ dependencies = [
  "once_cell",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "getdate"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clapi",
+ "termcolor",
 ]
 
 [[package]]

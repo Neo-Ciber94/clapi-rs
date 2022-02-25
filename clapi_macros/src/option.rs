@@ -28,6 +28,7 @@ use syn::Lit;
 #[derive(Debug, Clone)]
 pub struct OptionAttrData {
     name: String,
+    pub(crate) arg_name: String,
     attribute: Option<MacroAttribute>,
     alias: Option<String>,
     description: Option<String>,
@@ -41,15 +42,16 @@ pub struct OptionAttrData {
 }
 
 impl OptionAttrData {
-    pub fn new(name: String) -> Self {
-        assert!(!name.trim().is_empty(), "option `name` cannot be empty");
+    pub fn new(arg_name: String) -> Self {
+        assert!(!arg_name.trim().is_empty(), "option `name` cannot be empty");
         assert!(
-            name.trim().chars().all(|c| !c.is_whitespace()),
+            arg_name.trim().chars().all(|c| !c.is_whitespace()),
             "option `name` cannot contains whitespaces"
         );
 
         OptionAttrData {
-            name,
+            name: arg_name.clone(),
+            arg_name,
             attribute: None,
             alias: None,
             description: None,

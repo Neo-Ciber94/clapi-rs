@@ -230,7 +230,7 @@ impl CommandAttrData {
         None
     }
 
-    pub fn expand(&self) -> TokenStream {
+    pub fn expand(mut self) -> TokenStream {
         assert!(
             self.item_fn.is_some(),
             "`ItemFn` is not set for command `{}`",
@@ -242,6 +242,7 @@ impl CommandAttrData {
         // Apply only to root
         if !self.is_child {
             self.infer_global_options();
+            self.update_children_global_options();
         }
 
         // Command args
@@ -405,6 +406,16 @@ impl CommandAttrData {
     }
 
     fn infer_global_options(&self) {
+        /*
+        FIXME: This is a hack to infer the options which requires to make a copy
+        of the options, and then iterate through the children,
+
+        The wanted solution is to make a parent <-> child relation with comment
+        which make easy to navigate through the tree to locale the parent which contains
+        the global options. This solution would require to make the Command a `Rc<RefCell<CommandAttrData>>`
+        to allow the children command use `Weak<RefCell<CommandAttrData>>` to access the parent.
+        */
+
         let global_options = self
             .options
             .iter()
@@ -457,6 +468,48 @@ impl CommandAttrData {
                     global_options.push(option);
                 }
             }
+        }
+    }
+
+    fn update_children_global_options(&mut self) {
+        /*
+        FIXME: This is a hack to update the children global options.
+
+        The wanted solution is to make a parent <-> child relation with comment
+        which make easy to navigate through the tree to locale the parent which contains
+        the global options. This solution would require to make the Command a `Rc<RefCell<CommandAttrData>>`
+        to allow the children command use `Weak<RefCell<CommandAttrData>>` to access the parent.
+        */
+
+        fn update_children_options(opt: &OptionAttrData, parent: &mut CommandAttrData) {
+            for child in parent.children.iter_mut() {
+                if let Some(child_opt) = child
+                    .options
+                    .iter_mut()
+                    .find(|o| o.arg_name == opt.arg_name)
+                {
+                    if child_opt.is_from_global() {
+                        *child_opt = opt.clone();
+                    }
+                } else {
+                    update_children_options(opt, child);
+                }
+            }
+        }
+
+        let global_options = self
+            .options
+            .iter()
+            .filter(|o| o.is_from_global())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        for opt in global_options {
+            update_children_options(&opt, self);
+        }
+
+        for child in self.children.iter_mut() {
+            child.update_children_global_options();
         }
     }
 
@@ -551,7 +604,7 @@ impl CommandAttrData {
 
 impl ToTokens for CommandAttrData {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        tokens.append_all(self.expand().into_iter())
+        tokens.append_all(self.clone().expand().into_iter())
     }
 }
 
