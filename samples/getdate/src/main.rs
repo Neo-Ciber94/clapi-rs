@@ -9,7 +9,7 @@ use crate::weekday_ext::WeekdayExt;
 use chrono::{DateTime, Datelike, Local, Month, Timelike};
 use clapi::macros::*;
 
-#[command(name = "datetime", description = "Prints the current date and time")]
+#[command(name = "getdate", description = "Prints the current date and time")]
 #[option(
     format,
     alias = "f",
@@ -30,31 +30,31 @@ pub fn main(format: Option<String>, no_color: bool) {
     }
 }
 
-#[command(description = "Prints the current weekday")]
+#[subcommand(description = "Prints the current weekday")]
 fn weekday(no_color: bool) {
     println_colored!(!no_color, "{}", now().weekday().name_long());
 }
 
 #[subcommand(description = "Prints the current day")]
-fn day() {
-    println!("{}", now().day());
+fn day(no_color: bool) {
+    println_colored!(no_color, "{}", now().day());
 }
 
 #[subcommand(description = "Prints the current month")]
-fn month() {
-    println!("{}", now().month());
+fn month(no_color: bool) {
+    println_colored!(no_color, "{}", now().month());
 }
 
 #[subcommand(description = "Prints the current year")]
-fn year() {
-    println!("{}", now().year());
+fn year(no_color: bool) {
+    println_colored!(no_color, "{}", now().year());
 }
 
 fn now() -> DateTime<Local> {
     Local::now()
 }
 
-fn format_date(date: &DateTime<Local>, mut format: String) -> String {
+fn format_date(date: &DateTime<Local>, format: String) -> String {
     let mut result = format.clone();
 
     // Set year

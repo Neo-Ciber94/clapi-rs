@@ -1,12 +1,6 @@
 use std::io::Write;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
-pub enum PrintColor {
-    Color(Color),
-    AutoColor,
-    NoColor,
-}
-
 #[macro_export]
 macro_rules! println_colored {
     ($colored:expr, $($arg:tt)*) => {
@@ -27,6 +21,7 @@ macro_rules! println_colored {
     };
 }
 
+#[allow(dead_code)]
 pub fn print_colored(s: &str, colored: bool) {
     let color_choice = if colored {
         ColorChoice::Always

@@ -436,8 +436,10 @@ impl CommandAttrData {
         assert!(option.is_global());
 
         for opt in self.options.iter() {
-            if opt.from_global.get().is_none() && opt.name() == option.name() {
-                opt.set_from_global(true);
+            if opt.from_global.get().is_none() && opt.arg_name == option.arg_name {
+                if !opt.is_global() {
+                    opt.set_from_global(true);
+                }
             }
         }
 
@@ -489,7 +491,16 @@ impl CommandAttrData {
                     .find(|o| o.arg_name == opt.arg_name)
                 {
                     if child_opt.is_from_global() {
-                        *child_opt = opt.clone();
+                        // Updated the children and vars to match the global option names
+                        child_opt.name = opt.name().to_string();
+
+                        let var = child
+                            .vars
+                            .iter_mut()
+                            .find(|v| v.var_name == opt.arg_name)
+                            .unwrap();
+
+                        var.name = Some(opt.name().to_string());
                     }
                 } else {
                     update_children_options(opt, child);
@@ -500,7 +511,7 @@ impl CommandAttrData {
         let global_options = self
             .options
             .iter()
-            .filter(|o| o.is_from_global())
+            .filter(|o| o.is_global())
             .cloned()
             .collect::<Vec<_>>();
 

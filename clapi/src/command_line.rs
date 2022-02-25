@@ -334,8 +334,8 @@ impl CommandLine {
 
         let mut buf = String::new();
         match kind {
-            MessageKind::Help => (context.help().help)(&mut buf, &context, command, true),
-            MessageKind::Usage => (context.help().usage)(&mut buf, &context, command, true),
+            MessageKind::Help => context.help().get_help(&mut buf, &context, command, true),
+            MessageKind::Usage => context.help().get_usage(&mut buf, &context, command, true),
         }
 
         Ok(buf)

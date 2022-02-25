@@ -1,28 +1,18 @@
 use self::utils::*;
 use crate::{Command, Context, OptionList};
 use std::fmt::Write;
+use std::rc::Rc;
+
 // Indentation used to write the help messages
 const INDENT: &str = "   ";
+
+// TODO: Rename to CommandHelp
 
 /// Configuration for provider help messages.
 #[derive(Clone)]
 pub struct HelpSource {
-    /// Function pointer to the `help` message function.
-    ///
-    /// # Arguments by position:
-    /// * 1 - The `String` buffer to write the message.
-    /// * 2 - The `Context` used.
-    /// * 3 - The `Command` to provide the help message.
-    pub help: fn(&mut String, &Context, &Command, bool),
-
-    /// Function pointer to the `usage` message function.
-    ///
-    /// # Arguments by position:
-    /// * 1 - The `String` buffer to write the message.
-    /// * 2 - The `Context` used.
-    /// * 3 - The `Command` to provide the usage message.
-    /// * 4 - A flag to indicates if write a `after help` message after the usage.
-    pub usage: fn(&mut String, &Context, &Command, bool),
+    help: Rc<dyn Fn(&mut String, &Context, &Command, bool)>,
+    usage: Rc<dyn Fn(&mut String, &Context, &Command, bool)>,
 }
 
 impl HelpSource {
@@ -31,14 +21,47 @@ impl HelpSource {
     pub fn new() -> Self {
         Default::default()
     }
+
+    /// Gets a help message for the given command.
+    ///
+    /// # Arguments by position:
+    /// * 1 - The `String` buffer to write the message.
+    /// * 2 - The `Context` used.
+    /// * 3 - The `Command` to provide the help message.
+    pub fn get_help(
+        &self,
+        buf: &mut String,
+        context: &Context,
+        command: &Command,
+        after_help_message: bool,
+    ) {
+        (&self.help)(buf, context, command, after_help_message)
+    }
+
+    /// Gets a usage message for the given command.
+    ///
+    /// # Arguments by position:
+    /// * 1 - The `String` buffer to write the message.
+    /// * 2 - The `Context` used.
+    /// * 3 - The `Command` to provide the usage message.
+    /// * 4 - A flag to indicates if write a `after help` message after the usage.
+    pub fn get_usage(
+        &self,
+        buf: &mut String,
+        context: &Context,
+        command: &Command,
+        after_help_message: bool,
+    ) {
+        (&self.usage)(buf, context, command, after_help_message)
+    }
 }
 
 impl Default for HelpSource {
     #[inline]
     fn default() -> Self {
         HelpSource {
-            help: command_help,
-            usage: command_usage,
+            help: Rc::new(command_help),
+            usage: Rc::new(command_usage),
         }
     }
 }
@@ -139,7 +162,12 @@ pub fn command_help(
 
 // Provides a usage message for the command
 #[doc(hidden)]
-pub fn command_usage(buf: &mut String, context: &Context, command: &Command, after_help_message: bool) {
+pub fn command_usage(
+    buf: &mut String,
+    context: &Context,
+    command: &Command,
+    after_help_message: bool,
+) {
     // Writes the usage from the `Command` if any
     if let Some(usage) = command.get_usage() {
         writeln!(buf).unwrap();

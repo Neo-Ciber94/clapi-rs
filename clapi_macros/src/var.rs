@@ -7,8 +7,8 @@ use syn::{Expr, GenericArgument, Pat, PatType, Type};
 
 #[derive(Debug, Clone)]
 pub struct ArgLocalVar {
-    var_name: String,
-    name: Option<String>,
+    pub(crate) var_name: String,
+    pub(crate) name: Option<String>,
     is_mut: bool,
     source: VarSource,
     ty: ArgumentType,

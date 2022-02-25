@@ -27,7 +27,7 @@ use syn::Lit;
 /// ```
 #[derive(Debug, Clone)]
 pub struct OptionAttrData {
-    name: String,
+    pub(crate) name: String,
     pub(crate) arg_name: String,
     attribute: Option<MacroAttribute>,
     alias: Option<String>,
