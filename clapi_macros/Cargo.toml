@@ -1,7 +1,7 @@
 [package]
 name = "clapi_macros"
 description = "Macros for clapi"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Freddy L"]
 license = "Apache-2.0"
 edition = "2021"
